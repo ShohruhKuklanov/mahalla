@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Mahalla — 3D shahar sinov namunasi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg: rgba(18,22,30,.78);
@@ -113,6 +113,63 @@
   #tut p{margin:0;font-size:14px;line-height:1.4;flex:1}
   #tut button{color:var(--muted);font-size:12.5px;font-weight:700;padding:4px}
 
+  /* ---------- welcome screen over the living city ---------- */
+  body.hero #labels{opacity:0}
+  #labels{transition:opacity .6s}
+  body.hero #top, body.hero #legend, body.hero #tools, body.hero #nav, body.hero #tut, body.hero #sheet{display:none}
+  #hero{position:fixed;inset:0;z-index:30;display:none;pointer-events:none;color:#fff8ec}
+  #hero.show{display:block}
+  #hero::before{content:'';position:absolute;inset:0;background:
+      radial-gradient(ellipse 70% 55% at 50% 58%, rgba(10,12,30,.62), rgba(10,12,30,.15) 70%, transparent),
+      linear-gradient(180deg, rgba(10,12,30,.0) 0%, rgba(10,12,30,.0) 35%, rgba(12,14,34,.55) 80%, rgba(12,14,34,.85) 100%)}
+  .h-top{position:absolute;left:18px;right:18px;top:16px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:auto}
+  .h-brand{display:flex;align-items:center;gap:10px;padding:10px 16px 10px 12px;border-radius:16px;background:rgba(16,18,40,.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+           font:800 14px/1 Unbounded,Manrope,sans-serif;letter-spacing:.12em;border:1px solid rgba(255,255,255,.08)}
+  .h-brand i{width:22px;height:22px;border-radius:7px;background:conic-gradient(from 45deg,#2fb5a3,#3a6ea5,#f6c453,#2fb5a3);animation:spin 9s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .h-pop{padding:10px 18px;border-radius:16px;background:rgba(16,18,40,.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);text-align:center;border:1px solid rgba(255,255,255,.08)}
+  .h-pop small{display:block;color:#f6c453;font:800 11px/1 Unbounded,sans-serif;letter-spacing:.14em;margin-bottom:4px}
+  .h-pop b{font:800 26px/1 Unbounded,sans-serif;font-variant-numeric:tabular-nums}
+  .h-mid{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);width:min(640px,calc(100% - 32px));text-align:center;pointer-events:auto}
+  .h-langs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+  .h-langs button{padding:9px 16px;border-radius:999px;background:rgba(30,32,62,.78);font-weight:800;font-size:14px;color:#e9e5ff;border:1px solid rgba(255,255,255,.08)}
+  .h-langs button.on{background:#f6c453;color:#2a1d00}
+  .h-badge{display:inline-block;padding:8px 16px;border-radius:12px;background:#f6c453;color:#2a1d00;font:800 14px/1.1 Manrope,sans-serif;box-shadow:0 0 0 0 rgba(246,196,83,.6);animation:pulse 2.8s ease-out infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(246,196,83,.55)}70%{box-shadow:0 0 0 18px rgba(246,196,83,0)}100%{box-shadow:0 0 0 0 rgba(246,196,83,0)}}
+  #hero h1{margin:16px 0 12px;font:800 clamp(34px,6.4vw,64px)/1.04 Unbounded,Manrope,sans-serif;letter-spacing:-.01em;
+           background:linear-gradient(180deg,#fffaf0 30%,#ffd98a);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 6px 40px rgba(0,0,0,.25)}
+  #hero p.h-sub{margin:0 auto 22px;max-width:560px;font-size:clamp(15px,2.1vw,18px);line-height:1.5;color:#e8e4f6;font-weight:600}
+  .h-in{display:flex;align-items:center;height:62px;border-radius:18px;background:rgba(14,16,36,.82);border:2px solid #f6c453;box-shadow:0 0 34px rgba(246,196,83,.25);padding:0 18px;margin-bottom:12px}
+  .h-in span{color:#2AABEE;font:800 22px/1 Manrope,sans-serif;margin-right:6px}
+  .h-in input{flex:1;min-width:0;height:100%;background:none;border:0;outline:none;color:#fff;font:700 19px Manrope,sans-serif;text-align:center}
+  .h-in input::placeholder{color:#8f8db2}
+  .h-in svg{flex:0 0 26px}
+  .h-btn{width:100%;height:62px;border-radius:18px;background:#f6c453;color:#22180a;font:800 20px/1 Manrope,sans-serif;box-shadow:0 10px 30px rgba(246,196,83,.25);transition:transform .15s}
+  .h-btn:active{transform:scale(.98)}
+  #findMsg{min-height:0;max-height:0;overflow:hidden;transition:.25s;color:#ffd1c4;font-weight:700;font-size:14px;margin-top:0}
+  #findMsg.show{max-height:80px;margin-top:10px}
+  .h-cta{display:inline-flex;margin-top:16px;padding:12px 22px;border-radius:999px;font:800 17px/1 Manrope,sans-serif;color:#ffd98a;
+         background:linear-gradient(90deg,#5b2a86,#a23b72,#5b2a86);background-size:200% 100%;animation:shine 6s linear infinite;border:1.5px solid rgba(255,217,138,.45)}
+  @keyframes shine{to{background-position:200% 0}}
+  .h-chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+  .h-chips button{padding:9px 14px;border-radius:999px;background:rgba(20,22,46,.8);font-weight:800;font-size:13.5px;color:#f1efff;border:1.5px solid rgba(255,255,255,.08)}
+  .h-chips button:nth-child(1){border-color:#5fd4f0;color:#bff1ff}
+  .h-chips button:nth-child(2){border-color:#f08ab4;color:#ffd0e3}
+  .h-row{display:flex;gap:18px;justify-content:center;align-items:center;margin-top:18px;flex-wrap:wrap}
+  .h-get{padding:11px 20px;border-radius:14px;background:rgba(47,181,163,.95);color:#06231f;font-weight:800;font-size:15px}
+  .h-get.pulse{animation:pulse2 1.2s ease-in-out 3}
+  @keyframes pulse2{50%{transform:scale(1.07)}}
+  .h-browse{color:#fff;font-weight:800;font-size:15.5px;text-decoration:underline;text-underline-offset:4px;background:none}
+  .h-foot{margin-top:14px;color:#cfcbe6;font-weight:700;font-size:14px}
+  .h-foot b{color:#f6c453}
+  .h-mid > *{animation:rise .7s cubic-bezier(.2,.8,.2,1) both}
+  .h-mid > *:nth-child(2){animation-delay:.06s} .h-mid > *:nth-child(3){animation-delay:.12s} .h-mid > *:nth-child(4){animation-delay:.18s}
+  .h-mid > *:nth-child(5){animation-delay:.24s} .h-mid > *:nth-child(6){animation-delay:.3s} .h-mid > *:nth-child(7){animation-delay:.36s}
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){ .h-mid > *, .h-badge, .h-cta, .h-brand i{animation:none} }
+  @media (max-width:560px){ .h-mid{top:auto;bottom:18px;transform:translateX(-50%)} .h-pop b{font-size:20px} .h-brand{font-size:12px} .h-in,.h-btn{height:56px} .h-chips button:nth-child(n+5){display:none} }
+  @media (max-height:700px) and (min-width:561px){ .h-mid{transform:translate(-50%,-50%) scale(.88)} }
+
   /* owner labels over buildings */
   #labels{position:fixed;inset:0;z-index:3;pointer-events:none;overflow:hidden}
   .olbl{position:absolute;left:0;top:0;display:flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:11px;background:rgba(14,18,26,.80);
@@ -187,6 +244,28 @@
 
 <div id="sheet" class="glass"><div class="grab"></div><button class="x" id="sheetX" aria-label="Yopish">✕</button><div id="sheetBody"></div></div>
 <div id="toast" class="glass"></div>
+
+<div id="hero" aria-label="Xush kelibsiz">
+  <div class="h-top">
+    <div class="h-brand"><i></i>MAHALLA</div>
+    <div class="h-pop"><small data-i18n="pop">AHOLI</small><b id="popN">0</b></div>
+  </div>
+  <div class="h-mid">
+    <div class="h-langs" id="hLangs"><button data-l="uz">O‘zbekcha</button><button data-l="ru">Русский</button><button data-l="en">English</button></div>
+    <div><span class="h-badge" data-i18n="badge">1 Telegram = 1 hovli</span></div>
+    <h1 data-i18n="title">Mahallaga xush kelibsiz</h1>
+    <p class="h-sub" data-i18n="sub"></p>
+    <form id="findForm" autocomplete="off">
+      <label class="h-in"><span>@</span><input id="tgIn" maxlength="40" autocapitalize="off" spellcheck="false"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2AABEE"/><path d="M5.5 11.8l11-4.3c.5-.2 1 .1.8.9l-1.9 8.8c-.1.6-.5.8-1 .5l-2.8-2.1-1.4 1.3c-.2.2-.3.3-.6.3l.2-2.9 5.3-4.8c.2-.2 0-.3-.3-.1l-6.6 4.1-2.8-.9c-.6-.2-.6-.6.1-.8z" fill="#fff"/></svg></label>
+      <button class="h-btn" type="submit" data-i18n="find">Hovlimni top</button>
+      <div id="findMsg"></div>
+    </form>
+    <button class="h-cta" id="tourBtn" data-i18n="tour"></button>
+    <div class="h-chips" id="hChips"></div>
+    <div class="h-row"><button class="h-get" id="getBtn" data-i18n="get"></button><button class="h-browse" id="browseBtn" data-i18n="browse"></button></div>
+    <div class="h-foot"><span data-i18n="popLine">Aholi</span>: <b id="popN2">0</b></div>
+  </div>
+</div>
 
 <script id="catalog" type="application/json">
 {
@@ -581,7 +660,7 @@ try {
 const scene = new B.Scene(engine);
 scene.skipPointerMovePicking = true;
 scene.fogMode = B.Scene.FOGMODE_EXP2;
-scene.fogDensity = 0.0016;
+scene.fogDensity = 0.0009;
 
 // ---------- city layout ----------
 const P = 10;            // plot size (m)
@@ -717,8 +796,15 @@ sun.shadowMinZ = 1; sun.shadowMaxZ = 1600;
 
 // ---------- ground, roads, blocks ----------
 const grassTex = noiseTex('grass','#4f7a3a',0.22,256,3); grassTex.uScale = grassTex.vScale = 60;
-const ground = B.MeshBuilder.CreateGround('ground',{width:2600,height:2600},scene);
+// the city stands on a grassy island in a lake, mountains all around
+const ISLAND_R = 430;
+const ground = B.MeshBuilder.CreateCylinder('ground',{diameter:ISLAND_R*2, height:2, tessellation:96},scene);
+ground.position.y = -1;
 mats.grass = stdMat('grass',{dt:grassTex}); ground.material = mats.grass; ground.isPickable=false; ground.receiveShadows = true;
+const lakeTex = noiseTex('lake','#7f8c95',0.35,256,2); lakeTex.uScale = lakeTex.vScale = 60;
+const lake = B.MeshBuilder.CreateGround('lake',{width:7000,height:7000},scene);
+lake.position.y = -0.55; lake.isPickable = false;
+mats.lake = stdMat('lakeM',{dt:lakeTex, diffuse:hex('#1d3b52'), spec:new C3(1,1,1), power:180}); lake.material = mats.lake;
 
 const asphaltTex = noiseTex('asphalt','#3a3d42',0.16,256,2); asphaltTex.uScale = W/12; asphaltTex.vScale = D/12;
 const road = B.MeshBuilder.CreateGround('road',{width:W+2*RD, height:D+2*RD},scene);
@@ -793,7 +879,7 @@ for (const p of plots) pad.thinInstanceAdd(B.Matrix.Translation(p.x,0.36,p.z), f
 pad.thinInstanceBufferUpdated('matrix');
 pad.thinInstanceEnablePicking = true;
 const PAD_COL = { empty:[.43,.68,.30,1], owned:[.86,.83,.78,1], sale:[1,.80,.30,1], mine:[.42,.64,1,1] };
-function paintPad(p, refresh=true){ pad.thinInstanceSetAttributeAt('color', p.id, PAD_COL[p.state], refresh); setLabel(p); }
+function paintPad(p, refresh=true){ pad.thinInstanceSetAttributeAt('color', p.id, PAD_COL[p.state], refresh); dot.thinInstanceSetMatrixAt(p.id, p.state==='empty' ? B.Matrix.Translation(p.x, 0.47, p.z) : ZERO_M, refresh); setLabel(p); }
 
 // ---------- building parts ----------
 function box(w,h,d,x,y,z){ const m=B.MeshBuilder.CreateBox('b',{width:w,height:h,depth:d,wrap:true},scene); m.position.set(x,y,z); return m; }
@@ -832,7 +918,7 @@ const ornamentM = (()=>{ const t = new B.DynamicTexture('orn',{width:256,height:
 
 // One facade tile = 4 floors × 2 window bays (4.4 m). Repeated on the walls by faceUV, so any floor count fits.
 const TILE_W = 4.4;
-function facadeTile(style, group){
+function facadeTile(style, group, litP = 0.62){
   const w = 256, h = 512, rows = 4, cols = 2, cw = w/cols, rh = h/rows;
   const dif = new B.DynamicTexture(`ft_${style}_${group}_d`, {width:w, height:h}, scene, true);
   const emi = new B.DynamicTexture(`ft_${style}_${group}_e`, {width:w, height:h}, scene, true);
@@ -841,7 +927,7 @@ function facadeTile(style, group){
   for (let i=0;i<900;i++){ const g = 225 + Math.floor(rnd()*30); a.fillStyle=`rgba(${g},${g},${g},.18)`; a.fillRect(rnd()*w, rnd()*h, 2, 2); }
   e.fillStyle = '#000'; e.fillRect(0,0,w,h);
   const glass = (x,y,ww,hh) => { const g = a.createLinearGradient(0,y,0,y+hh); g.addColorStop(0,'#4a6782'); g.addColorStop(1,'#1f2d3b'); a.fillStyle = g; a.fillRect(x,y,ww,hh); a.fillStyle='rgba(255,255,255,.13)'; a.fillRect(x,y,ww*0.3,hh); };
-  const lit = (path) => { if (rnd() < 0.62){ e.fillStyle = rnd()<0.8 ? '#ffc66b' : '#cfe3ff'; path(); } };
+  const lit = (path) => { if (rnd() < litP){ e.fillStyle = rnd()<0.8 ? '#ffc66b' : '#cfe3ff'; path(); } };
   const big = group === 'shop';
   for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){
     const x0 = c*cw, y0 = r*rh;
@@ -943,14 +1029,14 @@ const steps = (H, tiers) => { const L = []; let prev = 0; for (const [t, r] of t
 const LMMAT = {};
 function lmGlass(key, tint, uRep, vRep){
   if (LMMAT[key]) return LMMAT[key];
-  const base = facadeTile('hitech', 'office');
+  const base = facadeTile('hitech', 'office', 0.32);
   const d = base.dif, e = base.emi; d.uScale = e.uScale = uRep; d.vScale = e.vScale = vRep;
   const m = stdMat('lm_'+key,{dt:d, et:e, diffuse:hex(tint), spec:new C3(.7,.72,.78), power:110}); m.diffuseColor = hex(tint);
   nightMats.push(m); return (LMMAT[key] = m);
 }
 function landmarkParts(key){
   const H = lmHeight(key), P = [], add = (m, mat) => P.push([m, mat, null]);
-  const gl = (tint, r) => lmGlass(key, tint, Math.max(2, Math.round(2*Math.PI*r/TILE_W/2)), H/(4*FLOOR_H));
+  const gl = (tint, r) => lmGlass(key, tint, Math.max(4, Math.round(2*Math.PI*r/TILE_W*1.6)), H/(4*FLOOR_H)*1.6);
   if (key==='lm_burj'){
     const lv = steps(H, [[.18,4.8],[.33,4.3],[.46,3.7],[.58,3.1],[.68,2.5],[.76,1.9],[.80,1.4]]).map(L=>({...L, rot:Math.PI/2}));
     add(shaft(lv, 3, 0.5), gl('#cbd7e1', 4));
@@ -1079,7 +1165,8 @@ for (const bl of blocks){
 }
 // outskirts forest
 for (let i=0;i<500;i++){
-  const a = rnd()*6.283, r = lerp(Math.max(W,D)/2+60, 900, Math.sqrt(rnd()));
+  const a = rnd()*6.283, r = lerp(Math.max(W,D)/2+40, ISLAND_R-14, Math.sqrt(rnd()));
+  if (Math.abs(Math.cos(a)*r*1.05) < W/2+20 && Math.abs(Math.sin(a)*r*0.85) < D/2+20) continue;
   addTree(Math.cos(a)*r*1.05, Math.sin(a)*r*0.85, 1.1+rnd()*1.2);
 }
 trunk.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('color');
@@ -1097,18 +1184,93 @@ for (const bl of blocks){
 }
 pole.thinInstanceBufferUpdated('matrix'); bulb.thinInstanceBufferUpdated('matrix');
 
-// distant mountains (silhouette ring)
+// low-poly mountains with snow caps, in two rings across the lake
 (function mountains(){
-  const list=[];
-  for (let i=0;i<34;i++){
-    const a = i/34*6.283 + rnd()*0.1, r = 1150 + rnd()*120, h = 90+rnd()*190;
-    const m = B.MeshBuilder.CreateCylinder('mt',{diameterTop:0,diameterBottom:h*2.6,height:h,tessellation:5},scene);
-    m.position.set(Math.cos(a)*r, h/2-8, Math.sin(a)*r); m.rotation.y = rnd()*3;
-    list.push(m);
+  const rock = [], snow = [];
+  for (const [count, r0, r1, h0, h1] of [[30, 1250, 1400, 120, 300], [22, 1650, 1900, 260, 520]]){
+    for (let i=0;i<count;i++){
+      const a = i/count*6.283 + rnd()*0.15, r = lerp(r0, r1, rnd()), h = lerp(h0, h1, rnd()), wide = h*lerp(2.0, 3.0, rnd()), tess = 5 + Math.floor(rnd()*3), rot = rnd()*3;
+      const m = B.MeshBuilder.CreateCylinder('mt',{diameterTop:0, diameterBottom:wide, height:h, tessellation:tess},scene);
+      m.position.set(Math.cos(a)*r, h/2-2, Math.sin(a)*r); m.rotation.y = rot; rock.push(m);
+      const hs = h*lerp(0.26, 0.38, rnd());
+      const c = B.MeshBuilder.CreateCylinder('sn',{diameterTop:0, diameterBottom:wide*hs/h*1.03, height:hs, tessellation:tess},scene);
+      c.position.set(Math.cos(a)*r, h-2-hs/2+0.4, Math.sin(a)*r); c.rotation.y = rot; snow.push(c);
+    }
   }
-  const mm = B.Mesh.MergeMeshes(list,true,true);
-  mm.material = stdMat('mtM',{diffuse:hex('#6b7b78')}); mm.isPickable=false; mats.mountain = mm.material;
+  const mm = B.Mesh.MergeMeshes(rock,true,true); mm.convertToFlatShadedMesh();
+  mm.material = stdMat('mtM',{diffuse:hex('#6b6f86')}); mm.isPickable=false; mats.mountain = mm.material;
+  const sm = B.Mesh.MergeMeshes(snow,true,true); sm.convertToFlatShadedMesh();
+  sm.material = stdMat('snowM',{diffuse:hex('#f4f1f6'), spec:new C3(.2,.2,.2)}); sm.isPickable=false; mats.snow = sm.material;
 })();
+
+// gradient sky dome with a soft sun glow (replaces a flat background colour)
+B.Effect.ShadersStore.skyVertexShader = `precision highp float; attribute vec3 position; uniform mat4 worldViewProjection; varying vec3 vDir;
+  void main(){ vDir = position; vec4 p = worldViewProjection * vec4(position, 1.0); gl_Position = p.xyww; }`;
+B.Effect.ShadersStore.skyFragmentShader = `precision highp float; varying vec3 vDir; uniform vec3 topC; uniform vec3 horC; uniform vec3 lowC; uniform vec3 sunDir; uniform vec3 sunC; uniform float glow; uniform float stars;
+  float hash(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,45.164))) * 43758.5453); }
+  void main(){ vec3 d = normalize(vDir); float h = d.y;
+    vec3 c = h > 0.0 ? mix(horC, topC, pow(clamp(h,0.0,1.0), 0.5)) : mix(horC, lowC, clamp(-h*6.0, 0.0, 1.0));
+    float s = max(dot(d, normalize(sunDir)), 0.0);
+    c += sunC * (pow(s, 900.0) * 3.0 + pow(s, 12.0) * 0.45 * glow + pow(s, 3.0) * 0.12 * glow);
+    vec3 g = floor(d * 380.0); float st = step(0.9975, hash(g)) * stars * smoothstep(0.05, 0.4, h);
+    c += vec3(st);
+    gl_FragColor = vec4(c, 1.0); }`;
+const skyMat = new B.ShaderMaterial('sky', scene, { vertex:'sky', fragment:'sky' }, { attributes:['position'], uniforms:['worldViewProjection','topC','horC','lowC','sunDir','sunC','glow','stars'] });
+skyMat.backFaceCulling = false; skyMat.disableDepthWrite = true;
+const skyDome = B.MeshBuilder.CreateSphere('skyDome',{diameter:6000, segments:24, sideOrientation:B.Mesh.BACKSIDE},scene);
+skyDome.material = skyMat; skyDome.infiniteDistance = true; skyDome.isPickable = false; skyDome.applyFog = false;
+camera.maxZ = 8000;
+
+// a glowing marker on every free plot (lights up at dusk: "1 Telegram = 1 hovli")
+const dot = B.MeshBuilder.CreateCylinder('dot',{diameter:1.1, height:0.08, tessellation:16},scene);
+mats.dot = stdMat('dotM',{diffuse:hex('#a9d18a'), emissive:new C3(0,0,0)}); dot.material = mats.dot; dot.isPickable = false;
+const ZERO_M = B.Matrix.Scaling(0,0,0);
+for (const p of plots) dot.thinInstanceAdd(B.Matrix.Translation(p.x, 0.47, p.z), false);
+dot.thinInstanceBufferUpdated('matrix'); dot.alwaysSelectAsActiveMesh = true;
+
+// traffic: cars with head- and tail-lights on every road
+const CAR_COLORS = ['#e9e6dc','#2b2f36','#c0503b','#1f6fb2','#9aa3ad','#d4a72c','#f4f1ea','#3f9a5a'];
+const carBody = B.MeshBuilder.CreateBox('car',{width:1.9, height:1.0, depth:4.2},scene); carBody.position.y = 0.6; carBody.bakeCurrentTransformIntoVertices();
+const cabin = B.MeshBuilder.CreateBox('cab',{width:1.7, height:0.7, depth:2.2},scene); cabin.position.set(0,1.35,-0.2); cabin.bakeCurrentTransformIntoVertices();
+const carMesh = B.Mesh.MergeMeshes([carBody, cabin], true, true);
+carMesh.material = stdMat('carM',{diffuse:new C3(1,1,1), spec:new C3(.6,.6,.6), power:64}); carMesh.isPickable = false;
+const head = B.MeshBuilder.CreateBox('hl',{width:1.6, height:0.25, depth:0.08},scene); head.position.set(0,0.75,2.12); head.bakeCurrentTransformIntoVertices();
+head.material = stdMat('hlM',{diffuse:hex('#fff6d8'), emissive:hex('#fff3c4')}); head.isPickable = false;
+const tail = B.MeshBuilder.CreateBox('tl',{width:1.6, height:0.25, depth:0.08},scene); tail.position.set(0,0.75,-2.12); tail.bakeCurrentTransformIntoVertices();
+tail.material = stdMat('tlM',{diffuse:hex('#ff3b30'), emissive:hex('#ff2a1f')}); tail.isPickable = false;
+const cars = [];
+const CAR_N = 150;
+const carBuf = new Float32Array(CAR_N*16);
+(function spawnCars(){
+  for (let i=0;i<CAR_N;i++){
+    const alongX = rnd() < 0.5, dir = rnd() < 0.5 ? 1 : -1;
+    const line = alongX ? Z0 - RD/2 + Math.floor(rnd()*(NBZ+1))*PITCH : X0 - RD/2 + Math.floor(rnd()*(NBX+1))*PITCH;
+    const len = alongX ? W + 2*RD : D + 2*RD, start = alongX ? X0 - RD : Z0 - RD;
+    cars.push({ alongX, dir, line: line + dir*2.6*(alongX ? 1 : -1), start, len, pos: rnd()*len, speed: lerp(7, 15, rnd()) });
+  }
+  carMesh.thinInstanceSetBuffer('matrix', carBuf, 16, false);
+  head.thinInstanceSetBuffer('matrix', carBuf, 16, false);
+  tail.thinInstanceSetBuffer('matrix', carBuf, 16, false);
+  carMesh.thinInstanceRegisterAttribute('color', 4);
+  cars.forEach((c, i) => { const col = hex(CAR_COLORS[i % CAR_COLORS.length]); carMesh.thinInstanceSetAttributeAt('color', i, [col.r, col.g, col.b, 1], false); });
+  carMesh.thinInstanceBufferUpdated('color');
+  [carMesh, head, tail].forEach(m => { m.alwaysSelectAsActiveMesh = true; m.receiveShadows = true; });
+})();
+let carsVisible = CAR_N;
+function updateCars(dt){
+  for (let i=0;i<CAR_N;i++){
+    const c = cars[i], o = i*16;
+    c.pos = (c.pos + c.dir*c.speed*dt + c.len) % c.len;
+    const along = c.start + c.pos, x = c.alongX ? along : c.line, z = c.alongX ? c.line : along;
+    const hide = i >= carsVisible || (x > parkMin.x-2 && x < parkMax.x+2 && z > parkMin.z-2 && z < parkMax.z+2);
+    const th = c.alongX ? (c.dir > 0 ? Math.PI/2 : -Math.PI/2) : (c.dir > 0 ? 0 : Math.PI), cs = Math.cos(th), sn = Math.sin(th), k = hide ? 0 : 1;
+    carBuf[o]=cs*k; carBuf[o+1]=0; carBuf[o+2]=-sn*k; carBuf[o+3]=0;
+    carBuf[o+4]=0; carBuf[o+5]=k; carBuf[o+6]=0; carBuf[o+7]=0;
+    carBuf[o+8]=sn*k; carBuf[o+9]=0; carBuf[o+10]=cs*k; carBuf[o+11]=0;
+    carBuf[o+12]=x; carBuf[o+13]=0.05; carBuf[o+14]=z; carBuf[o+15]=1;
+  }
+  carMesh.thinInstanceBufferUpdated('matrix'); head.thinInstanceBufferUpdated('matrix'); tail.thinInstanceBufferUpdated('matrix');
+}
 
 // ---------- populate others ----------
 function hexArr(h){ const c=hex(h); return [c.r,c.g,c.b,1]; }
@@ -1153,7 +1315,7 @@ function populateDemo(){
   for (const p of plots) paintPad(p, false);
 }
 function flushBuffers(){
-  pad.thinInstanceBufferUpdated('color');
+  pad.thinInstanceBufferUpdated('color'); dot.thinInstanceBufferUpdated('matrix');
   trunk.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('color');
   for (const t of Object.values(T)) for (const pt of t.parts){ if (pt.mesh.hasThinInstances){ pt.mesh.thinInstanceBufferUpdated('matrix'); if(pt.colorKey) pt.mesh.thinInstanceBufferUpdated('color'); pt.mesh.thinInstanceRefreshBoundingInfo(false); } }
   pad.thinInstanceRefreshBoundingInfo(false);
@@ -1338,6 +1500,7 @@ function showPlot(p){
   }
 }
 async function buy(p, price){
+  if (API.on && !(API.me && API.me.nickname)){ if (!(await ensureLogin())) return; showPlot(p); return; }
   if (S.coins<price) return;
   const hadBuilding = !!p.tpl;
   if (API.on){
@@ -1568,14 +1731,17 @@ function applyQuality(q){
       pipeline.imageProcessing.vignetteEnabled = true; pipeline.imageProcessing.vignetteWeight = 1.4;
       glow = new B.GlowLayer('glow', scene, { blurKernelSize: 32, mainTextureRatio: 0.5 });
       glow.intensity = 0.6;
-      glow.addIncludedOnlyMesh(bulb);
+      glow.addIncludedOnlyMesh(bulb); glow.addIncludedOnlyMesh(head); glow.addIncludedOnlyMesh(tail); glow.addIncludedOnlyMesh(dot);
     }
   }
-  scene.fogDensity = q==='low' ? 0.0019 : 0.0015;
+  scene.fogDensity = q==='low' ? 0.0011 : 0.0009;
+  carsVisible = q==='low' ? 50 : q==='medium' ? 110 : CAR_N;
 }
 
 // ---------- day / night ----------
 const SKY_NIGHT = new C3(.05,.08,.17), SKY_DAY = new C3(.55,.74,.93), SKY_DUSK = new C3(.98,.55,.32);
+// sky dome palettes: [top, horizon]
+const SKY = { day:[hex('#3f7fd4'), hex('#c3dcef')], dusk:[hex('#3b3a78'), hex('#f3a467')], night:[hex('#060a1a'), hex('#1b2342')] };
 const WARM = new C3(1,.86,.62);
 function clockStr(){ const h=Math.floor(S.hours)%24, m=Math.floor((S.hours%1)*60); return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
 const tmpDir = new V3();
@@ -1598,14 +1764,24 @@ function updateSky(){
   hemi.diffuse = C3.Lerp(new C3(.42,.52,.85), new C3(.95,.97,1), day);
   let sky = C3.Lerp(SKY_NIGHT, SKY_DAY, day);
   sky = C3.Lerp(sky, SKY_DUSK, dusk*0.55*(elev>-0.25?1:0));
-  scene.clearColor = new C4(sky.r, sky.g, sky.b, 1);
-  scene.fogColor = sky;
+  const dk = dusk*(elev>-0.3?1:0);
+  let top = C3.Lerp(SKY.night[0], SKY.day[0], day), hor = C3.Lerp(SKY.night[1], SKY.day[1], day);
+  top = C3.Lerp(top, SKY.dusk[0], dk*0.8); hor = C3.Lerp(hor, SKY.dusk[1], dk*0.9);
+  skyMat.setColor3('topC', top); skyMat.setColor3('horC', hor); skyMat.setColor3('lowC', C3.Lerp(hor, hex('#0b1424'), 0.6));
+  skyMat.setVector3('sunDir', new V3(-sx, Math.max(sy, -0.2), -0.45));
+  skyMat.setColor3('sunC', C3.Lerp(hex('#ff9a4a'), hex('#fff4d6'), smooth(0, 0.5, elev)).scale(elev > -0.1 ? 1 : 0));
+  skyMat.setFloat('glow', 0.4 + dk*1.6); skyMat.setFloat('stars', night);
+  scene.clearColor = new C4(hor.r, hor.g, hor.b, 1);
+  scene.fogColor = C3.Lerp(hor, sky, 0.35);
+  mats.lake.emissiveColor = C3.Lerp(top, hor, 0.6).scale(0.35);
+  mats.dot.emissiveColor = hex('#ffcf73').scale(0.15 + night*1.3);
+  if (mats.snow) mats.snow.diffuseColor = C3.Lerp(hex('#3a4160'), hex('#f4f1f6'), Math.max(day, dk*0.8)).add(hex('#3a1e10').scale(dk*0.5));
   // windows & lamps
   const ei = night*1.05;
   for (const m of nightMats) m.emissiveTexture.level = ei;
   mats.bulb.emissiveColor = WARM.scale(night*1.4);
   if (glow) glow.intensity = 0.65*night;
-  mats.mountain.diffuseColor = C3.Lerp(new C3(.12,.14,.2), new C3(.42,.5,.5), day);
+  mats.mountain.diffuseColor = C3.Lerp(hex('#1c2034'), hex('#6b6f86'), day).add(hex('#4a2a3a').scale(dk*0.5));
   $('#clock').textContent = clockStr();
   $('#clockIcon').textContent = elev>0.05 ? '☀' : elev>-0.12 ? '◐' : '☾';
 }
@@ -1654,7 +1830,7 @@ function stopAuto(){ fly = null; S.autoOrbit = false; S.orbitAnim = 0; const b=$
 canvas.addEventListener('pointerdown', e=>{
   try { canvas.setPointerCapture(e.pointerId); } catch(_){}
   const p = rel(e); ptrs.set(e.pointerId, p);
-  stopAuto(); vel.x = vel.z = 0;
+  stopAuto(); vel.x = vel.z = 0; S.tour = null; S.cinePause = performance.now() + 4000;
   if (ptrs.size === 1){
     tapStart = { x:p.x, y:p.y, t:performance.now() };
     const orbit = e.pointerType==='mouse' && (e.button===2 || e.button===1 || e.ctrlKey || e.altKey);
@@ -1783,6 +1959,20 @@ scene.onBeforeRenderObservable.add(()=>{
     if (fly.to.a!=null) camera.alpha = lerp(fly.from.a, fly.to.a, e);
     if (fly.t>=1) fly = null;
   }
+  // welcome-screen cinematic orbit (pauses for a few seconds whenever someone drags the city)
+  if (S.cine && !gest && now > (S.cinePause||0)){
+    camera.alpha += dt*0.045;
+    camera.target.x += (0 - camera.target.x)*Math.min(1, dt*0.8); camera.target.z += (0 - camera.target.z)*Math.min(1, dt*0.8);
+    camera.radius += ((isMobile ? 430 : 360) - camera.radius)*Math.min(1, dt*0.6); camera.beta += (1.17 - camera.beta)*Math.min(1, dt*0.6);
+  }
+  if (S.tour){
+    S.tour.t += dt;
+    if (S.tour.t > 4.6){
+      S.tour.t = 0; S.tour.i++;
+      if (S.tour.i >= S.tour.list.length){ S.tour = null; toast(tr('tourEnd')); }
+      else { const p = S.tour.list[S.tour.i], h = T[p.vkey] ? T[p.vkey].height : 60; select(p); flyTo(p.x, p.z, h*2.3, 1.14); toast(`${TPL[p.tpl].name} · ${TPL[p.tpl].city} · ${TPL[p.tpl].realHeight} m`); }
+    }
+  }
   // pan inertia, rotate-button animation, auto orbit, keyboard
   if (!gest && (Math.abs(vel.x)+Math.abs(vel.z)) > 0.5){ moveTarget(vel.x*dt, vel.z*dt); const k = Math.exp(-dt*5); vel.x*=k; vel.z*=k; }
   if (S.orbitAnim){ const st = S.orbitAnim*Math.min(1, dt*7); orbitBy(st); S.orbitAnim -= st; if (Math.abs(S.orbitAnim)<1e-3) S.orbitAnim = 0; }
@@ -1792,8 +1982,10 @@ scene.onBeforeRenderObservable.add(()=>{
   updateLabels(dt);
   // selector pulse
   if (selector.isEnabled()){ const s = 1 + Math.sin(now/220)*0.03; selector.scaling.set(s,1,s); mats.sel.emissiveColor = hex('#2fb5a3').scale(0.6+0.4*Math.sin(now/220)); }
-  // water shimmer
+  // water shimmer + traffic
   jet.scaling.y = 1 + Math.sin(now/160)*0.06;
+  lakeTex.uOffset += dt*0.004; lakeTex.vOffset += dt*0.002;
+  updateCars(dt);
   // fps + auto quality
   fpsAcc += engine.getFps(); fpsN++; fpsT += dt;
   if (fpsT > 0.5){
@@ -1878,18 +2070,20 @@ function showLogin(opts){
       ${opts.guest ? `<button class="btn primary" id="guestGo" style="width:100%;margin-top:6px">Mehmon sifatida kirish</button><p class="note">Hisob shu brauzerga bog‘lanadi. Brauzer tozalansa, mulk yo‘qoladi.</p>` : ''}
       ${opts.dev ? `<div class="sep">${opts.telegramBot?'yoki ':''}sinov uchun kirish</div><div class="row"><input id="devName" placeholder="Ismingiz (test)" maxlength="40"><button class="btn primary" id="devGo" style="flex:0 0 auto">Kirish</button></div>` : ''}
       ${!opts.dev && !opts.telegramBot && !opts.guest ? '<p class="note warn">Kirish usuli sozlanmagan (TELEGRAM_BOT_TOKEN).</p>' : ''}
-      <p class="note">Kirish bilan shahar qoidalariga rozilik bildirasiz.</p>`);
+      <p class="note">Kirish bilan shahar qoidalariga rozilik bildirasiz.</p>
+      <button class="h-browse" id="authBack" style="color:var(--muted);font-size:14px;margin-top:6px">← Orqaga</button>`);
+    $('#authBack').onclick = () => resolve(false);
     if (opts.telegramBot){
-      window.onTelegramAuth = async (user) => { try { await api('POST','/api/auth/telegram', user); resolve(); } catch(e){ toast(e.message); } };
+      window.onTelegramAuth = async (user) => { try { await api('POST','/api/auth/telegram', user); resolve(true); } catch(e){ toast(e.message); } };
       const sc = document.createElement('script');
       sc.async = true; sc.src = 'https://telegram.org/js/telegram-widget.js?22';
       sc.setAttribute('data-telegram-login', opts.telegramBot); sc.setAttribute('data-size','large'); sc.setAttribute('data-radius','12');
       sc.setAttribute('data-onauth','onTelegramAuth(user)'); sc.setAttribute('data-request-access','write');
       $('#tgBox').appendChild(sc);
     }
-    if (opts.guest) $('#guestGo').onclick = async ()=>{ $('#guestGo').disabled = true; try { await api('POST','/api/auth/guest'); resolve(); } catch(e){ toast(e.message); $('#guestGo').disabled = false; } };
+    if (opts.guest) $('#guestGo').onclick = async ()=>{ $('#guestGo').disabled = true; try { await api('POST','/api/auth/guest'); resolve(true); } catch(e){ toast(e.message); $('#guestGo').disabled = false; } };
     if (opts.dev){
-      const go = async ()=>{ const n = $('#devName').value.trim(); if (!n) return; try { await api('POST','/api/auth/dev',{ name:n }); resolve(); } catch(e){ toast(e.message); } };
+      const go = async ()=>{ const n = $('#devName').value.trim(); if (!n) return; try { await api('POST','/api/auth/dev',{ name:n }); resolve(true); } catch(e){ toast(e.message); } };
       $('#devGo').onclick = go; $('#devName').onkeydown = e=>{ if (e.key==='Enter') go(); };
     }
   });
@@ -1920,6 +2114,89 @@ function showNickname(){
   });
 }
 
+// ---------- welcome screen ----------
+const I18N = {
+  uz: { pop:'AHOLI', badge:'1 Telegram = 1 hovli', title:'Mahallaga xush kelibsiz',
+        sub:'Har bir o‘yinchining o‘z hovlisi bor — tepasida Telegram niki yonib turadi. Yer oling, uslubini tanlang, qavat qo‘shing va dunyoning eng baland binolariga ega bo‘ling.',
+        ph:'Telegram nikingiz', find:'Hovlimni top', tour:'Dunyo osmono‘parlari bo‘ylab sayohat ›', get:'Hovli olish', browse:'Shunchaki aylanib chiqish', popLine:'Aholi',
+        notFound:'Bu nik bilan hovli topilmadi. “Hovli olish” ni bosing — Telegram orqali kirib, o‘zingizga yer oling.', tourEnd:'Sayohat tugadi', choyxona:'Milliy choyxona' },
+  ru: { pop:'ЖИТЕЛИ', badge:'1 Telegram = 1 двор', title:'Добро пожаловать в Махаллю',
+        sub:'У каждого игрока свой двор — над ним светится ник в Telegram. Купите землю, выберите стиль, добавьте этажи и станьте владельцем копий самых высоких зданий мира.',
+        ph:'Ваш ник в Telegram', find:'Найти мой двор', tour:'Тур по небоскрёбам мира ›', get:'Получить двор', browse:'Просто посмотреть', popLine:'Жители',
+        notFound:'Двор с таким ником не найден. Нажмите «Получить двор» — войдите через Telegram и выберите участок.', tourEnd:'Тур завершён', choyxona:'Национальная чайхана' },
+  en: { pop:'RESIDENTS', badge:'1 Telegram = 1 home', title:'Welcome to Mahalla',
+        sub:'Every player has their own home — their Telegram name glows above it. Buy land, pick a style, add floors and own copies of the world’s tallest buildings.',
+        ph:'Your Telegram username', find:'Find my home', tour:'Tour the world’s skyscrapers ›', get:'Get a home', browse:'Just look around', popLine:'Residents',
+        notFound:'No home found for that name. Tap “Get a home” to sign in with Telegram and claim a plot.', tourEnd:'Tour finished', choyxona:'National teahouse' },
+};
+let LANG = 'uz'; try { const l = localStorage.getItem('mahalla_lang'); if (I18N[l]) LANG = l; } catch(_){}
+const tr = k => I18N[LANG][k] || I18N.uz[k] || k;
+function applyLang(){
+  document.querySelectorAll('#hero [data-i18n]').forEach(el => el.textContent = tr(el.dataset.i18n));
+  $('#tgIn').placeholder = tr('ph');
+  $('#hLangs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.l === LANG));
+  document.documentElement.lang = LANG;
+  renderChips();
+}
+function renderChips(){
+  const lm = ['lm_burj','lm_abraj','lm_shanghai','lm_owtc','lm_merdeka'].map(k => plots.find(p => p.tpl === k)).filter(Boolean);
+  const tea = plots.find(p => p.tpl === 'cafe' && p.style === 'milliy');
+  const items = lm.map(p => [p, TPL[p.tpl].name.replace(/ \(.*\)$/, '')]);
+  if (tea) items.push([tea, tr('choyxona')]);
+  $('#hChips').innerHTML = items.map(([p, n]) => `<button data-pid="${p.id}">${esc(n)}</button>`).join('');
+  $('#hChips').querySelectorAll('button').forEach(b => b.onclick = () => { const p = plots[+b.dataset.pid]; leaveHero(); visitPlot(p); });
+}
+function countUp(el, to){
+  const from = +(el.dataset.v || 0), t0 = performance.now();
+  const step = now => { const k = Math.min(1, (now - t0)/1400), v = Math.round(from + (to - from)*(1 - Math.pow(1-k, 3))); el.textContent = fmt(v); if (k < 1) requestAnimationFrame(step); else el.dataset.v = to; };
+  requestAnimationFrame(step);
+}
+function setPopulation(n){ countUp($('#popN'), n); countUp($('#popN2'), n); }
+function visitPlot(p){ const h = (p.vkey && T[p.vkey] ? T[p.vkey].height : 10); flyTo(p.x, p.z, Math.max(70, h*2.1), h > 40 ? 1.12 : 1.05); showPlot(p); }
+function showHero(){
+  document.body.classList.add('hero'); $('#hero').classList.add('show');
+  S.heroSpeed = S.speed; S.speed = 0; S.hours = 17.6; S.cine = true; S.cinePause = 0;
+  closeSheet(); select(null); tut(0); applyLang();
+}
+function leaveHero(){
+  if (!$('#hero').classList.contains('show')) return;
+  $('#hero').classList.remove('show'); document.body.classList.remove('hero');
+  S.cine = false; S.speed = S.heroSpeed ?? 1; S.hours = 15.8; // play starts in bright afternoon light
+}
+$('#hLangs').querySelectorAll('button').forEach(b => b.onclick = () => { LANG = b.dataset.l; try { localStorage.setItem('mahalla_lang', LANG); } catch(_){} applyLang(); });
+$('#findForm').onsubmit = async e => {
+  e.preventDefault();
+  const q = $('#tgIn').value.trim().replace(/^@/, ''); if (!q) { $('#tgIn').focus(); return; }
+  let ids = [];
+  if (API.on){ try { const r = await api('GET', '/api/find?q=' + encodeURIComponent(q)); ids = r.plots || []; } catch(_){} }
+  else { const ql = q.toLowerCase(); ids = plots.filter(p => p.owner && p.owner !== 'Shahar hokimligi' && ((p.ownerTg||'').toLowerCase() === ql || p.owner.toLowerCase() === ql)).map(p => p.id); }
+  const msg = $('#findMsg');
+  if (!ids.length){ msg.textContent = tr('notFound'); msg.classList.add('show'); const g = $('#getBtn'); g.classList.remove('pulse'); void g.offsetWidth; g.classList.add('pulse'); return; }
+  msg.classList.remove('show'); leaveHero(); visitPlot(plots[ids[0]]);
+};
+$('#tourBtn').onclick = () => {
+  const list = plots.filter(p => p.tpl && TPL[p.tpl] && TPL[p.tpl].landmark).sort((a,b) => Math.atan2(a.z,a.x) - Math.atan2(b.z,b.x));
+  leaveHero(); if (!list.length) return;
+  S.tour = { list, i: -1, t: 99 };
+};
+$('#getBtn').onclick = async () => {
+  if (API.on && !(await ensureLogin())) return;
+  leaveHero();
+  if (myPlots().length) visitPlot(myPlots()[0]); else { findLand(); if (S.tut) tut(1); }
+};
+$('#browseBtn').onclick = () => { leaveHero(); if (!API.on || (API.me && API.me.nickname)) tut(1); else toast('Ko‘rish rejimi. Yer olish uchun bo‘sh uchastkani bosing.'); };
+
+// sign-in only when it is needed (buying), so visitors can look around freely
+async function ensureLogin(){
+  if (!API.on) return true;
+  if (API.me && API.me.nickname) return true;
+  if (!API.me){ const ok = await showLogin(API.opts); if (!ok){ closeAuth(); return false; } await refreshMe(); }
+  if (!API.me.nickname){ await showNickname(); await refreshMe(); }
+  closeAuth();
+  try { const c = await api('GET','/api/city'); for (const d of c.plots) applyDTO(plots[d.id], d, false); flushBuffers(); } catch(_){}
+  return true;
+}
+
 async function boot(){
   let opts = null;
   if (location.protocol.startsWith('http')){
@@ -1936,7 +2213,8 @@ async function boot(){
   const offline = () => { // demo mode without a server (e.g. the published artifact)
     API.on = false;
     populateDemo(); flushBuffers(); updateCoins();
-    $('#loader').classList.add('hide'); setTimeout(()=>tut(1), 600);
+    $('#loader').classList.add('hide');
+    showHero(); setPopulation(new Set(plots.filter(p => p.owner && p.owner !== 'Shahar hokimligi').map(p => p.owner)).size);
   };
   if (!opts) return offline();
   API.on = true;
@@ -1950,12 +2228,12 @@ async function boot(){
       if (p.zone==='res' && p.tpl && rnd()<0.5) addTree(p.x+3.6*(rnd()<.5?-1:1), p.z+3.6*(rnd()<.5?-1:1), 0.55); }
     flushBuffers();
   } catch(e){ console.error(e); }
+  API.opts = opts;
   $('#loader').classList.add('hide');
   connectWs();
   let me = null;
   try { me = await refreshMe(); } catch(_){}
-  if (!me){ await showLogin(opts); me = await refreshMe(); }
-  if (!me.nickname){ await showNickname(); me = await refreshMe(); }
+  if (!me || !me.nickname){ showHero(); setPopulation(city.stats ? city.stats.residents : 0); return; }
   closeAuth();
   // re-mark my plots now that we know who "me" is
   const city2 = await api('GET','/api/city');

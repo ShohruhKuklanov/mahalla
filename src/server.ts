@@ -155,9 +155,23 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
     return {
       districts: DISTRICTS, zones: ZONES, // building types, styles, prices: the catalog block in index.html
       economy: { plotLimit: eco.plot_limit, saleFee: eco.sale_fee, daySeconds: config.daySeconds },
+      stats: { residents: (await db.query("select count(distinct p.owner_id)::int n from plots p join users u on u.id = p.owner_id where u.role <> 'bot'")).rows[0].n },
       plots: await game.allPlots(db),
     };
   });
+  // "Hovlimni top": find someone's plots by Telegram @username (only if they show it) or by game nickname
+  app.get('/api/find', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req) => {
+    const { q } = z.object({ q: z.string().min(1).max(40) }).parse(req.query);
+    const name = q.trim().replace(/^@/, '').toLowerCase();
+    if (!/^[\p{L}\p{N}_.‘’ʻ]{2,40}$/u.test(name)) return { found: false, plots: [] };
+    const u = (await db.query(
+      `select id, nickname from users where status = 'active' and role <> 'bot'
+       and ((show_telegram and lower(telegram_username) = $1) or nickname_lower = $1) order by (lower(telegram_username) = $1) desc nulls last limit 1`, [name])).rows[0];
+    if (!u) return { found: false, plots: [] };
+    const plots = (await db.query('select id from plots where owner_id = $1 order by id', [u.id])).rows.map((r) => r.id);
+    return { found: plots.length > 0, nickname: u.nickname, plots };
+  });
+
   app.get('/api/plots/:id', async (req) => {
     const p = await game.onePlot(db, plotId(req)); if (!p) throw E.notFound('Uchastka topilmadi'); return p;
   });

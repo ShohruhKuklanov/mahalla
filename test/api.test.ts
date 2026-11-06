@@ -294,6 +294,19 @@ test('landmark copies: all 10 stand in the centre from the start, for sale, one 
   assert.deepEqual(await ledgerMismatches(db), []);
 });
 
+test('"Hovlimni top": find plots by nickname or shown Telegram @username', async () => {
+  const byNick = (await app.inject({ method: 'GET', url: '/api/find?q=buyer1' })).json();
+  assert.equal(byNick.found, true); assert.equal(byNick.plots.length, 1);
+  // the Telegram test user hid their @username, so it must not be findable by it
+  assert.equal((await app.inject({ method: 'GET', url: '/api/find?q=@shohruh_k' })).json().found, false);
+  await db.query("update users set show_telegram = true where telegram_username = 'shohruh_k'");
+  const byTg = (await app.inject({ method: 'GET', url: '/api/find?q=@SHOHRUH_K' })).json();
+  assert.equal(byTg.found, true); assert.equal(byTg.nickname, 'TgShohrux');
+  assert.equal((await app.inject({ method: 'GET', url: '/api/find?q=nobody_here' })).json().found, false);
+  assert.equal((await app.inject({ method: 'GET', url: '/api/find?q=Shahar' })).json().found, false, 'bots are not people');
+  assert.ok((await city()).stats.residents >= 5);
+});
+
 test('guest login is off unless GUEST_LOGIN=1', async () => {
   const r = await app.inject({ method: 'POST', url: '/api/auth/guest' });
   assert.equal(r.statusCode, 403);

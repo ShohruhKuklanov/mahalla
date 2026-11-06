@@ -24,7 +24,7 @@ Windows’da: `set DAY_SECONDS=360 && npm run dev`.
 npm test
 ```
 
-19 ta uchidan-uchigacha sinov haqiqiy PostgreSQL’da ishlaydi. Ular quyidagilarni tekshiradi:
+20 ta uchidan-uchigacha sinov haqiqiy PostgreSQL’da ishlaydi. Ular quyidagilarni tekshiradi:
 
 - 20 kishi bir vaqtda bitta yerni sotib olmoqchi bo‘lsa, faqat bittasi oladi va boshqalarning tangasi yo‘qolmaydi.
 - Tugma ikki marta bosilsa ham pul bir marta yechiladi.
@@ -78,7 +78,8 @@ test/                 uchidan-uchigacha sinovlar
 
 | Usul | Manzil | Nima qiladi |
 | --- | --- | --- |
-| GET | /api/city | butun shahar: uchastkalar, binolar, narxlar |
+| GET | /api/city | butun shahar: uchastkalar, binolar, narxlar, aholi soni |
+| GET | /api/find?q= | “Hovlimni top”: Telegram @username (agar ko‘rsatilgan bo‘lsa) yoki nik bo‘yicha hovli |
 | POST | /api/auth/telegram · /api/auth/guest · /api/auth/dev | kirish (guest — beta uchun, dev — faqat lokal sinovda) |
 | GET | /api/me | balans, mulklar, to‘plangan daromad |
 | POST | /api/me/nickname | nik + avatar + 16+ tasdig‘i |
