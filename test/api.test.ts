@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createPool, migrate, Db } from '../src/db.js';
 import { seed } from '../src/seed.js';
 import { buildApp } from '../src/server.js';
-import { ledgerMismatches, clearEconomyCache } from '../src/game.js';
+import { ledgerMismatches, clearEconomyCache, allPlots } from '../src/game.js';
 import { config } from '../src/config.js';
 import crypto from 'node:crypto';
 
@@ -35,9 +35,9 @@ async function player(name: string, nick = name) {
   return { call, me: async () => (await call('GET', '/api/me')).json() };
 }
 const city = async () => (await app.inject({ method: 'GET', url: '/api/city' })).json();
+const everyPlot = async () => JSON.parse(JSON.stringify(await allPlots(db))); // all 12 992, empty ones included
 async function emptyPlot(zone: string, skip = 0) {
-  const c = await city();
-  return c.plots.filter((p: any) => p.state === 'empty' && p.zone === zone)[skip];
+  return (await everyPlot()).filter((p: any) => p.state === 'empty' && p.zone === zone)[skip];
 }
 
 test('new player gets 10 000 coins and must pick a nickname first', async () => {
@@ -108,7 +108,7 @@ test('plot limit and insufficient funds', async () => {
   assert.equal(r.json().error, 'plot_limit');
 
   const poor = await player('poor');
-  const cen = (await city()).plots.filter((p: any) => p.state === 'empty' && p.price > 10000)[0];
+  const cen = (await everyPlot()).filter((p: any) => p.state === 'empty' && p.price > 10000)[0];
   const r2 = await poor.call('POST', `/api/plots/${cen.id}/buy`);
   assert.equal(r2.statusCode, 402);
   assert.equal(r2.json().error, 'insufficient_funds');
@@ -162,7 +162,7 @@ test('market: price corridor, new-account rule, sale moves coins and building', 
   assert.equal(tooHigh.json().error, 'price_out_of_range');
   const { min } = tooHigh.json();
   assert.equal((await seller.call('POST', `/api/plots/${p.id}/list`, { price: min })).statusCode, 200);
-  assert.equal((await city()).plots[p.id].state, 'sale');
+  assert.equal((await city()).plots.find((q: any) => q.id === p.id).state, 'sale');
 
   const sellerBefore = (await seller.me()).balance;
   const buyer = await player('buyer2');
@@ -209,11 +209,29 @@ test('public profile never exposes private data', async () => {
   assert.deepEqual(Object.keys(pub).sort(), ['avatarId', 'id', 'likes', 'nickname', 'plots', 'since']);
 });
 
-test('city endpoint returns the same 1 216-plot layout as the 3D client', async () => {
+test('city: 12 992-plot layout (v1 centre ids unchanged), only non-empty plots sent, client-side land prices match', async () => {
   const c = await city();
-  assert.equal(c.plots.length, 1216);
-  assert.deepEqual([c.plots[0].x, c.plots[0].z], [-267, -211]); // same formula as web/index.html
+  assert.equal(c.total, 12992);
+  assert.ok(c.plots.every((p: any) => p.state !== 'empty'));
+  const p0 = (await app.inject({ method: 'GET', url: '/api/plots/0' })).json();
+  assert.deepEqual([p0.x, p0.z], [-267, -211]); // same formula as web/index.html
+  const p1216 = (await app.inject({ method: 'GET', url: '/api/plots/1216' })).json();
+  assert.deepEqual([p1216.x, p1216.z, p1216.district], [-883, -715, 3]);
+  // the client prices empty land as round100(base × loc × (1 + w × occupancy[district]))
+  const loc = 0.77, occ = c.land.occupancy[3] || 0;
+  assert.equal(p1216.price, Math.round(4000 * loc * (1 + c.land.demandWeight * occ) / 100) * 100);
   clearEconomyCache();
+});
+
+test('expansion: a v1 database (1 216 plots) gets the new outer ring on the next start, owners untouched', async () => {
+  const before = (await db.query('select count(*)::int n, count(owner_id)::int o from plots where id < 1216')).rows[0];
+  await db.query('delete from plots where id >= 1216 and owner_id is null and not exists (select 1 from listings l where l.plot_id = plots.id)');
+  const mid = (await db.query('select count(*)::int n from plots')).rows[0].n;
+  assert.ok(mid < 12992);
+  await seed(db, { demo: false });
+  const after = (await db.query('select count(*)::int n from plots')).rows[0].n;
+  assert.equal(after, 12992);
+  assert.deepEqual((await db.query('select count(*)::int n, count(owner_id)::int o from plots where id < 1216')).rows[0], before);
 });
 
 test('Telegram login: signature checked, @username shown over the owner’s plots unless hidden', async () => {
@@ -251,7 +269,7 @@ test('styles, floors and roofs: validated, priced by floors', async () => {
   const a = await player('stylist');
   await db.query("update wallets set balance = balance + 50000 where user_id = (select id from users where nickname='stylist')");
   await db.query("insert into transactions(user_id,amount,type,balance_after) select id, 50000, 'admin_adjust', 60000 from users where nickname='stylist'");
-  const p = (await city()).plots.filter((x: any) => x.state === 'empty' && x.zone === 'com')[0];
+  const p = (await everyPlot()).filter((x: any) => x.state === 'empty' && x.zone === 'com')[0];
   await a.call('POST', `/api/plots/${p.id}/buy`);
   const tryBuild = (b: any) => a.call('POST', `/api/plots/${p.id}/build`, { template: 'office', accent: '#2a9d8f', ...b });
   assert.equal((await tryBuild({ style: 'hitech', floors: 40, roof: 'antenna', color: '#cfe3ee' })).json().error, 'bad_floors');
@@ -280,7 +298,7 @@ test('landmark copies: all 10 stand in the centre from the start, for sale, one 
   const res = await emptyPlot('res', 70);
   await a.call('POST', `/api/plots/${res.id}/buy`);
   assert.equal((await a.call('POST', `/api/plots/${res.id}/build`, { template: 'lm_burj' })).json().error, 'wrong_zone');
-  const cen = (await city()).plots.filter((x: any) => x.state === 'empty' && x.zone === 'cen');
+  const cen = (await everyPlot()).filter((x: any) => x.state === 'empty' && x.zone === 'cen');
   await a.call('POST', `/api/plots/${cen[0].id}/buy`);
   const dup = await a.call('POST', `/api/plots/${cen[0].id}/build`, { template: 'lm_burj' });
   assert.equal(dup.statusCode, 409); assert.equal(dup.json().error, 'landmark_taken', 'a second Burj Khalifa is refused');

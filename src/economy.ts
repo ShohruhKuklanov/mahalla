@@ -1,15 +1,26 @@
 // City layout, building templates and price rules.
 // The layout MUST stay identical to the 3D client (web/index.html) so plot ids match.
 
-export const LAYOUT = { P: 10, PB: 4, SW: 2.5, RD: 11, NBX: 10, NBZ: 8 };
+// The city: a 32 × 26 grid of blocks. The original 10 × 8 centre keeps plot ids 0–1215 (layout v1);
+// the ring around it (v2, "10× city") is appended after, so existing owners keep their plots.
+export const LAYOUT = { P: 10, PB: 4, SW: 2.5, RD: 11, GX: 32, GZ: 26, OX: 11, OZ: 9, CX: 10, CZ: 8 };
 const BLK = LAYOUT.PB * LAYOUT.P + 2 * LAYOUT.SW;
 const PITCH = BLK + LAYOUT.RD;
-const W = LAYOUT.NBX * PITCH - LAYOUT.RD, D = LAYOUT.NBZ * PITCH - LAYOUT.RD;
+const W = LAYOUT.GX * PITCH - LAYOUT.RD, D = LAYOUT.GZ * PITCH - LAYOUT.RD;
 const X0 = -W / 2, Z0 = -D / 2;
-const isPark = (bx: number, bz: number) => (bx === 4 || bx === 5) && (bz === 3 || bz === 4);
+const inCore = (gx: number, gz: number) => gx >= LAYOUT.OX && gx < LAYOUT.OX + LAYOUT.CX && gz >= LAYOUT.OZ && gz < LAYOUT.OZ + LAYOUT.CZ;
+/** Park blocks: the central park and a small square park every 6 blocks outside the centre. */
+export const isPark = (gx: number, gz: number) =>
+  ((gx === 15 || gx === 16) && (gz === 12 || gz === 13)) || (!inCore(gx, gz) && gx % 6 === 5 && gz % 6 === 4);
 
 export type ZoneCode = 'res' | 'com' | 'cen';
-export const DISTRICTS = ['Navro‘z mahallasi', 'Ipak yo‘li mahallasi', 'Bog‘ishamol mahallasi'];
+export const DISTRICTS = [
+  'Navro‘z mahallasi', 'Ipak yo‘li mahallasi', 'Bog‘ishamol mahallasi',
+  // outer ring: 4 × 3 sectors, north (airport side) to south (sea side)
+  'Yunusobod mahallasi', 'Bodomzor mahallasi', 'Parvoz mahallasi', 'Qoraqamish mahallasi',
+  'Chilonzor mahallasi', 'Olmazor mahallasi', 'Mirobod mahallasi', 'Sebzor mahallasi',
+  'Beshyog‘och mahallasi', 'Dengizbo‘yi mahallasi', 'Bandargoh mahallasi', 'Shayxontohur mahallasi',
+];
 export const ZONES: Record<ZoneCode, { name: string; base: number }> = {
   res: { name: 'Turar-joy', base: 4000 },
   com: { name: 'Savdo', base: 6000 },
@@ -17,21 +28,43 @@ export const ZONES: Record<ZoneCode, { name: string; base: number }> = {
 };
 
 export interface PlotSeed { id: number; x: number; z: number; zone: ZoneCode; district: number; loc: number }
+interface BlockInfo { zone: ZoneCode; district: number; locK: number }
+
+/** Zone, mahalla and price factor of a block (shared rule with web/index.html). */
+export function blockInfo(gx: number, gz: number): BlockInfo {
+  if (inCore(gx, gz)) {
+    const bx = gx - LAYOUT.OX, bz = gz - LAYOUT.OZ;
+    const d = Math.max(Math.abs(bx - 4.5), Math.abs(bz - 3.5));
+    return { zone: d <= 1.5 ? 'cen' : d <= 2.5 ? 'com' : 'res', district: bx <= 2 ? 0 : bx <= 6 ? 1 : 2, locK: d <= 1.5 ? 1.3 : 1 };
+  }
+  const d = Math.max(Math.abs(gx - 15.5), Math.abs(gz - 12.5));
+  const seaside = gz >= LAYOUT.GZ - 2;
+  const zone: ZoneCode = (seaside && gx >= 12 && gx <= 19) ? 'cen' : (gx % 5 === 2 || gz % 5 === 2 || seaside) ? 'com' : 'res';
+  const district = 3 + Math.min(2, Math.floor(gz / 9)) * 4 + Math.min(3, Math.floor(gx / 8));
+  const locK = Math.max(0.7, 1.1 - 0.035 * d) * (seaside ? 1.25 : 1);
+  return { zone, district, locK };
+}
+
+function blockPlots(gx: number, gz: number, out: PlotSeed[]) {
+  const b = blockInfo(gx, gz);
+  for (let i = 0; i < LAYOUT.PB; i++) for (let j = 0; j < LAYOUT.PB; j++) {
+    const x = X0 + gx * PITCH + LAYOUT.SW + LAYOUT.P * i + LAYOUT.P / 2;
+    const z = Z0 + gz * PITCH + LAYOUT.SW + LAYOUT.P * j + LAYOUT.P / 2;
+    const corner = (i === 0 || i === LAYOUT.PB - 1) && (j === 0 || j === LAYOUT.PB - 1);
+    const loc = b.locK * (corner ? 1.1 : 1);
+    out.push({ id: out.length, x, z, zone: b.zone, district: b.district, loc: Math.round(loc * 100) / 100 });
+  }
+}
 
 export function cityPlots(): PlotSeed[] {
   const out: PlotSeed[] = [];
-  for (let bx = 0; bx < LAYOUT.NBX; bx++) for (let bz = 0; bz < LAYOUT.NBZ; bz++) {
-    if (isPark(bx, bz)) continue;
-    const d = Math.max(Math.abs(bx - 4.5), Math.abs(bz - 3.5));
-    const zone: ZoneCode = d <= 1.5 ? 'cen' : d <= 2.5 ? 'com' : 'res';
-    const district = bx <= 2 ? 0 : bx <= 6 ? 1 : 2;
-    for (let i = 0; i < LAYOUT.PB; i++) for (let j = 0; j < LAYOUT.PB; j++) {
-      const x = X0 + bx * PITCH + LAYOUT.SW + LAYOUT.P * i + LAYOUT.P / 2;
-      const z = Z0 + bz * PITCH + LAYOUT.SW + LAYOUT.P * j + LAYOUT.P / 2;
-      const corner = (i === 0 || i === LAYOUT.PB - 1) && (j === 0 || j === LAYOUT.PB - 1);
-      const loc = (d <= 1.5 ? 1.3 : 1) * (corner ? 1.1 : 1);
-      out.push({ id: out.length, x, z, zone, district, loc: Math.round(loc * 100) / 100 });
-    }
+  // v1 centre first, in its original order (ids 0–1215 unchanged)
+  for (let bx = 0; bx < LAYOUT.CX; bx++) for (let bz = 0; bz < LAYOUT.CZ; bz++) {
+    const gx = bx + LAYOUT.OX, gz = bz + LAYOUT.OZ;
+    if (!isPark(gx, gz)) blockPlots(gx, gz, out);
+  }
+  for (let gx = 0; gx < LAYOUT.GX; gx++) for (let gz = 0; gz < LAYOUT.GZ; gz++) {
+    if (!inCore(gx, gz) && !isPark(gx, gz)) blockPlots(gx, gz, out);
   }
   return out;
 }

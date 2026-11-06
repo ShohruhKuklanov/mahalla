@@ -774,7 +774,7 @@ try {
 const scene = new B.Scene(engine);
 scene.skipPointerMovePicking = true;
 scene.fogMode = B.Scene.FOGMODE_EXP2;
-scene.fogDensity = 0.0009;
+scene.fogDensity = 0.00028;
 
 // ---------- city layout ----------
 const P = 10;            // plot size (m)
@@ -783,18 +783,37 @@ const SW = 2.5;          // sidewalk
 const RD = 11;           // road width
 const BLK = PB*P + 2*SW; // block size
 const PITCH = BLK + RD;
-const NBX = 10, NBZ = 8;
-const W = NBX*PITCH - RD, D = NBZ*PITCH - RD;
+// 32 × 26 blocks (the original 10 × 8 centre sits in the middle, ids unchanged) — same rule as src/economy.ts
+const GX = 32, GZ = 26, OX = 11, OZ = 9, CX = 10, CZ = 8;
+const NBX = GX, NBZ = GZ;
+const W = GX*PITCH - RD, D = GZ*PITCH - RD;
 const X0 = -W/2, Z0 = -D/2;
-const PARK = (bx,bz) => (bx===4||bx===5) && (bz===3||bz===4);
-const DISTRICTS = ['Navro‘z mahallasi','Ipak yo‘li mahallasi','Bog‘ishamol mahallasi'];
+const inCore = (gx,gz) => gx>=OX && gx<OX+CX && gz>=OZ && gz<OZ+CZ;
+const CENTRAL_PARK = (gx,gz) => (gx===15||gx===16) && (gz===12||gz===13);
+const PARK = (gx,gz) => CENTRAL_PARK(gx,gz) || (!inCore(gx,gz) && gx%6===5 && gz%6===4);
+const DISTRICTS = ['Navro‘z mahallasi','Ipak yo‘li mahallasi','Bog‘ishamol mahallasi',
+  'Yunusobod mahallasi','Bodomzor mahallasi','Parvoz mahallasi','Qoraqamish mahallasi',
+  'Chilonzor mahallasi','Olmazor mahallasi','Mirobod mahallasi','Sebzor mahallasi',
+  'Beshyog‘och mahallasi','Dengizbo‘yi mahallasi','Bandargoh mahallasi','Shayxontohur mahallasi'];
 const ZONES = {
   res:{ name:'Turar-joy', base:4000 },
   com:{ name:'Savdo',     base:6000 },
   cen:{ name:'Markaz',    base:12000 }
 };
+function blockInfo(gx,gz){
+  if (inCore(gx,gz)){
+    const bx = gx-OX, bz = gz-OZ, d = Math.max(Math.abs(bx-4.5), Math.abs(bz-3.5));
+    return { zone: d<=1.5 ? 'cen' : d<=2.5 ? 'com' : 'res', district: bx<=2 ? 0 : bx<=6 ? 1 : 2, locK: d<=1.5 ? 1.3 : 1 };
+  }
+  const d = Math.max(Math.abs(gx-15.5), Math.abs(gz-12.5)), seaside = gz >= GZ-2;
+  const zone = (seaside && gx>=12 && gx<=19) ? 'cen' : (gx%5===2 || gz%5===2 || seaside) ? 'com' : 'res';
+  return { zone, district: 3 + Math.min(2, Math.floor(gz/9))*4 + Math.min(3, Math.floor(gx/8)), locK: Math.max(0.7, 1.1 - 0.035*d) * (seaside ? 1.25 : 1) };
+}
 const blockX = bx => X0 + bx*PITCH, blockZ = bz => Z0 + bz*PITCH;
-const parkMin = new V3(blockX(4), 0, blockZ(3)), parkMax = new V3(blockX(5)+BLK, 0, blockZ(4)+BLK);
+const parkMin = new V3(blockX(15), 0, blockZ(12)), parkMax = new V3(blockX(16)+BLK, 0, blockZ(13)+BLK);
+// beyond the grid: the port and the sea to the south, the airport to the north
+const CITY_S = Z0 + D + RD, COAST_Z = CITY_S + 120, CITY_N = Z0 - RD;
+const AIR = { z: CITY_N - 470, x0: -760, x1: 760 };
 const parkC = parkMin.add(parkMax).scale(.5);
 
 const NICKS = ['sardor_77','Malika','jasur.dev','Dilnoza','bekzod_uz','Aziza.k','Otabek','Shahzoda','timur99','nodira','Ulug‘bek','Sevara','Javohir','Kamola','rustam_b','Laylo','Akmal','Madina','Sherzod','Zarina','Bobur','Gulnoza','Islom','Feruza'];
@@ -896,7 +915,7 @@ const nightMats = []; // materials whose emissive follows the night
 
 // ---------- light + camera ----------
 const camera = new B.ArcRotateCamera('cam', -Math.PI/2.6, 1.08, 300, new V3(0,0,0), scene);
-camera.lowerRadiusLimit = 22; camera.upperRadiusLimit = 620;
+camera.lowerRadiusLimit = 22; camera.upperRadiusLimit = 2100;
 camera.lowerBetaLimit = 0.18; camera.upperBetaLimit = 1.42;
 camera.minZ = 1; camera.maxZ = 4000;
 camera.inputs.clear(); // own map-style controls below (pan anywhere, orbit around the selected plot)
@@ -906,19 +925,23 @@ const hemi = new B.HemisphericLight('hemi', new V3(0.2,1,0.1), scene);
 hemi.groundColor = new C3(.22,.2,.18);
 const sun = new B.DirectionalLight('sun', new V3(-1,-2,-1), scene);
 sun.position = new V3(200,300,200);
-sun.shadowMinZ = 1; sun.shadowMaxZ = 1600;
+sun.shadowMinZ = 1; sun.shadowMaxZ = 2400;
 
 // ---------- ground, roads, blocks ----------
-const grassTex = noiseTex('grass','#4f7a3a',0.22,256,3); grassTex.uScale = grassTex.vScale = 60;
-// the city stands on a grassy island in a lake, mountains all around
-const ISLAND_R = 430;
-const ground = B.MeshBuilder.CreateCylinder('ground',{diameter:ISLAND_R*2, height:2, tessellation:96},scene);
-ground.position.y = -1;
+const grassTex = noiseTex('grass','#4f7a3a',0.22,256,3);
+// the city stands on a wide plain: the sea along the south (port), the airport to the north, mountains far behind
+const LAND = { x0:-6000, x1:6000, z0:-6500, z1:COAST_Z };
+const ground = B.MeshBuilder.CreateGround('ground',{width:LAND.x1-LAND.x0, height:LAND.z1-LAND.z0},scene);
+ground.position.set((LAND.x0+LAND.x1)/2, -0.02, (LAND.z0+LAND.z1)/2);
+grassTex.uScale = (LAND.x1-LAND.x0)/16; grassTex.vScale = (LAND.z1-LAND.z0)/16;
 mats.grass = stdMat('grass',{dt:grassTex}); ground.material = mats.grass; ground.isPickable=false; ground.receiveShadows = true;
-const lakeTex = noiseTex('lake','#7f8c95',0.35,256,2); lakeTex.uScale = lakeTex.vScale = 60;
-const lake = B.MeshBuilder.CreateGround('lake',{width:7000,height:7000},scene);
-lake.position.y = -0.55; lake.isPickable = false;
-mats.lake = stdMat('lakeM',{dt:lakeTex, diffuse:hex('#1d3b52'), spec:new C3(1,1,1), power:180}); lake.material = mats.lake;
+const lakeTex = noiseTex('lake','#7f8c95',0.35,256,2); lakeTex.uScale = lakeTex.vScale = 180;
+const lake = B.MeshBuilder.CreateGround('lake',{width:20000,height:20000},scene);
+lake.position.y = -1.2; lake.isPickable = false;
+mats.lake = stdMat('lakeM',{dt:lakeTex, diffuse:hex('#1d4660'), spec:new C3(1,1,1), power:180}); lake.material = mats.lake;
+// sea wall along the coast
+const seawall = B.MeshBuilder.CreateBox('seawall',{width:LAND.x1-LAND.x0, height:3.2, depth:3},scene);
+seawall.position.set(ground.position.x, -1.4, COAST_Z+1.5); seawall.isPickable=false;
 
 const asphaltTex = noiseTex('asphalt','#3a3d42',0.16,256,2); asphaltTex.uScale = W/12; asphaltTex.vScale = D/12;
 const road = B.MeshBuilder.CreateGround('road',{width:W+2*RD, height:D+2*RD},scene);
@@ -929,12 +952,10 @@ const pave = noiseTex('pave','#b9b4aa',0.18,128,2); pave.uScale=pave.vScale=6;
 const sideBox = B.MeshBuilder.CreateBox('sidewalk',{width:BLK,height:0.3,depth:BLK},scene);
 sideBox.material = stdMat('sidewalkM',{dt:pave}); sideBox.receiveShadows=true; sideBox.isPickable=false;
 const blocks = [];
-for (let bx=0;bx<NBX;bx++) for (let bz=0;bz<NBZ;bz++){
-  const cx = blockX(bx)+BLK/2, cz = blockZ(bz)+BLK/2;
-  if (PARK(bx,bz)) continue;
-  sideBox.thinInstanceAdd(B.Matrix.Translation(cx,0.15,cz), false);
-  blocks.push({bx,bz,cx,cz});
-}
+const pushBlock = (bx,bz) => { const cx = blockX(bx)+BLK/2, cz = blockZ(bz)+BLK/2; sideBox.thinInstanceAdd(B.Matrix.Translation(cx,0.15,cz), false); blocks.push({bx,bz,cx,cz,...blockInfo(bx,bz)}); };
+for (let bx=OX;bx<OX+CX;bx++) for (let bz=OZ;bz<OZ+CZ;bz++) if (!PARK(bx,bz)) pushBlock(bx,bz);         // v1 centre first (plot ids 0–1215)
+for (let bx=0;bx<GX;bx++) for (let bz=0;bz<GZ;bz++) if (!inCore(bx,bz) && !PARK(bx,bz)) pushBlock(bx,bz);
+const smallParks = []; for (let bx=0;bx<GX;bx++) for (let bz=0;bz<GZ;bz++) if (PARK(bx,bz) && !CENTRAL_PARK(bx,bz)) smallParks.push({bx,bz,cx:blockX(bx)+BLK/2,cz:blockZ(bz)+BLK/2});
 sideBox.thinInstanceBufferUpdated('matrix');
 
 // park
@@ -955,9 +976,14 @@ mats.water = stdMat('waterM',{diffuse:hex('#2f6f8f'), spec:new C3(.9,.9,.9), pow
 const jet = B.MeshBuilder.CreateCylinder('jet',{diameterTop:0.3,diameterBottom:1.4,height:5,tessellation:16},scene); jet.position=new V3(parkC.x,3.5,parkC.z);
 mats.jet = stdMat('jetM',{diffuse:hex('#cfe9f5'), emissive:new C3(.15,.2,.25)}); mats.jet.alpha=0.55; jet.material=mats.jet;
 [basin,water,jet,pathA,pathB].forEach(m=>m.isPickable=false);
+// small square parks across the new districts
+const sqPark = B.MeshBuilder.CreateBox('sqPark',{width:BLK,height:0.32,depth:BLK},scene);
+sqPark.material = parkPad.material; sqPark.receiveShadows = true; sqPark.isPickable = false;
+for (const sp of smallParks) sqPark.thinInstanceAdd(B.Matrix.Translation(sp.cx,0.16,sp.cz), false);
+sqPark.thinInstanceBufferUpdated('matrix'); sqPark.alwaysSelectAsActiveMesh = true;
 
 // lane dashes
-const dash = B.MeshBuilder.CreateBox('dash',{width:3,height:0.04,depth:0.3},scene);
+const dash = B.MeshBuilder.CreateGround('dash',{width:3,height:0.3},scene);
 dash.material = stdMat('dashM',{diffuse:hex('#e9e6dc')}); dash.isPickable=false;
 const inPark = (x,z)=> x>parkMin.x-1 && x<parkMax.x+1 && z>parkMin.z-1 && z<parkMax.z+1;
 for (let i=0;i<=NBZ;i++){ // roads along x
@@ -973,19 +999,15 @@ dash.thinInstanceBufferUpdated('matrix');
 // ---------- plots ----------
 const plots = [];
 for (const bl of blocks){
-  const d = Math.max(Math.abs(bl.bx-4.5), Math.abs(bl.bz-3.5));
-  const zone = d<=1.5 ? 'cen' : d<=2.5 ? 'com' : 'res';
-  const district = bl.bx<=2 ? 0 : bl.bx<=6 ? 1 : 2;
-  const nearPark = d<=1.5;
   for (let i=0;i<PB;i++) for (let j=0;j<PB;j++){
     const x = blockX(bl.bx)+SW+P*i+P/2, z = blockZ(bl.bz)+SW+P*j+P/2;
     const corner = (i===0||i===PB-1) && (j===0||j===PB-1);
-    const loc = (nearPark ? 1.3 : 1) * (corner ? 1.1 : 1);
-    plots.push({ id:plots.length, x, z, zone, district, loc, state:'empty', owner:null, tpl:null, rot:0, color:null, accent:null, likes:0, inst:null, liked:false });
+    const loc = Math.round(bl.locK * (corner ? 1.1 : 1) * 100) / 100;
+    plots.push({ id:plots.length, x, z, zone:bl.zone, district:bl.district, loc, state:'empty', owner:null, tpl:null, rot:0, color:null, accent:null, likes:0, inst:null, liked:false });
   }
 }
 // pads
-const pad = B.MeshBuilder.CreateBox('pad',{width:P-0.6,height:0.12,depth:P-0.6},scene);
+const pad = B.MeshBuilder.CreateGround('pad',{width:P-0.6,height:P-0.6},scene); pad.position.y = 0.06; pad.bakeCurrentTransformIntoVertices();
 const padMat = stdMat('padM',{dt:noiseTex('padT','#ffffff',0.12,64,2)});
 pad.material = padMat; pad.receiveShadows = true;
 pad.thinInstanceRegisterAttribute('color',4);
@@ -1140,17 +1162,60 @@ function shaft(levels, sides, round, n=48){
   return B.MeshBuilder.CreateRibbon('lm', { pathArray: levels.map(L => ring(L.r, sides, round, L.rot||0, L.y, n)), closePath:true, sideOrientation: B.Mesh.DOUBLESIDE }, scene);
 }
 const steps = (H, tiers) => { const L = []; let prev = 0; for (const [t, r] of tiers){ L.push({ y: prev*H, r }, { y: t*H, r }); prev = t; } return L; };
+// Real facades: glass tint (top→bottom of a floor), frame/mullion colour and the cladding pattern of each tower.
+const LMLOOK = {
+  lm_burj:     { g1:'#b9cad6', g2:'#7e95a6', frame:'#dfe4e8', pat:'fins',    finW:0.16 },  // silver reflective glass + stainless fins
+  lm_merdeka:  { g1:'#a9c6dc', g2:'#5f83a2', frame:'#d3dde5', pat:'diamond' },               // blue-silver faceted glass
+  lm_shanghai: { g1:'#c6dad8', g2:'#8eaaaa', frame:'#e4ebea', pat:'bands' },                 // pale green-blue double skin
+  lm_abraj:    { g1:'#5b6670', g2:'#3a434b', frame:'#d9c8a6', pat:'stone' },                 // beige stone, dark windows
+  lm_pingan:   { g1:'#7d8e9b', g2:'#4a5864', frame:'#d9dcde', pat:'fins',    finW:0.3 },   // stainless-steel chevron pilasters
+  lm_lotte:    { g1:'#e9eff2', g2:'#b9c8d1', frame:'#f3f5f6', pat:'seams' },                 // pale silver-white glass
+  lm_owtc:     { g1:'#a9c6e0', g2:'#5f87ad', frame:'#c6d1db', pat:'grid' },                  // blue reflective glass
+  lm_gzctf:    { g1:'#9fb0bc', g2:'#6c7f8d', frame:'#f1eee6', pat:'fins',    finW:0.34 },  // white terracotta fins
+  lm_tjctf:    { g1:'#dfe7ec', g2:'#a7b8c4', frame:'#e8ecee', pat:'scales' },                // crystalline pale glass, aluminium mullions
+  lm_citic:    { g1:'#bccbd6', g2:'#7f95a6', frame:'#d6dde2', pat:'diamond' },               // silver-blue glass, diagonal grid
+};
 const LMMAT = {};
-function lmGlass(key, tint, uRep, vRep){
+function lmFacade(key){
+  const L = LMLOOK[key], w = 256, h = 256, rows = 4, cols = 4, cw = w/cols, rh = h/rows;
+  const dif = new B.DynamicTexture('lmf_'+key+'_d', {width:w, height:h}, scene, true), emi = new B.DynamicTexture('lmf_'+key+'_e', {width:w, height:h}, scene, true);
+  const a = dif.getContext(), e = emi.getContext();
+  e.fillStyle = '#000'; e.fillRect(0,0,w,h);
+  if (L.pat === 'stone'){ a.fillStyle = L.frame; a.fillRect(0,0,w,h); for (let i=0;i<700;i++){ a.fillStyle = `rgba(120,100,70,${rnd()*0.12})`; a.fillRect(rnd()*w, rnd()*h, 3, 2); } }
+  else { const g = a.createLinearGradient(0,0,0,rh); g.addColorStop(0, L.g1); g.addColorStop(1, L.g2); a.fillStyle = g; for (let r=0;r<rows;r++){ a.save(); a.translate(0, r*rh); a.fillRect(0,0,w,rh); a.restore(); } }
+  for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){
+    const x0 = c*cw, y0 = r*rh;
+    if (L.pat === 'stone'){
+      const g = a.createLinearGradient(0,y0,0,y0+rh); g.addColorStop(0,L.g1); g.addColorStop(1,L.g2); a.fillStyle = g; a.fillRect(x0+cw*0.22, y0+rh*0.2, cw*0.56, rh*0.6);
+      if (rnd()<0.4){ e.fillStyle='#ffe2a8'; e.fillRect(x0+cw*0.22, y0+rh*0.2, cw*0.56, rh*0.6); }
+      continue;
+    }
+    a.fillStyle = 'rgba(255,255,255,.10)'; a.fillRect(x0+2, y0+2, cw*0.3, rh-4);                       // sky reflection
+    if (rnd()<0.3){ e.fillStyle = rnd()<0.7 ? '#ffd9a0' : '#d6e6ff'; e.fillRect(x0+3, y0+4, cw-6, rh-10); }
+  }
+  a.strokeStyle = a.fillStyle = L.frame;
+  if (L.pat === 'fins'){ const fw = Math.max(3, cw*L.finW); for (let c=0;c<cols;c++){ a.fillRect(c*cw - fw/2, 0, fw, h); a.fillRect(c*cw + cw/2 - fw/4, 0, fw/2, h); } for (let r=0;r<rows;r++) a.fillRect(0, r*rh, w, 3); }
+  else if (L.pat === 'bands'){ for (let r=0;r<rows;r++) a.fillRect(0, r*rh, w, 4); for (let c=0;c<cols*2;c++) a.fillRect(c*cw/2, 0, 1.5, h); }
+  else if (L.pat === 'grid'){ for (let r=0;r<rows;r++) a.fillRect(0, r*rh, w, 3); for (let c=0;c<cols;c++) a.fillRect(c*cw, 0, 3, h); }
+  else if (L.pat === 'seams'){ for (let c=0;c<cols;c++) a.fillRect(c*cw, 0, 2, h); for (let r=0;r<rows;r++) a.fillRect(0, r*rh, w, 1.5); }
+  else if (L.pat === 'diamond'){ a.lineWidth = 3; a.beginPath(); for (let k=-4;k<=8;k++){ a.moveTo(k*cw, 0); a.lineTo(k*cw + h, h); a.moveTo(k*cw, 0); a.lineTo(k*cw - h, h); } a.stroke(); for (let r=0;r<rows;r++) a.fillRect(0, r*rh, w, 1.5); }
+  else if (L.pat === 'scales'){ for (let r=0;r<rows;r++){ a.fillRect(0, r*rh, w, 2.5); for (let c=0;c<cols;c++){ const off = (r%2)*cw/2; a.fillRect(x0n(c*cw+off,w), r*rh, 3, rh); } } }
+  dif.update(true); emi.update(true);
+  for (const t of [dif, emi]){ t.wrapU = t.wrapV = B.Texture.WRAP_ADDRESSMODE; t.anisotropicFilteringLevel = 8; }
+  return { dif, emi };
+}
+const x0n = (x,w) => ((x % w) + w) % w;
+function lmGlass(key, uRep, vRep){
   if (LMMAT[key]) return LMMAT[key];
-  const base = facadeTile('hitech', 'office', 0.32);
-  const d = base.dif, e = base.emi; d.uScale = e.uScale = uRep; d.vScale = e.vScale = vRep;
-  const m = stdMat('lm_'+key,{dt:d, et:e, diffuse:hex(tint), spec:new C3(.7,.72,.78), power:110}); m.diffuseColor = hex(tint);
+  const base = lmFacade(key), d = base.dif, e = base.emi; d.uScale = e.uScale = uRep; d.vScale = e.vScale = vRep;
+  const stone = LMLOOK[key].pat === 'stone';
+  const m = stdMat('lm_'+key,{dt:d, et:e, spec: stone ? new C3(.12,.12,.12) : new C3(.75,.78,.82), power: stone ? 20 : 120});
+  m.emissiveColor = hex(stone ? LMLOOK[key].frame : LMLOOK[key].g1).scale(0.16);   // sky light on the shaded faces, keeps the real colour readable
   nightMats.push(m); return (LMMAT[key] = m);
 }
 function landmarkParts(key){
   const H = lmHeight(key), P = [], add = (m, mat) => P.push([m, mat, null]);
-  const gl = (tint, r) => lmGlass(key, tint, Math.max(4, Math.round(2*Math.PI*r/TILE_W*1.6)), H/(4*FLOOR_H)*1.6);
+  const gl = (tint, r) => lmGlass(key, Math.max(4, Math.round(2*Math.PI*r/TILE_W*0.8)), H/(4*FLOOR_H)*1.6);
   if (key==='lm_burj'){
     const lv = steps(H, [[.18,4.8],[.33,4.3],[.46,3.7],[.58,3.1],[.68,2.5],[.76,1.9],[.80,1.4]]).map(L=>({...L, rot:Math.PI/2}));
     add(shaft(lv, 3, 0.5), gl('#cbd7e1', 4));
@@ -1166,14 +1231,14 @@ function landmarkParts(key){
     const cap = cyl({diameter:5.4, height:1.2, tessellation:24}, 0.97*H+0.6); add(cap, steelM);
   } else if (key==='lm_abraj'){
     const ped = box(9.6, 9, 9.6, 0, 4.5, 0), tw = box(6.6, H*0.6-9, 6.6, 0, 9 + (H*0.6-9)/2, 0);
-    add(merge([ped, tw]), wallMatFor('milliy','office'));
-    add(box(7.4, H*0.09, 7.4, 0, H*0.645, 0), stdMat('abrajClockBody',{diffuse:hex('#e9e4d8')}));
+    add(merge([ped, tw]), lmGlass('lm_abraj', 6, H*0.6/(4*FLOOR_H)*1.2));
+    add(box(7.4, H*0.09, 7.4, 0, H*0.645, 0), stdMat('abrajClockBody',{diffuse:hex('#2f5d46'), spec:new C3(.3,.3,.3)}));
     const faces = []; const hands = [];
     for (let i=0;i<4;i++){ const f = B.MeshBuilder.CreateDisc('cf',{radius:2.9, tessellation:32}, scene); const a = i*Math.PI/2;
       f.position.set(Math.sin(a)*3.75, H*0.645, Math.cos(a)*3.75); f.rotation.y = a + Math.PI; faces.push(f);
       const h1 = box(0.25,2.2,0.1,0,0,0); h1.position.set(Math.sin(a)*3.82, H*0.645+0.9, Math.cos(a)*3.82); h1.rotation.y = a; hands.push(h1);
       const h2 = box(1.6,0.25,0.1,0,0,0); h2.position.set(Math.sin(a)*3.82+Math.cos(a)*0.7, H*0.645, Math.cos(a)*3.82-Math.sin(a)*0.7); h2.rotation.y = a; hands.push(h2); }
-    add(merge(faces), stdMat('clockFace',{diffuse:hex('#f6f6f0'), emissive:hex('#9fd6a8')}));
+    add(merge(faces), stdMat('clockFace',{diffuse:hex('#f4f4ee'), emissive:hex('#5f8f6c')}));
     add(merge(hands), darkM);
     add(cyl({diameterTop:2.2, diameterBottom:6.6, height:H*0.15, tessellation:8}, H*0.69 + H*0.075), goldM);
     add(cyl({diameterTop:0.1, diameterBottom:1.4, height:H*0.12, tessellation:8}, H*0.84 + H*0.06), goldM);
@@ -1253,9 +1318,9 @@ function getVariant(s){
 }
 
 // ---------- trees & lamps ----------
-const trunk = B.MeshBuilder.CreateCylinder('trunk',{diameterTop:0.25,diameterBottom:0.4,height:2.4,tessellation:6},scene); trunk.position.y=1.2; trunk.bakeCurrentTransformIntoVertices();
+const trunk = B.MeshBuilder.CreateCylinder('trunk',{diameterTop:0.25,diameterBottom:0.4,height:2.4,tessellation:5,cap:B.Mesh.NO_CAP},scene); trunk.position.y=1.2; trunk.bakeCurrentTransformIntoVertices();
 trunk.material = stdMat('trunkM',{diffuse:hex('#5b4330')});
-const crown = B.MeshBuilder.CreateIcoSphere('crown',{radius:2,subdivisions:3,flat:false},scene); crown.position.y=3.6; crown.bakeCurrentTransformIntoVertices();
+const crown = B.MeshBuilder.CreateIcoSphere('crown',{radius:2,subdivisions:2,flat:false},scene); crown.position.y=3.6; crown.bakeCurrentTransformIntoVertices();
 crown.material = stdMat('crownM',{diffuse:new C3(1,1,1)}); crown.thinInstanceRegisterAttribute('color',4);
 [trunk,crown].forEach(m=>{ m.isPickable=false; m.receiveShadows=true; });
 function addTree(x,z,s){
@@ -1269,26 +1334,29 @@ for (let i=0;i<190;i++){
   if (Math.hypot(x-parkC.x, z-parkC.z) < 16 || Math.abs(x-parkC.x)<4 || Math.abs(z-parkC.z)<4) continue;
   addTree(x,z,0.9+rnd()*0.6);
 }
-// street trees along block edges
+// street trees along block edges (denser in the old centre)
 for (const bl of blocks){
-  const x0 = blockX(bl.bx), z0 = blockZ(bl.bz);
+  const x0 = blockX(bl.bx), z0 = blockZ(bl.bz), pr = inCore(bl.bx,bl.bz) ? 0.55 : 0.3;
   for (let t=6; t<BLK-4; t+=9){
-    if (rnd()<0.55) addTree(x0+t, z0+1.1, 0.6+rnd()*0.25);
-    if (rnd()<0.55) addTree(x0+t, z0+BLK-1.1, 0.6+rnd()*0.25);
+    if (rnd()<pr) addTree(x0+t, z0+1.1, 0.6+rnd()*0.25);
+    if (rnd()<pr) addTree(x0+t, z0+BLK-1.1, 0.6+rnd()*0.25);
   }
 }
-// outskirts forest
-for (let i=0;i<500;i++){
-  const a = rnd()*6.283, r = lerp(Math.max(W,D)/2+40, ISLAND_R-14, Math.sqrt(rnd()));
-  if (Math.abs(Math.cos(a)*r*1.05) < W/2+20 && Math.abs(Math.sin(a)*r*0.85) < D/2+20) continue;
-  addTree(Math.cos(a)*r*1.05, Math.sin(a)*r*0.85, 1.1+rnd()*1.2);
+// small parks
+for (const sp of smallParks) for (let i=0;i<14;i++) addTree(sp.cx + (rnd()-0.5)*(BLK-6), sp.cz + (rnd()-0.5)*(BLK-6), 0.8+rnd()*0.5);
+// countryside groves east and west of the city, and behind the airport
+for (let i=0;i<1400;i++){
+  const x = lerp(LAND.x0+200, LAND.x1-200, rnd()), z = lerp(AIR.z-1400, COAST_Z-40, rnd());
+  if (x > X0-30 && x < X0+W+30 && z > AIR.z-330 && z < COAST_Z) continue;   // city, port, airport strip
+  if (Math.abs(x) > 2600 && rnd() < 0.6) continue;
+  addTree(x, z, 1.1+rnd()*1.2);
 }
 trunk.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('color');
 
 // lamps at block corners
-const pole = B.MeshBuilder.CreateCylinder('pole',{diameter:0.18,height:6,tessellation:6},scene); pole.position.y=3; pole.bakeCurrentTransformIntoVertices();
+const pole = B.MeshBuilder.CreateCylinder('pole',{diameter:0.18,height:6,tessellation:4,cap:B.Mesh.NO_CAP},scene); pole.position.y=3; pole.bakeCurrentTransformIntoVertices();
 pole.material = stdMat('poleM',{diffuse:hex('#2b2f36')}); pole.isPickable=false;
-const bulb = B.MeshBuilder.CreateSphere('bulb',{diameter:0.75,segments:6},scene); bulb.position.y=6.1; bulb.bakeCurrentTransformIntoVertices();
+const bulb = B.MeshBuilder.CreateBox('bulb',{width:0.6,height:0.5,depth:0.6},scene); bulb.position.y=6.1; bulb.bakeCurrentTransformIntoVertices();
 mats.bulb = stdMat('bulbM',{diffuse:hex('#fff2cc'), emissive:new C3(0,0,0)}); bulb.material = mats.bulb; bulb.isPickable=false;
 for (const bl of blocks){
   const x0 = blockX(bl.bx), z0 = blockZ(bl.bz);
@@ -1301,9 +1369,10 @@ pole.thinInstanceBufferUpdated('matrix'); bulb.thinInstanceBufferUpdated('matrix
 // low-poly mountains with snow caps, in two rings across the lake
 (function mountains(){
   const rock = [], snow = [];
-  for (const [count, r0, r1, h0, h1] of [[30, 1250, 1400, 120, 300], [22, 1650, 1900, 260, 520]]){
+  for (const [count, r0, r1, h0, h1] of [[30, 3300, 3700, 220, 480], [24, 4300, 5000, 420, 820]]){
     for (let i=0;i<count;i++){
-      const a = i/count*6.283 + rnd()*0.15, r = lerp(r0, r1, rnd()), h = lerp(h0, h1, rnd()), wide = h*lerp(2.0, 3.0, rnd()), tess = 5 + Math.floor(rnd()*3), rot = rnd()*3;
+      // northern half only: the sea is south
+      const a = Math.PI*1.04 + i/count*Math.PI*0.92 + rnd()*0.05, r = lerp(r0, r1, rnd()), h = lerp(h0, h1, rnd()), wide = h*lerp(2.0, 3.0, rnd()), tess = 5 + Math.floor(rnd()*3), rot = rnd()*3;
       const m = B.MeshBuilder.CreateCylinder('mt',{diameterTop:0, diameterBottom:wide, height:h, tessellation:tess},scene);
       m.position.set(Math.cos(a)*r, h/2-2, Math.sin(a)*r); m.rotation.y = rot; rock.push(m);
       const hs = h*lerp(0.26, 0.38, rnd());
@@ -1316,6 +1385,212 @@ pole.thinInstanceBufferUpdated('matrix'); bulb.thinInstanceBufferUpdated('matrix
   const sm = B.Mesh.MergeMeshes(snow,true,true); sm.convertToFlatShadedMesh();
   sm.material = stdMat('snowM',{diffuse:hex('#f4f1f6'), spec:new C3(.2,.2,.2)}); sm.isPickable=false; mats.snow = sm.material;
 })();
+
+// =================== PORT (south, on the sea) & AIRPORT (north) ===================
+seawall.material = concrete;
+const portConcrete = stdMat('portConc',{dt:noiseTex('pc','#9d9a93',0.16,128,2)}); portConcrete.diffuseTexture.uScale = portConcrete.diffuseTexture.vScale = 40;
+const flatBox = (name, x0, x1, z0, z1, y, h, mat) => { const m = B.MeshBuilder.CreateBox(name,{width:x1-x0, height:h, depth:z1-z0},scene); m.position.set((x0+x1)/2, y+h/2, (z0+z1)/2); m.material = mat; m.isPickable = false; m.receiveShadows = true; return m; };
+const whiteM = stdMat('whiteM',{diffuse:hex('#f2f2ee'), spec:new C3(.3,.3,.3)});
+const PORT = { x0: X0-60, x1: 160, zq: COAST_Z };            // container terminal west, promenade + cruise pier east
+flatBox('portYard', PORT.x0, PORT.x1, CITY_S+1, COAST_Z, 0, 0.3, portConcrete);
+flatBox('promenade', PORT.x1, X0+W+60, COAST_Z-26, COAST_Z, 0, 0.32, stdMat('promM',{dt:pave}));
+for (let x = PORT.x1+8; x < X0+W+50; x += 14) addTree(x, COAST_Z-6, 0.9+rnd()*0.3);
+trunk.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('color');
+// container stacks
+const CONT_COLORS = ['#c0392b','#1f5fa8','#2e8b57','#e67e22','#7f8c8d','#f1c40f','#16a085','#8e44ad','#d35400','#2c3e50','#b03a2e','#eaeaea'];
+const cont = B.MeshBuilder.CreateBox('cont',{width:12.2, height:2.6, depth:2.44},scene);
+cont.material = stdMat('contM',{dt:noiseTex('ct','#ffffff',0.25,64,2), spec:new C3(.2,.2,.2)}); cont.isPickable=false; cont.receiveShadows=true;
+cont.thinInstanceRegisterAttribute('color',4);
+const yard = { x0: PORT.x0+30, x1: PORT.x1-170, z0: CITY_S+18, z1: COAST_Z-60 };
+for (let x = yard.x0; x < yard.x1; x += 14) for (let z = yard.z0, lane = 0; z < yard.z1; z += 2.9, lane++){
+  if (lane % 6 === 5){ z += 9; continue; }                    // straddle-carrier aisles
+  const hgt = 1 + Math.floor(rnd()*4); if (rnd() < 0.12) continue;
+  for (let k = 0; k < hgt; k++){
+    const i = cont.thinInstanceAdd(B.Matrix.Translation(x, 0.3 + 1.3 + k*2.6, z), false), c = hex(CONT_COLORS[Math.floor(rnd()*CONT_COLORS.length)]), g = 0.8 + rnd()*0.25;
+    cont.thinInstanceSetAttributeAt('color', i, [c.r*g, c.g*g, c.b*g, 1], false);
+  }
+}
+cont.thinInstanceBufferUpdated('matrix'); cont.thinInstanceBufferUpdated('color'); cont.alwaysSelectAsActiveMesh = true;
+// warehouses next to the yard
+for (let i = 0; i < 3; i++){ const wx = PORT.x1-150 + i*48; const wh = flatBox('wh', wx-20, wx+20, CITY_S+14, CITY_S+74, 0.3, 12, stdMat('whM'+i,{diffuse:hex(['#c7ccd1','#b9c0c8','#d4d6d8'][i])}));
+  const roofW = flatBox('whr', wx-21, wx+21, CITY_S+13, CITY_S+75, 12.3, 0.8, stdMat('whR'+i,{diffuse:hex('#6d7c8a')})); }
+// ship-to-shore gantry cranes on the quay edge
+const craneRed = stdMat('craneRed',{diffuse:hex('#d0432b'), spec:new C3(.3,.3,.3)}), craneWhite = stdMat('craneWhite',{diffuse:hex('#eeeeea')});
+function makeCrane(x){
+  const r = [], w = [], zq = COAST_Z, L = 16, Hh = 42;
+  for (const [dx,dz] of [[-9,-L-6],[9,-L-6],[-9,-4],[9,-4]]) r.push(box(1.6, Hh, 1.6, x+dx, Hh/2+0.3, zq+dz));
+  r.push(box(20, 2.2, 1.8, x, Hh*0.55, zq-L-6), box(20, 2.2, 1.8, x, Hh*0.55, zq-4));
+  w.push(box(3.2, 3, 80, x-4, Hh+1.5, zq+14), box(3.2, 3, 80, x+4, Hh+1.5, zq+14));      // boom over the water
+  w.push(box(12, 3, 3, x, Hh+1.5, zq-28), box(10, 5, 6, x, Hh+5, zq-24));                  // back reach + machinery house
+  r.push(box(1, 18, 1, x-4, Hh+12, zq-18), box(1, 18, 1, x+4, Hh+12, zq-18));              // A-frame
+  const mr = merge(r); mr.material = craneRed; const mw = merge(w); mw.material = craneWhite;
+  for (const m of [mr, mw]){ m.isPickable = false; m.receiveShadows = true; }
+}
+for (let x = PORT.x0+90; x < PORT.x1-200; x += 95) makeCrane(x);
+// breakwater with a lighthouse at its tip
+const stoneM = stdMat('stoneM',{dt:noiseTex('st','#8d8a84',0.3,128,3)});
+flatBox('bw1', PORT.x0-40, PORT.x0-14, COAST_Z, COAST_Z+460, -2, 3.4, stoneM);
+flatBox('bw2', PORT.x0-40, PORT.x0+520, COAST_Z+440, COAST_Z+466, -2, 3.4, stoneM);
+(function lighthouse(){ const lx = PORT.x0+505, lz = COAST_Z+453;
+  const t = cyl({diameterTop:3.4, diameterBottom:5, height:24, tessellation:16}, 1.4+12); t.position.x = lx; t.position.z = lz; t.material = whiteM;
+  const band = cyl({diameter:4.4, height:3, tessellation:16}, 1.4+15); band.position.x = lx; band.position.z = lz; band.material = craneRed;
+  const lamp = cyl({diameter:3, height:2.4, tessellation:12}, 1.4+25.2); lamp.position.x = lx; lamp.position.z = lz; lamp.material = mats.bulb;
+  const cap = cyl({diameterTop:0.2, diameterBottom:4, height:2.4, tessellation:12}, 1.4+27.6); cap.position.x = lx; cap.position.z = lz; cap.material = craneRed;
+  [t,band,lamp,cap].forEach(m=>m.isPickable=false); })();
+// cruise pier in the east
+const CRUISE_X = 520;
+flatBox('cruisePier', CRUISE_X-14, CRUISE_X+14, COAST_Z, COAST_Z+230, -1, 1.35, portConcrete);
+flatBox('cruiseTerm', CRUISE_X-70, CRUISE_X-18, COAST_Z-24, COAST_Z+10, 0.3, 10, stdMat('ctM',{diffuse:hex('#e9eef2'), spec:new C3(.6,.6,.6), power:80}));
+// marina: small jetties + yachts
+for (let i = 0; i < 6; i++) flatBox('jetty', 760+i*26, 763+i*26, COAST_Z, COAST_Z+70, -1, 1.25, stdMat('woodM',{diffuse:hex('#8a6a4a')}));
+
+// ---------- ships ----------
+function shipMesh(kind){
+  // modelled along +x; waterline at y = 0
+  const hullC = { cargo:'#23324a', cruise:'#f4f4f2', ferry:'#f2f2ee', yacht:'#f7f7f5' }[kind];
+  const L = { cargo:170, cruise:200, ferry:80, yacht:22 }[kind], Bm = { cargo:26, cruise:30, ferry:18, yacht:6 }[kind];
+  const hull = [], deck = [], accent = [], cargoBoxes = [];
+  hull.push(box(L*0.86, Bm*0.42, Bm, -L*0.07, Bm*0.1, 0));
+  const bow = B.MeshBuilder.CreateCylinder('bow',{diameter:1, height:Bm*0.42, tessellation:3},scene); bow.scaling.set(L*0.3, 1, Bm*1.155); bow.position.set(L*0.36, Bm*0.1, 0); bow.rotation.y = Math.PI; hull.push(bow);
+  hull.push(box(L*0.9, Bm*0.06, Bm*1.0, -L*0.05, -Bm*0.12, 0));
+  if (kind === 'cargo'){
+    accent.push(box(L*0.86, Bm*0.12, Bm*1.01, -L*0.07, -Bm*0.06, 0));                       // red antifouling at the waterline
+    deck.push(box(14, 22, Bm*0.9, -L*0.40, Bm*0.3+11, 0), box(4, 6, Bm*1.1, -L*0.40, Bm*0.3+24, 0)); // bridge
+    for (let x = -L*0.32; x < L*0.3; x += 13) for (let z = -Bm*0.4; z < Bm*0.42; z += 2.6){ const h = 2 + Math.floor(rnd()*4); for (let k = 0; k < h; k++) cargoBoxes.push([x, Bm*0.31+1.3+k*2.6, z]); }
+  } else if (kind === 'cruise'){
+    accent.push(box(L*0.86, Bm*0.1, Bm*1.01, -L*0.07, -Bm*0.04, 0));
+    for (let k = 0; k < 6; k++) deck.push(box(L*(0.78-k*0.05), 3.1, Bm*(0.96-k*0.03), -L*0.08 - k*1.2, Bm*0.31+1.55+k*3.1, 0));
+    accent.push(cyl({diameterTop:5, diameterBottom:7, height:9, tessellation:12}, Bm*0.31+18.6+4.5)); accent[accent.length-1].position.x = -L*0.28;
+  } else if (kind === 'ferry'){
+    accent.push(box(L*0.86, Bm*0.1, Bm*1.01, -L*0.07, Bm*0.24, 0));
+    deck.push(box(L*0.62, 4, Bm*0.92, -L*0.06, Bm*0.31+2, 0), box(L*0.4, 3.4, Bm*0.8, -L*0.06, Bm*0.31+5.7, 0));
+  } else {
+    deck.push(box(L*0.42, 2.2, Bm*0.7, -L*0.08, Bm*0.31+1.1, 0), box(L*0.22, 1.6, Bm*0.55, -L*0.12, Bm*0.31+3, 0));
+  }
+  const root = new B.TransformNode('ship_'+kind, scene);
+  const mk = (list, mat) => { if (!list.length) return; const m = merge(list); m.material = mat; m.parent = root; m.isPickable = false; m.receiveShadows = true; };
+  mk(hull, stdMat('hull_'+kind+'_'+rnd(),{diffuse:hex(hullC), spec:new C3(.3,.3,.3)}));
+  mk(deck, kind === 'cruise' || kind === 'yacht' || kind === 'ferry' ? shipWindowsM : whiteM);
+  mk(accent, kind === 'cruise' ? stdMat('cruiseAcc',{diffuse:hex('#1f4e8c')}) : craneRed);
+  if (cargoBoxes.length){
+    const cb = B.MeshBuilder.CreateBox('shipCont',{width:12.2, height:2.6, depth:2.44},scene); cb.material = cont.material; cb.isPickable = false; cb.parent = root; // own geometry: thin-instance buffers live on the geometry
+    cb.thinInstanceRegisterAttribute('color',4);
+    for (const [x,y,z] of cargoBoxes){ const i = cb.thinInstanceAdd(B.Matrix.Translation(x,y,z), false), c = hex(CONT_COLORS[Math.floor(rnd()*CONT_COLORS.length)]); cb.thinInstanceSetAttributeAt('color', i, [c.r,c.g,c.b,1], false); }
+    cb.thinInstanceBufferUpdated('matrix'); cb.thinInstanceBufferUpdated('color'); cb.alwaysSelectAsActiveMesh = true;
+  }
+  return root;
+}
+const shipWindowsM = (()=>{ const t = new B.DynamicTexture('shipWin',{width:256,height:64},scene,true), c = t.getContext(), e = new B.DynamicTexture('shipWinE',{width:256,height:64},scene,true), ce = e.getContext();
+  c.fillStyle='#f6f6f2'; c.fillRect(0,0,256,64); ce.fillStyle='#000'; ce.fillRect(0,0,256,64);
+  for (let x=4;x<256;x+=12){ c.fillStyle='#24384f'; c.fillRect(x,22,8,20); if (rnd()<0.6){ ce.fillStyle='#ffd9a0'; ce.fillRect(x,22,8,20); } }
+  t.update(true); e.update(true); t.uScale = e.uScale = 6; const m = stdMat('shipWinM',{dt:t, et:e}); nightMats.push(m); return m; })();
+const WATER_Y = lake.position.y;
+const ships = [];
+function addShip(kind, path){ const n = shipMesh(kind); n.position.y = WATER_Y; ships.push({ n, path, t: rnd()*1000 }); return n; }
+// docked
+for (const x of [PORT.x0+140, PORT.x0+330]){ const s = shipMesh('cargo'); s.position.set(x, WATER_Y, COAST_Z+15); }
+{ const s = shipMesh('cruise'); s.position.set(CRUISE_X+30, WATER_Y, COAST_Z+120); s.rotation.y = -Math.PI/2; }
+// sailing (circular routes out at sea; speed in m/s)
+addShip('cargo',  { cx:-300, cz:COAST_Z+1500, r:950,  v:7 });
+addShip('cargo',  { cx:1400, cz:COAST_Z+2600, r:1500, v:-8 });
+addShip('cruise', { cx:900,  cz:COAST_Z+1700, r:1100, v:6 });
+addShip('ferry',  { cx:200,  cz:COAST_Z+900,  r:500,  v:-9 });
+for (let i = 0; i < 4; i++) addShip('yacht', { cx:850+i*40, cz:COAST_Z+330+i*60, r:140+i*30, v:(i%2?-1:1)*(5+i) });
+function updateShips(dt){
+  for (const s of ships){
+    const P = s.path; s.t += dt; const ph = s.t*P.v/P.r;
+    const x = P.cx + Math.cos(ph)*P.r, z = P.cz + Math.sin(ph)*P.r, vx = -Math.sin(ph)*P.v, vz = Math.cos(ph)*P.v;
+    s.n.position.x = x; s.n.position.z = z; s.n.position.y = WATER_Y + Math.sin(s.t*0.9)*0.15;
+    s.n.rotation.y = Math.atan2(-vz, vx); s.n.rotation.z = Math.sin(s.t*0.7)*0.012;
+  }
+}
+
+// ---------- airport ----------
+const runwayM = stdMat('runwayM',{dt:noiseTex('rw','#2e3034',0.12,256,2)}); runwayM.diffuseTexture.uScale = 60; runwayM.diffuseTexture.vScale = 2;
+const markM = stdMat('markM',{diffuse:hex('#f0f0ea')});
+const RW = { x0:-780, x1:780, z:AIR.z, w:45 };
+flatBox('airfield', RW.x0-160, RW.x1+160, AIR.z-140, CITY_N-20, 0, 0.12, stdMat('airGrass',{dt:noiseTex('ag','#5e8a45',0.18,256,3)}));
+flatBox('runway', RW.x0, RW.x1, RW.z-RW.w/2, RW.z+RW.w/2, 0.12, 0.12, runwayM);
+const TWY_Z = AIR.z + 110;
+flatBox('taxiway', RW.x0+60, RW.x1-60, TWY_Z-11, TWY_Z+11, 0.12, 0.1, runwayM);
+for (const x of [RW.x0+70, -200, 200, RW.x1-70]) flatBox('twyLink', x-11, x+11, RW.z, TWY_Z, 0.12, 0.1, runwayM);
+const APRON = { x0:-380, x1:380, z0:TWY_Z+11, z1:TWY_Z+150 };
+flatBox('apron', APRON.x0, APRON.x1, APRON.z0, APRON.z1, 0.12, 0.12, portConcrete);
+flatBox('airRoad', -12, 12, APRON.z1+50, CITY_N, 0.05, 0.08, mats.asphalt);
+flatBox('airRoad2', -320, 320, APRON.z1+50, APRON.z1+72, 0.05, 0.08, mats.asphalt);
+// runway markings: centre line, threshold "piano keys", touchdown zone bars
+const mark = B.MeshBuilder.CreateGround('mark',{width:1,height:1},scene); mark.material = markM; mark.isPickable=false;
+const addMark = (x,z,w,d) => mark.thinInstanceAdd(B.Matrix.Compose(new V3(w,1,d), B.Quaternion.Identity(), new V3(x,0.26,z)), false);
+for (let x = RW.x0+80; x < RW.x1-80; x += 50) addMark(x, RW.z, 30, 0.9);
+for (const end of [RW.x0+20, RW.x1-20]) for (let k = -7; k <= 7; k++) if (k) addMark(end, RW.z + k*2.6, 30, 1.6);
+for (const [end, s] of [[RW.x0+170, 1], [RW.x1-170, -1]]) for (const k of [-1,1]) addMark(end, RW.z + k*8, 45, 3);
+for (let x = RW.x0+70; x < RW.x1-70; x += 18) addMark(x, TWY_Z, 7, 0.4);
+mark.thinInstanceBufferUpdated('matrix'); mark.alwaysSelectAsActiveMesh = true;
+// runway edge lights
+const rwl = B.MeshBuilder.CreateBox('rwl',{width:0.8,height:0.5,depth:0.8},scene); rwl.material = mats.bulb; rwl.isPickable=false;
+for (let x = RW.x0; x <= RW.x1; x += 40) for (const k of [-1,1]) rwl.thinInstanceAdd(B.Matrix.Translation(x, 0.4, RW.z + k*(RW.w/2+2)), false);
+for (let x = RW.x1+30; x < RW.x1+300; x += 30) rwl.thinInstanceAdd(B.Matrix.Translation(x, 0.4, RW.z), false);   // approach lights (east)
+rwl.thinInstanceBufferUpdated('matrix'); rwl.alwaysSelectAsActiveMesh = true;
+// terminal: long glass hall with a white wave roof, jet bridges
+const termGlass = stdMat('termGlass',{dt:facadeTile('hitech','shop',0.7).dif, et:facadeTile('hitech','shop',0.7).emi, spec:new C3(.7,.7,.75), power:110});
+termGlass.diffuseTexture.uScale = 40; termGlass.emissiveTexture.uScale = 40; nightMats.push(termGlass);
+flatBox('terminal', -300, 300, APRON.z1+4, APRON.z1+44, 0.2, 16, termGlass);
+(function waveRoof(){ const paths = []; for (let i = 0; i <= 24; i++){ const x = -310 + i*620/24, line = []; for (let j = 0; j <= 6; j++){ const z = APRON.z1 - 2 + j*50/6; line.push(new V3(x, 16.5 + Math.sin(i/24*Math.PI*3)*2 + Math.sin(j/6*Math.PI)*3, z)); } paths.push(line); }
+  const r = B.MeshBuilder.CreateRibbon('termRoof',{pathArray:paths, sideOrientation:B.Mesh.DOUBLESIDE},scene); r.material = whiteM; r.isPickable = false; })();
+for (const x of [-240,-150,-60,30,120,210]){ flatBox('bridge', x-2, x+2, APRON.z1-26, APRON.z1+4, 4, 3.4, steelM); }
+// control tower
+(function tower(){ const tx = 470, tz = APRON.z0 + 60;
+  const shaftT = cyl({diameterTop:6, diameterBottom:8, height:62, tessellation:16}, 31); shaftT.position.x = tx; shaftT.position.z = tz; shaftT.material = concrete;
+  const cab = cyl({diameterTop:15, diameterBottom:11, height:7, tessellation:12}, 65.5); cab.position.x = tx; cab.position.z = tz; cab.material = termGlass;
+  const top = cyl({diameter:15.6, height:1.2, tessellation:12}, 69.6); top.position.x = tx; top.position.z = tz; top.material = whiteM;
+  [shaftT, cab, top].forEach(m=>{ m.isPickable = false; }); })();
+// hangars
+for (let i = 0; i < 3; i++){ const hx = -650 + i*90; flatBox('hangar', hx-38, hx+38, APRON.z0+10, APRON.z0+80, 0.2, 18, stdMat('hgM'+i,{diffuse:hex('#cfd5da')}));
+  flatBox('hangarDoor', hx-34, hx+34, APRON.z0+9, APRON.z0+10, 0.2, 15, darkM); }
+// planes: modelled along +x, wheels at y = 0
+function planeParts(livery){
+  const body = [], acc = [];
+  const fus = B.MeshBuilder.CreateCylinder('fus',{diameter:4.2, height:40, tessellation:16},scene); fus.rotation.z = Math.PI/2; fus.position.y = 4; body.push(fus);
+  const nose = B.MeshBuilder.CreateSphere('nose',{diameter:4.2, segments:12},scene); nose.scaling.x = 1.8; nose.position.set(20, 4, 0); body.push(nose);
+  const tailc = B.MeshBuilder.CreateCylinder('tc',{diameterTop:4.2, diameterBottom:1.0, height:10, tessellation:16},scene); tailc.rotation.z = -Math.PI/2; tailc.position.set(-25, 4.6, 0); body.push(tailc);
+  const wing = B.MeshBuilder.CreateBox('wing',{width:7, height:0.5, depth:38},scene); wing.position.set(1, 3, 0); body.push(wing);
+  const stab = B.MeshBuilder.CreateBox('stab',{width:3.6, height:0.4, depth:13},scene); stab.position.set(-27, 5.4, 0); body.push(stab);
+  const fin = B.MeshBuilder.CreateBox('fin',{width:6, height:8, depth:0.5},scene); fin.position.set(-27, 9.6, 0); fin.rotation.z = -0.35; acc.push(fin);
+  for (const z of [-8, 8]){ const e = B.MeshBuilder.CreateCylinder('eng',{diameter:2.4, height:4.6, tessellation:12},scene); e.rotation.z = Math.PI/2; e.position.set(3.5, 1.9, z); acc.push(e); }
+  const stripe = B.MeshBuilder.CreateBox('stripe',{width:34, height:0.7, depth:4.3},scene); stripe.position.set(-1, 3.4, 0); acc.push(stripe);
+  const b = merge(body), a = merge(acc); b.material = whiteM; a.material = stdMat('liv_'+livery,{diffuse:hex(livery), spec:new C3(.4,.4,.4)});
+  for (const m of [b,a]){ m.isPickable = false; m.receiveShadows = true; }
+  return [b, a];
+}
+const LIVERIES = ['#1f6fb2','#c0392b','#0f8a6e','#d4a72c','#5b2a86'];
+for (let i = 0; i < 6; i++){                                  // parked at the jet bridges, nose to the terminal
+  const [b, a] = planeParts(LIVERIES[i % LIVERIES.length]);
+  for (const m of [b, a]){ m.position.set(-240 + i*90, 0.25, APRON.z1-50); m.rotation.y = -Math.PI/2; }
+}
+const flights = [];
+for (let i = 0; i < 2; i++){
+  const [b, a] = planeParts(LIVERIES[(i+2) % LIVERIES.length]), root = new B.TransformNode('flight'+i, scene); b.parent = root; a.parent = root;
+  flights.push({ root, t: i*35, land: i === 0 });
+}
+function updateFlights(dt){
+  for (const f of flights){
+    f.t = (f.t + dt) % 70; const t = f.t, n = f.root;
+    let x, y, pitch = 0, show = true;
+    if (f.land){                                              // approach from the east, touch down, roll out
+      if (t < 26){ const k = t/26; x = lerp(RW.x1+2600, RW.x1-120, k); y = lerp(190, 0.25, k); pitch = 0.05; }
+      else if (t < 44){ const k = (t-26)/18, e = 1-Math.pow(1-k, 2); x = lerp(RW.x1-120, -260, e); y = 0.25; }
+      else { show = false; x = -260; y = 0.25; }
+      n.rotation.y = Math.PI;                                 // flying west (−x)
+    } else {                                                  // take-off roll to the west, climb out
+      if (t < 6){ show = false; x = RW.x1-40; y = 0.25; }
+      else if (t < 26){ const k = (t-6)/20; x = lerp(RW.x1-40, -120, k*k); y = 0.25; }
+      else if (t < 50){ const k = (t-26)/24; x = lerp(-120, -4200, k); y = 0.25 + Math.pow(k, 1.4)*420; pitch = 0.16; }
+      else { show = false; x = -4200; y = 400; }
+      n.rotation.y = Math.PI;
+    }
+    n.setEnabled(show); n.position.set(x, y, RW.z + (f.land ? -6 : 6)); n.rotation.z = -pitch;
+  }
+}
 
 // gradient sky dome with a soft sun glow (replaces a flat background colour)
 B.Effect.ShadersStore.skyVertexShader = `precision highp float; attribute vec3 position; uniform mat4 worldViewProjection; varying vec3 vDir;
@@ -1331,12 +1606,12 @@ B.Effect.ShadersStore.skyFragmentShader = `precision highp float; varying vec3 v
     gl_FragColor = vec4(c, 1.0); }`;
 const skyMat = new B.ShaderMaterial('sky', scene, { vertex:'sky', fragment:'sky' }, { attributes:['position'], uniforms:['worldViewProjection','topC','horC','lowC','sunDir','sunC','glow','stars'] });
 skyMat.backFaceCulling = false; skyMat.disableDepthWrite = true;
-const skyDome = B.MeshBuilder.CreateSphere('skyDome',{diameter:6000, segments:24, sideOrientation:B.Mesh.BACKSIDE},scene);
+const skyDome = B.MeshBuilder.CreateSphere('skyDome',{diameter:16000, segments:24, sideOrientation:B.Mesh.BACKSIDE},scene);
 skyDome.material = skyMat; skyDome.infiniteDistance = true; skyDome.isPickable = false; skyDome.applyFog = false;
-camera.maxZ = 8000;
+camera.maxZ = 20000;
 
 // a glowing marker on every free plot (lights up at dusk: "1 Telegram = 1 hovli")
-const dot = B.MeshBuilder.CreateCylinder('dot',{diameter:1.1, height:0.08, tessellation:16},scene);
+const dot = B.MeshBuilder.CreateDisc('dot',{radius:0.55, tessellation:6},scene); dot.rotation.x = Math.PI/2; dot.bakeCurrentTransformIntoVertices();
 mats.dot = stdMat('dotM',{diffuse:hex('#a9d18a'), emissive:new C3(0,0,0)}); dot.material = mats.dot; dot.isPickable = false;
 const ZERO_M = B.Matrix.Scaling(0,0,0);
 for (const p of plots) dot.thinInstanceAdd(B.Matrix.Translation(p.x, 0.47, p.z), false);
@@ -1353,7 +1628,7 @@ head.material = stdMat('hlM',{diffuse:hex('#fff6d8'), emissive:hex('#fff3c4')});
 const tail = B.MeshBuilder.CreateBox('tl',{width:1.6, height:0.25, depth:0.08},scene); tail.position.set(0,0.75,-2.12); tail.bakeCurrentTransformIntoVertices();
 tail.material = stdMat('tlM',{diffuse:hex('#ff3b30'), emissive:hex('#ff2a1f')}); tail.isPickable = false;
 const cars = [];
-const CAR_N = 150;
+const CAR_N = 420;
 const carBuf = new Float32Array(CAR_N*16);
 (function spawnCars(){
   for (let i=0;i<CAR_N;i++){
@@ -1848,8 +2123,8 @@ function applyQuality(q){
       glow.addIncludedOnlyMesh(bulb); glow.addIncludedOnlyMesh(head); glow.addIncludedOnlyMesh(tail); glow.addIncludedOnlyMesh(dot);
     }
   }
-  scene.fogDensity = q==='low' ? 0.0011 : 0.0009;
-  carsVisible = q==='low' ? 50 : q==='medium' ? 110 : CAR_N;
+  scene.fogDensity = q==='low' ? 0.00034 : 0.00028;
+  carsVisible = q==='low' ? 140 : q==='medium' ? 280 : CAR_N;
 }
 
 // ---------- day / night ----------
@@ -1870,7 +2145,9 @@ function updateSky(){
   if (elev > -0.02){ tmpDir.set(-sx, -Math.max(sy,0.06), -0.45); }
   else { tmpDir.set(sx, sy, -0.6); tmpDir.y = -Math.max(-sy,0.25); }
   tmpDir.normalize(); sun.direction.copyFrom(tmpDir);
-  sun.position.copyFrom(tmpDir.scale(-600));
+  // shadows follow the view: a fixed square around the camera target (the city is too big for one map)
+  sun.position.set(camera.target.x - tmpDir.x*1200, -tmpDir.y*1200, camera.target.z - tmpDir.z*1200);
+  sun.shadowFrustumSize = clamp(camera.radius*2.4, 260, 2200);
   const sunI = elev > -0.02 ? 0.25 + 2.1*smooth(-0.02,0.35,elev) : 0.45*smooth(0, 0.3, -elev);
   sun.intensity = sunI;
   sun.diffuse = elev>-0.02 ? C3.Lerp(new C3(1,.62,.38), new C3(1,.97,.9), smooth(0,0.45,elev)) : new C3(.55,.65,1);
@@ -1904,7 +2181,7 @@ function updateSky(){
 // 1 finger / left mouse: grab-pan anywhere · 2 fingers: pinch zoom, twist rotate, parallel vertical drag tilts
 // right mouse / Ctrl+left: orbit + tilt · wheel: zoom to cursor · keys: WASD/arrows, Q/E, R/F, +/-
 // Rotation pivot = selected plot (if any), otherwise the point between the fingers / screen centre.
-const LIM = { x0: X0-320, x1: X0+W+320, z0: Z0-320, z1: Z0+D+320 };
+const LIM = { x0: X0-700, x1: X0+W+700, z0: AIR.z-700, z1: COAST_Z+700 };
 const ptrs = new Map();
 let gest = null, tapStart = null;
 const vel = { x:0, z:0 };
@@ -1913,7 +2190,7 @@ function groundAt(x, y){
   camera.getViewMatrix(true);
   const ray = scene.createPickingRay(x, y, B.Matrix.Identity(), camera, false);
   if (ray.direction.y > -0.02) return null;               // looking above the horizon
-  const t = Math.min(-ray.origin.y / ray.direction.y, 2500);
+  const t = Math.min(-ray.origin.y / ray.direction.y, 9000);
   return new V3(ray.origin.x + ray.direction.x*t, 0, ray.origin.z + ray.direction.z*t);
 }
 function moveTarget(dx, dz){
@@ -2087,7 +2364,7 @@ scene.onBeforeRenderObservable.add(()=>{
   if (S.cine && !gest && now > (S.cinePause||0)){
     camera.alpha += dt*0.045;
     camera.target.x += (0 - camera.target.x)*Math.min(1, dt*0.8); camera.target.z += (0 - camera.target.z)*Math.min(1, dt*0.8);
-    camera.radius += ((isMobile ? 430 : 360) - camera.radius)*Math.min(1, dt*0.6); camera.beta += (1.17 - camera.beta)*Math.min(1, dt*0.6);
+    camera.radius += ((isMobile ? 1150 : 950) - camera.radius)*Math.min(1, dt*0.6); camera.beta += (1.17 - camera.beta)*Math.min(1, dt*0.6);
   }
   if (S.tour){
     S.tour.t += dt;
@@ -2109,7 +2386,7 @@ scene.onBeforeRenderObservable.add(()=>{
   // water shimmer + traffic
   jet.scaling.y = 1 + Math.sin(now/160)*0.06;
   lakeTex.uOffset += dt*0.004; lakeTex.vOffset += dt*0.002;
-  updateCars(dt);
+  updateCars(dt); updateShips(dt); updateFlights(dt);
   // fps + auto quality
   fpsAcc += engine.getFps(); fpsN++; fpsT += dt;
   if (fpsT > 0.5){
@@ -2154,6 +2431,18 @@ function applyDTO(p, d, animate){
     else if (left > 0) setTimeout(()=>{ p.building = false; }, left*1000);
   } else if (!b && p.tpl){ hideBuilding(p); p.tpl = null; }
   paintPad(p, animate);
+}
+// /api/city sends only non-empty plots; empty land is priced here with the server's formula
+let LANDP = { occupancy:{}, demandWeight:0.5 };
+const emptyPrice = p => Math.round(ZONES[p.zone].base * p.loc * (1 + LANDP.demandWeight * (LANDP.occupancy[p.district] || 0)) / 100) * 100;
+function applyCity(c){
+  if (c.land) LANDP = c.land;
+  const seen = new Set();
+  for (const d of c.plots){ const p = plots[d.id]; if (!p) continue; seen.add(d.id); applyDTO(p, d, false); }
+  for (const p of plots) if (!seen.has(p.id)){
+    if (p.state !== 'empty' || p.tpl) applyDTO(p, { id:p.id, state:'empty', price:emptyPrice(p), owner:null, building:null, likes:0 }, false);
+    else { p.price = emptyPrice(p); paintPad(p, false); }
+  }
 }
 async function api(method, url, body, idemKey){
   const headers = {};
@@ -2317,7 +2606,7 @@ async function ensureLogin(){
   if (!API.me){ const ok = await showLogin(API.opts); if (!ok){ closeAuth(); return false; } await refreshMe(); }
   if (!API.me.nickname){ await showNickname(); await refreshMe(); }
   closeAuth();
-  try { const c = await api('GET','/api/city'); for (const d of c.plots) applyDTO(plots[d.id], d, false); flushBuffers(); } catch(_){}
+  try { applyCity(await api('GET','/api/city')); flushBuffers(); } catch(_){}
   return true;
 }
 
@@ -2348,8 +2637,8 @@ async function boot(){
   try {
     API.daySeconds = city.economy.daySeconds; S.limit = city.economy.plotLimit;
     seed = 7;
-    for (const d of city.plots){ const p = plots[d.id]; if (!p) continue; applyDTO(p, d, false);
-      if (p.zone==='res' && p.tpl && rnd()<0.5) addTree(p.x+3.6*(rnd()<.5?-1:1), p.z+3.6*(rnd()<.5?-1:1), 0.55); }
+    applyCity(city);
+    for (const d of city.plots){ const p = plots[d.id]; if (p && p.zone==='res' && p.tpl && rnd()<0.5) addTree(p.x+3.6*(rnd()<.5?-1:1), p.z+3.6*(rnd()<.5?-1:1), 0.55); }
     flushBuffers();
   } catch(e){ console.error(e); }
   API.opts = opts;
@@ -2360,8 +2649,7 @@ async function boot(){
   if (!me || !me.nickname){ showHero(); setPopulation(city.stats ? city.stats.residents : 0); return; }
   closeAuth();
   // re-mark my plots now that we know who "me" is
-  const city2 = await api('GET','/api/city');
-  for (const d of city2.plots) applyDTO(plots[d.id], d, false);
+  applyCity(await api('GET','/api/city'));
   pad.thinInstanceBufferUpdated('color');
   if (!me.plots.length) setTimeout(()=>tut(1), 400); else tut(0);
 }

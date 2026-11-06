@@ -25,19 +25,19 @@ export async function seed(db: Db, opts: { demo: boolean; log?: (m: string) => v
     for (const [k, v] of Object.entries(ECONOMY_DEFAULTS)) {
       await c.query('insert into economy_config(key,value) values ($1,$2) on conflict (key) do nothing', [k, JSON.stringify(v)]);
     }
+    // plots: insert the ones this layout adds (first start: all; after the 10× expansion: the outer ring)
     const { rows } = await c.query('select count(*)::int n from plots');
-    if (rows[0].n === 0) {
-      const plots = cityPlots();
-      // one multi-row insert
-      const vals: unknown[] = [];
-      const ph = plots.map((p, i) => {
+    const all = cityPlots(), add = rows[0].n < all.length ? all : [];
+    for (let k = 0; k < add.length; k += 2000) {
+      const part = add.slice(k, k + 2000), vals: unknown[] = [];
+      const ph = part.map((p, i) => {
         vals.push(p.id, p.district, p.zone, p.x, p.z, p.loc);
         const b = i * 6;
         return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6})`;
       });
-      await c.query(`insert into plots(id,district_id,zone,x,z,location_factor) values ${ph.join(',')}`, vals);
-      log(`seeded ${plots.length} plots`);
+      await c.query(`insert into plots(id,district_id,zone,x,z,location_factor) values ${ph.join(',')} on conflict (id) do nothing`, vals);
     }
+    if (add.length) log(`plots: ${rows[0].n} → ${all.length}`);
   });
   if (opts.demo) await seedDemo(db, log);
   await seedLandmarks(db, log);

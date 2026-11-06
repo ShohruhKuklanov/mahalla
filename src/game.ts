@@ -61,6 +61,13 @@ export async function allPlots(db: Db): Promise<PlotDTO[]> {
   const [eco, occ, rows] = await Promise.all([economy(db), occupancy(db), db.query(PLOT_SQL + ' order by p.id')]);
   return rows.rows.map((r) => toDTO(r, occ, eco));
 }
+/** City view for the client: only plots that are not empty (empty-land prices are computed by the client
+ *  from the same formula, using the occupancy per mahalla sent here). Keeps /api/city small for 13 000 plots. */
+export async function cityView(db: Db) {
+  const [eco, occ, rows, total] = await Promise.all([economy(db), occupancy(db), db.query(PLOT_SQL + " where p.status <> 'empty' order by p.id"), db.query('select count(*)::int n from plots')]);
+  const occ2: Record<number, number> = {}; for (const [k, v] of occ) occ2[k] = v;
+  return { total: total.rows[0].n as number, land: { occupancy: occ2, demandWeight: eco.demand_weight }, plots: rows.rows.map((r) => toDTO(r, occ, eco)) };
+}
 export async function onePlot(db: Db | Tx, id: number): Promise<PlotDTO | null> {
   const [eco, occ, rows] = await Promise.all([economy(db), occupancy(db), db.query(PLOT_SQL + ' where p.id = $1', [id])]);
   return rows.rows[0] ? toDTO(rows.rows[0], occ, eco) : null;

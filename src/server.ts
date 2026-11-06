@@ -156,7 +156,7 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
       districts: DISTRICTS, zones: ZONES, // building types, styles, prices: the catalog block in index.html
       economy: { plotLimit: eco.plot_limit, saleFee: eco.sale_fee, daySeconds: config.daySeconds },
       stats: { residents: (await db.query("select count(distinct p.owner_id)::int n from plots p join users u on u.id = p.owner_id where u.role <> 'bot'")).rows[0].n },
-      plots: await game.allPlots(db),
+      ...(await game.cityView(db)),
     };
   });
   // "Hovlimni top": find someone's plots by Telegram @username (only if they show it) or by game nickname

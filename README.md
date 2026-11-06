@@ -69,7 +69,7 @@ src/game.ts           pul va mulk qoidalari: sotib olish, qurish, daromad, bozor
 src/economy.ts        shahar xaritasi, zonalar, bino shablonlari, narx formulalari
 src/auth.ts           Telegram tekshiruvi, sessiyalar, yangi o‘yinchiga 10 000 tanga
 src/nickname.ts       nik qoidalari va so‘z filtri
-src/seed.ts           shaharni (1 216 uchastka) va namuna qo‘shnilarni yaratish
+src/seed.ts           shaharni (12 992 uchastka, 15 mahalla; eski bazaga yangi halqa qo‘shiladi) va namuna qo‘shnilarni yaratish
 migrations/           ma’lumotlar bazasi sxemasi
 test/                 uchidan-uchigacha sinovlar
 ```
