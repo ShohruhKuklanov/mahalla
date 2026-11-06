@@ -349,6 +349,7 @@
   <button class="tool" id="tilt" title="Ko‘rinishni almashtirish">3D</button>
   <button class="tool" id="goPort" title="Port" aria-label="Portga borish"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v14"/><path d="M5 13a7 7 0 0 0 14 0"/><path d="M8 11h8"/></svg></button>
   <button class="tool" id="goAir" title="Aeroport" aria-label="Aeroportga borish"><svg viewBox="0 0 24 24"><path d="M10.5 3.5c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5V9l7 4v2l-7-2v5l2 1.5V21l-3.5-1-3.5 1v-1.5l2-1.5v-5l-7 2v-2l7-4z"/></svg></button>
+  <button class="tool" id="goForest" title="Bog‘ va o‘rmon" aria-label="Bog‘ va o‘rmonga borish"><svg viewBox="0 0 24 24"><path d="M12 2 6 10h3l-4 6h5v6h4v-6h5l-4-6h3z"/></svg></button>
   <button class="tool" id="home" title="Mening yerim" aria-label="Mening yerim"><svg viewBox="0 0 24 24"><path d="M4 11l8-6 8 6"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/></svg></button>
 </div>
 
@@ -821,6 +822,27 @@ const parkMin = new V3(blockX(15), 0, blockZ(12)), parkMax = new V3(blockX(16)+B
 // beyond the grid: the port and the sea to the south, the airport to the north
 const CITY_S = Z0 + D + RD, COAST_Z = CITY_S + 120, CITY_N = Z0 - RD;
 const AIR = { z: CITY_N - 470, x0: -760, x1: 760 };
+// ---------- the river ----------
+// Springs from a lake in the forest behind the mountains, runs through a gorge, across the plain, then through the city
+// along two road lines (so no plot moves): west→east on road row 9 up to the central park, then south past the park,
+// through the port and into the sea. Streets cross it on bridges.
+const RIVER_ROW = 9, RIVER_K = 15;
+const RIVER_Z = Z0 - RD/2 + RIVER_ROW*PITCH, RIVER_X = X0 - RD/2 + RIVER_K*PITCH;
+const onRiverRoad = (x, z) => (Math.abs(z - RIVER_Z) < RD/2 && x < RIVER_X + RD/2 && x > X0 - RD - 2) || (Math.abs(x - RIVER_X) < RD/2 && z > RIVER_Z - RD/2);
+const FOREST = { x0:-4200, x1:4200, z0:-9600, z1:-6300 };
+const SPRING = { x:-1900, z:-6900, rx:360, rz:260 };
+const RIVER_PATH = [[-1900,-6640],[-1820,-6000],[-1700,-5300],[-1620,-4600],[-1540,-3900],[-1470,-3200],[-1360,-2500],[-1250,-1800],[-1180,-1200],[-1120,-700],[-1050,-420],[-975,-270],[X0-RD+2, RIVER_Z]].map(([x,z]) => new V3(x, 0, z));
+function distToRiver(x, z){
+  let best = 1e9;
+  for (let i = 0; i < RIVER_PATH.length-1; i++){
+    const a = RIVER_PATH[i], b = RIVER_PATH[i+1], dx = b.x-a.x, dz = b.z-a.z, L2 = dx*dx+dz*dz;
+    const t = Math.max(0, Math.min(1, ((x-a.x)*dx + (z-a.z)*dz)/L2)), px = a.x+dx*t-x, pz = a.z+dz*t-z;
+    best = Math.min(best, Math.hypot(px, pz));
+  }
+  if (x > X0-RD-4 && ((Math.abs(z-RIVER_Z) < RD && x < RIVER_X+RD) || (Math.abs(x-RIVER_X) < RD && z > RIVER_Z-RD))) best = 0;
+  const e = Math.hypot((x-SPRING.x)/SPRING.rx, (z-SPRING.z)/SPRING.rz); if (e < 1.15) best = 0;
+  return best;
+}
 const parkC = parkMin.add(parkMax).scale(.5);
 
 const NICKS = ['sardor_77','Malika','jasur.dev','Dilnoza','bekzod_uz','Aziza.k','Otabek','Shahzoda','timur99','nodira','Ulug‘bek','Sevara','Javohir','Kamola','rustam_b','Laylo','Akmal','Madina','Sherzod','Zarina','Bobur','Jahongir','Islom','Feruza'];
@@ -937,14 +959,14 @@ sun.shadowMinZ = 1; sun.shadowMaxZ = 2400;
 // ---------- ground, roads, blocks ----------
 const grassTex = noiseTex('grass','#4f7a3a',0.22,256,3);
 // the city stands on a wide plain: the sea along the south (port), the airport to the north, mountains far behind
-const LAND = { x0:-6000, x1:6000, z0:-6500, z1:COAST_Z };
+const LAND = { x0:-6000, x1:6000, z0:-12500, z1:COAST_Z };
 const ground = B.MeshBuilder.CreateGround('ground',{width:LAND.x1-LAND.x0, height:LAND.z1-LAND.z0},scene);
 ground.position.set((LAND.x0+LAND.x1)/2, -0.02, (LAND.z0+LAND.z1)/2);
 grassTex.uScale = (LAND.x1-LAND.x0)/16; grassTex.vScale = (LAND.z1-LAND.z0)/16;
 mats.grass = stdMat('grass',{dt:grassTex}); mats.grass.zOffset = 4; ground.material = mats.grass;  // polygon offset: the plain never shows through roads far away
  ground.isPickable=false; ground.receiveShadows = true;
 const lakeTex = noiseTex('lake','#7f8c95',0.35,256,2); lakeTex.uScale = lakeTex.vScale = 180;
-const lake = B.MeshBuilder.CreateGround('lake',{width:20000,height:20000},scene);
+const lake = B.MeshBuilder.CreateGround('lake',{width:34000,height:34000},scene);
 lake.position.y = -1.2; lake.isPickable = false;
 mats.lake = stdMat('lakeM',{dt:lakeTex, diffuse:hex('#1d4660'), spec:new C3(1,1,1), power:180}); lake.material = mats.lake; mats.lake.zOffset = 6;
 // sea wall along the coast
@@ -1041,11 +1063,11 @@ const dashes = chunkSet(dashBase, 1000);
 const inPark = (x,z)=> x>parkMin.x-1 && x<parkMax.x+1 && z>parkMin.z-1 && z<parkMax.z+1;
 for (let i=0;i<=NBZ;i++){ // roads along x
   const z = Z0 - RD/2 + i*PITCH;
-  for (let x=X0-RD; x<X0+W+RD; x+=8) if(!inPark(x,z)) dashes.add(B.Matrix.Translation(x,0.08,z), x, z);
+  for (let x=X0-RD; x<X0+W+RD; x+=8) if(!inPark(x,z) && !onRiverRoad(x,z)) dashes.add(B.Matrix.Translation(x,0.08,z), x, z);
 }
 for (let i=0;i<=NBX;i++){ // roads along z
   const x = X0 - RD/2 + i*PITCH;
-  for (let z=Z0-RD; z<Z0+D+RD; z+=8) if(!inPark(x,z)) dashes.add(B.Matrix.RotationY(Math.PI/2).multiply(B.Matrix.Translation(x,0.08,z)), x, z);
+  for (let z=Z0-RD; z<Z0+D+RD; z+=8) if(!inPark(x,z) && !onRiverRoad(x,z)) dashes.add(B.Matrix.RotationY(Math.PI/2).multiply(B.Matrix.Translation(x,0.08,z)), x, z);
 }
 dashes.flush();
 
@@ -1416,6 +1438,7 @@ for (let i=0;i<1400;i++){
   const x = lerp(LAND.x0+200, LAND.x1-200, rnd()), z = lerp(AIR.z-1400, COAST_Z-40, rnd());
   if (x > X0-30 && x < X0+W+30 && z > AIR.z-330 && z < COAST_Z) continue;   // city, port, airport strip
   if (Math.abs(x) > 2600 && rnd() < 0.6) continue;
+  if (distToRiver(x, z) < 45) continue;
   addTree(x, z, 1.1+rnd()*1.2);
 }
 flushTrees();
@@ -1441,6 +1464,7 @@ poles.flush(); bulbs.flush();
     for (let i=0;i<count;i++){
       // northern half only: the sea is south
       const a = Math.PI*1.04 + i/count*Math.PI*0.92 + rnd()*0.05, r = lerp(r0, r1, rnd()), h = lerp(h0, h1, rnd()), wide = h*lerp(2.0, 3.0, rnd()), tess = 5 + Math.floor(rnd()*3), rot = rnd()*3;
+      if (distToRiver(Math.cos(a)*r, Math.sin(a)*r) < wide*0.5 + 90) continue;          // the river's gorge
       const m = B.MeshBuilder.CreateCylinder('mt',{diameterTop:0, diameterBottom:wide, height:h, tessellation:tess},scene);
       m.position.set(Math.cos(a)*r, h/2-2, Math.sin(a)*r); m.rotation.y = rot; rock.push(m);
       const hs = h*lerp(0.26, 0.38, rnd());
@@ -1456,11 +1480,17 @@ poles.flush(); bulbs.flush();
 
 // =================== PORT (south, on the sea) & AIRPORT (north) ===================
 seawall.material = concrete;
+{ // open the sea wall at the river mouth
+  const L0 = LAND.x0, L1 = LAND.x1, a = RIVER_X - RD/2 - 1, b = RIVER_X + RD/2 + 1;
+  seawall.scaling.x = (a - L0)/(L1 - L0); seawall.position.x = (L0 + a)/2;
+  const sw2 = seawall.clone('seawall2'); sw2.scaling.x = (L1 - b)/(L1 - L0); sw2.position.x = (b + L1)/2;
+}
 const portConcrete = stdMat('portConc',{dt:noiseTex('pc','#9d9a93',0.16,128,2)}); portConcrete.diffuseTexture.uScale = portConcrete.diffuseTexture.vScale = 40;
 const flatBox = (name, x0, x1, z0, z1, y, h, mat) => { const m = B.MeshBuilder.CreateBox(name,{width:x1-x0, height:h, depth:z1-z0},scene); m.position.set((x0+x1)/2, y+h/2, (z0+z1)/2); m.material = mat; m.isPickable = false; m.receiveShadows = true; return m; };
 const whiteM = stdMat('whiteM',{diffuse:hex('#f2f2ee'), spec:new C3(.3,.3,.3)});
 const PORT = { x0: X0-60, x1: 160, zq: COAST_Z };            // container terminal west, promenade + cruise pier east
-flatBox('portYard', PORT.x0, PORT.x1, CITY_S+1, COAST_Z, 0, 0.3, portConcrete);
+flatBox('portYard', PORT.x0, RIVER_X-RD/2, CITY_S+1, COAST_Z, 0, 0.3, portConcrete);
+flatBox('portYard2', RIVER_X+RD/2, PORT.x1, CITY_S+1, COAST_Z, 0, 0.3, portConcrete);
 flatBox('promenade', PORT.x1, X0+W+60, COAST_Z-26, COAST_Z, 0, 0.32, stdMat('promM',{dt:pave}));
 for (let x = PORT.x1+8; x < X0+W+50; x += 14) addTree(x, COAST_Z-6, 0.9+rnd()*0.3);
 flushTrees();
@@ -1472,7 +1502,7 @@ cont.thinInstanceRegisterAttribute('color',4);
 const yard = { x0: PORT.x0+30, x1: PORT.x1-170, z0: CITY_S+18, z1: COAST_Z-60 };
 for (let x = yard.x0; x < yard.x1; x += 14) for (let z = yard.z0, lane = 0; z < yard.z1; z += 2.9, lane++){
   if (lane % 6 === 5){ z += 9; continue; }                    // straddle-carrier aisles
-  const hgt = 1 + Math.floor(rnd()*4); if (rnd() < 0.12) continue;
+  const hgt = 1 + Math.floor(rnd()*4); if (rnd() < 0.12 || Math.abs(x - RIVER_X) < RD/2 + 8) continue;
   for (let k = 0; k < hgt; k++){
     const i = cont.thinInstanceAdd(B.Matrix.Translation(x, 0.3 + 1.3 + k*2.6, z), false), c = hex(CONT_COLORS[Math.floor(rnd()*CONT_COLORS.length)]), g = 0.8 + rnd()*0.25;
     cont.thinInstanceSetAttributeAt('color', i, [c.r*g, c.g*g, c.b*g, 1], false);
@@ -1660,6 +1690,130 @@ function updateFlights(dt){
   }
 }
 
+// =================== RIVER, BRIDGES, FOREST & GARDENS ===================
+const riverTex = noiseTex('river','#8fa3ad',0.35,256,2); riverTex.uScale = 6; riverTex.vScale = 60;
+const riverM = stdMat('riverM',{dt:riverTex, diffuse:hex('#2a6a86'), spec:new C3(.22,.22,.22), power:60}); riverM.zOffset = -4;
+const bankM = stdMat('bankM',{dt:noiseTex('bank','#b8a77f',0.25,128,2)}); bankM.zOffset = -2;
+// outside the city: a ribbon that widens upstream, with sandy banks
+(function riverRibbon(){
+  const dense = [];
+  for (let i = 0; i < RIVER_PATH.length-1; i++){ const a = RIVER_PATH[i], b = RIVER_PATH[i+1], n = Math.max(2, Math.ceil(V3.Distance(a,b)/40));
+    for (let k = 0; k < n; k++) dense.push(V3.Lerp(a, b, k/n)); }
+  dense.push(RIVER_PATH[RIVER_PATH.length-1]);
+  // gentle meanders
+  const total = dense.length;
+  const pts = dense.map((p, i) => { const t = i/(total-1), wig = Math.sin(i*0.23)*28*(1-Math.min(1, t*1.15)); return new V3(p.x + wig, 0, p.z); });
+  pts[pts.length-1] = RIVER_PATH[RIVER_PATH.length-1].clone();
+  const ribbon = (extra, y, mat, name) => {
+    const L = [], R = [];
+    for (let i = 0; i < pts.length; i++){
+      const a = pts[Math.max(0,i-1)], b = pts[Math.min(pts.length-1,i+1)], dir = b.subtract(a).normalize(), nx = -dir.z, nz = dir.x;
+      const t = i/(pts.length-1), w = (t > 0.93 ? lerp(46, RD, (t-0.93)/0.07) : lerp(64, 46, t)) / 2 + extra;
+      L.push(new V3(pts[i].x + nx*w, y, pts[i].z + nz*w)); R.push(new V3(pts[i].x - nx*w, y, pts[i].z - nz*w));
+    }
+    const m = B.MeshBuilder.CreateRibbon(name,{pathArray:[L,R], sideOrientation:B.Mesh.DOUBLESIDE},scene);
+    m.material = mat; m.isPickable = false; m.receiveShadows = true; return m;
+  };
+  ribbon(9, 0.04, bankM, 'riverBank'); ribbon(0, 0.08, riverM, 'river');
+  // the spring lake in the forest
+  const sp = B.MeshBuilder.CreateDisc('springLake',{radius:1, tessellation:48},scene); sp.rotation.x = Math.PI/2; sp.scaling.set(SPRING.rx, SPRING.rz, 1);
+  sp.position.set(SPRING.x, 0.08, SPRING.z); sp.material = riverM; sp.isPickable = false;
+  const spb = sp.clone('springBank'); spb.scaling.set(SPRING.rx+14, SPRING.rz+14, 1); spb.position.y = 0.04; spb.material = bankM;
+})();
+// inside the city: water between the bridges, stone parapets, bridge railings
+(function cityRiver(){
+  const wat = B.MeshBuilder.CreateGround('rw',{width:1,height:1},scene); wat.material = riverM; wat.isPickable = false;
+  const par = B.MeshBuilder.CreateBox('rp',{width:1,height:1,depth:1},scene); par.material = concrete; par.isPickable = false; par.receiveShadows = true;
+  const rail = B.MeshBuilder.CreateBox('rr',{width:1,height:1,depth:1},scene); rail.material = steelM; rail.isPickable = false;
+  const S = (m, x0, x1, z0, z1, y0, y1) => m.thinInstanceAdd(B.Matrix.Compose(new V3(x1-x0, (y1-y0) || 1, z1-z0), B.Quaternion.Identity(), new V3((x0+x1)/2, (y0+y1)/2, (z0+z1)/2)), false);
+  const h = RD/2;
+  // west→east reach on road row 9: crossings at every column road k = 0..14 (bridges), the bend at k = 15
+  for (let k = -1; k < RIVER_K; k++){
+    const xa = k < 0 ? X0 - RD - 2 : X0 - RD/2 + k*PITCH + h, xb = X0 - RD/2 + (k+1)*PITCH - h;
+    S(wat, xa, xb, RIVER_Z-h, RIVER_Z+h, 0.08, 0.08);
+    for (const sd of [-1, 1]) S(par, xa, xb, RIVER_Z + sd*h - (sd>0?0.35:0), RIVER_Z + sd*h + (sd<0?0.35:0), 0.05, 0.95);
+    if (k >= 0){ const xc = X0 - RD/2 + k*PITCH; for (const sd of [-1,1]) S(rail, xc + sd*(h-0.15) - 0.08, xc + sd*(h-0.15) + 0.08, RIVER_Z - h, RIVER_Z + h, 0.05, 1.1); }   // railings along the bridge
+  }
+  // the bend (open water) and the dead ends of the two roads that meet it
+  S(wat, RIVER_X-h, RIVER_X+h, RIVER_Z-h, RIVER_Z+h, 0.08, 0.08);
+  S(par, RIVER_X+h-0.35, RIVER_X+h, RIVER_Z-h, RIVER_Z+h, 0.05, 0.95);
+  S(par, RIVER_X-h, RIVER_X+h, RIVER_Z-h, RIVER_Z-h+0.35, 0.05, 0.95);
+  // north→south reach on column road 15: crossings at rows 10..26, then through the port to the sea
+  for (let r = RIVER_ROW; r <= GZ; r++){
+    const za = Z0 - RD/2 + r*PITCH + h, zb = r < GZ ? Z0 - RD/2 + (r+1)*PITCH - h : COAST_Z + 2;
+    S(wat, RIVER_X-h, RIVER_X+h, za, zb, 0.08, 0.08);
+    for (const sd of [-1, 1]) S(par, RIVER_X + sd*h - (sd>0?0.35:0), RIVER_X + sd*h + (sd<0?0.35:0), za, zb, 0.05, r < GZ ? 0.95 : 0.6);
+    if (r > RIVER_ROW){ const zc = Z0 - RD/2 + r*PITCH; for (const sd of [-1,1]) S(rail, RIVER_X - h, RIVER_X + h, zc + sd*(h-0.15) - 0.08, zc + sd*(h-0.15) + 0.08, 0.05, 1.1); }
+  }
+  for (const m of [wat, par, rail]){ m.thinInstanceBufferUpdated('matrix'); m.thinInstanceRefreshBoundingInfo(false); }
+})();
+// ---------- beyond the mountains: forest and gardens ----------
+const GARDEN = { x0:-330, x1:330, z0:-7190, z1:-6810 };
+(function forestAndGardens(){
+  // forest floor a little darker, the garden lawn brighter
+  const floor = B.MeshBuilder.CreateGround('forestFloor',{width:FOREST.x1-FOREST.x0, height:FOREST.z1-FOREST.z0},scene);
+  floor.position.set((FOREST.x0+FOREST.x1)/2, 0.01, (FOREST.z0+FOREST.z1)/2);
+  const ft = noiseTex('ff','#3f6a32',0.25,256,3); ft.uScale = (FOREST.x1-FOREST.x0)/16; ft.vScale = (FOREST.z1-FOREST.z0)/16;
+  floor.material = stdMat('ffM',{dt:ft}); floor.material.zOffset = 2; floor.isPickable = false; floor.receiveShadows = true;
+  // pines: tall cones
+  const pineBase = B.MeshBuilder.CreateCylinder('pine',{diameterTop:0, diameterBottom:5.2, height:11, tessellation:7},scene); pineBase.position.y = 7.2; pineBase.bakeCurrentTransformIntoVertices();
+  pineBase.material = stdMat('pineM',{diffuse:new C3(1,1,1)}); pineBase.receiveShadows = true;
+  const pines = chunkSet(pineBase, 1800, ['color']);
+  const inGarden = (x, z, m=40) => x > GARDEN.x0-m && x < GARDEN.x1+m && z > GARDEN.z0-m && z < GARDEN.z1+m;
+  // groves: dense clusters (mostly pines, some broadleaf), thinning out towards the edges
+  for (let g = 0; g < 380; g++){
+    // most groves crowd around the gardens, the rest scatter over the whole valley
+    const near = g < 260, ga = rnd()*6.283, gd = 420 + Math.sqrt(rnd())*1500;
+    const gx = near ? Math.cos(ga)*gd : lerp(FOREST.x0+300, FOREST.x1-300, rnd()), gz = near ? -7000 + Math.sin(ga)*gd*0.7 : lerp(FOREST.z0+300, FOREST.z1-120, rnd());
+    if (gz > FOREST.z1 - 60) continue;
+    const gr = 60 + rnd()*110, n = 30 + Math.floor(rnd()*40);
+    for (let i = 0; i < n; i++){
+      const a = rnd()*6.283, d = Math.sqrt(rnd())*gr, x = gx + Math.cos(a)*d, z = gz + Math.sin(a)*d;
+      if (inGarden(x, z, 70) || distToRiver(x, z) < 40 || Math.hypot(x - 700, z + 8200) < 240) continue;
+      if (rnd() < 0.7){ const s = 1.1 + rnd()*0.9, m = B.Matrix.Compose(new V3(s, s*(0.9+rnd()*0.5), s), B.Quaternion.RotationAxis(V3.Up(), rnd()*6.28), new V3(x, 0, z));
+        trunks.add(m, x, z); const r = pines.add(m, x, z), k = 0.8 + rnd()*0.35; r.c.mesh.thinInstanceSetAttributeAt('color', r.i, [0.2*k, 0.46*k, 0.25*k, 1], false); }
+      else addTree(x, z, 1.4 + rnd()*1.2);
+    }
+  }
+  pines.flush();
+  // gardens: lawn, paths, orchard rows in blossom, tulip beds, an ayvon (pavilion) with a pool
+  flatBox('gardenLawn', GARDEN.x0, GARDEN.x1, GARDEN.z0, GARDEN.z1, 0, 0.08, stdMat('lawnM',{dt:(()=>{ const t = noiseTex('lawn','#5fa148',0.15,128,2); t.uScale = 60; t.vScale = 30; return t; })()}));
+  const pathM = stdMat('gpathM',{dt:pave});
+  const gcx = (GARDEN.x0+GARDEN.x1)/2, gcz = (GARDEN.z0+GARDEN.z1)/2;
+  flatBox('gpath1', GARDEN.x0, GARDEN.x1, gcz-4, gcz+4, 0.08, 0.06, pathM);
+  flatBox('gpath2', gcx-4, gcx+4, GARDEN.z0, GARDEN.z1, 0.08, 0.06, pathM);
+  const blossom = [[0.97,0.78,0.86],[1,0.95,0.97],[0.95,0.65,0.78],[0.55,0.78,0.38]];
+  for (const [qx, qz] of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+    const x0 = qx < 0 ? GARDEN.x0+16 : gcx+24, x1 = qx < 0 ? gcx-24 : GARDEN.x1-16, z0 = qz < 0 ? GARDEN.z0+16 : gcz+24, z1 = qz < 0 ? gcz-24 : GARDEN.z1-16;
+    const orchard = (qx*qz) > 0;
+    if (orchard){
+      for (let x = x0; x < x1; x += 10) for (let z = z0; z < z1; z += 10){
+        const s = 0.8 + rnd()*0.2, m = B.Matrix.Compose(new V3(s, s, s), B.Quaternion.RotationAxis(V3.Up(), rnd()*6.28), new V3(x, 0.1, z));
+        trunks.add(m, x, z); const r = crowns.add(m, x, z), c = blossom[Math.floor(rnd()*blossom.length)]; r.c.mesh.thinInstanceSetAttributeAt('color', r.i, [...c, 1], false);
+      }
+    } else {
+      const bed = B.MeshBuilder.CreateBox('bed',{width:1, height:0.5, depth:1},scene); bed.material = stdMat('bedM'+qx+qz,{diffuse:new C3(1,1,1)}); bed.isPickable = false; bed.receiveShadows = true;
+      bed.thinInstanceRegisterAttribute('color', 4);
+      const cols = [[0.9,0.15,0.2],[0.98,0.8,0.15],[0.65,0.3,0.8],[0.98,0.5,0.6],[1,1,1],[0.95,0.45,0.1]];
+      let ci = 0;
+      for (let z = z0; z < z1; z += 9){ const c = cols[(ci++) % cols.length];
+        const i = bed.thinInstanceAdd(B.Matrix.Compose(new V3(x1-x0, 1, 4.5), B.Quaternion.Identity(), new V3((x0+x1)/2, 0.3, z)), false);
+        bed.thinInstanceSetAttributeAt('color', i, [...c, 1], false); }
+      bed.thinInstanceBufferUpdated('matrix'); bed.thinInstanceBufferUpdated('color'); bed.thinInstanceRefreshBoundingInfo(false);
+    }
+  }
+  // ayvon: carved wooden columns, a flat painted roof, a pool in front
+  const wood = stdMat('ayvonWood',{diffuse:hex('#7a4a28')}), roofP = stdMat('ayvonRoof',{diffuse:hex('#2f8f86')});
+  const cols = [];
+  for (let i = 0; i < 6; i++) for (const dz of [-7, 7]) cols.push(box(0.7, 6, 0.7, gcx - 15 + i*6, 3.1, gcz + dz));
+  const cm = merge(cols); cm.material = wood; cm.isPickable = false;
+  const roof = flatBox('ayvonRoofB', gcx-19, gcx+19, gcz-10, gcz+10, 6.1, 1.0, roofP);
+  flatBox('ayvonDais', gcx-18, gcx+18, gcz-9, gcz+9, 0.08, 0.5, stdMat('daisM',{diffuse:hex('#e8dcc4')}));
+  const pool = B.MeshBuilder.CreateGround('gpool',{width:30, height:12},scene); pool.position.set(gcx, 0.2, gcz + 30); pool.material = riverM; pool.isPickable = false;
+  flatBox('gpoolRim', gcx-16, gcx+16, gcz+23, gcz+37, 0.08, 0.1, stdMat('rimM',{diffuse:hex('#d9cfbd')}));
+  flushTrees();
+})();
+
 // gradient sky dome with a soft sun glow (replaces a flat background colour)
 B.Effect.ShadersStore.skyVertexShader = `precision highp float; attribute vec3 position; uniform mat4 worldViewProjection; varying vec3 vDir;
   void main(){ vDir = position; vec4 p = worldViewProjection * vec4(position, 1.0); gl_Position = p.xyww; }`;
@@ -1718,7 +1872,7 @@ const approaches = [], SIG_AT = new Map();        // key ix|iz → true (crossin
 const OFF = B.Matrix.Compose(V3.Zero(), B.Quaternion.Identity(), V3.Zero());
 for (let ix = 0; ix <= GX; ix++) for (let iz = 0; iz <= GZ; iz++){
   const cx = X0 - RD/2 + ix*PITCH, cz = Z0 - RD/2 + iz*PITCH;
-  if (inPark(cx, cz)) continue;
+  if (inPark(cx, cz) || onRiverRoad(cx, cz)) continue;     // no lights on the river's bridges
   SIG_AT.set(ix*1000+iz, true);
   // [travel axis, travel dir]: the head stands past the crossing on the driver's side and faces the oncoming cars
   for (const [axisX, d] of [[true,1],[true,-1],[false,1],[false,-1]]){
@@ -1755,7 +1909,9 @@ const lanes = new Map();
 (function spawnCars(){
   for (let i=0;i<CAR_N;i++){
     const alongX = rnd() < 0.5, dir = rnd() < 0.5 ? 1 : -1;
-    const road = alongX ? Math.floor(rnd()*(NBZ+1)) : Math.floor(rnd()*(NBX+1));
+    let road = alongX ? Math.floor(rnd()*(NBZ+1)) : Math.floor(rnd()*(NBX+1));
+    if (alongX && road === RIVER_ROW) road++;                 // those two roads are the river now
+    if (!alongX && road === RIVER_K) road++;
     const line = alongX ? Z0 - RD/2 + road*PITCH : X0 - RD/2 + road*PITCH;
     const len = alongX ? W + 2*RD : D + 2*RD, start = alongX ? X0 - RD : Z0 - RD;
     const c = { alongX, dir, road, line: line + dir*2.6*(alongX ? 1 : -1), start, len, pos: rnd()*len, speed: lerp(8, 15, rnd()), v: 0 };
@@ -1902,7 +2058,7 @@ function updateLabels(dt){
     lblShown = [];
     if (LBL.on){
       const camPos = camera.position, all = [];
-      for (const p of plots) if (p.lbl){ p._ld = V3.Distance(camPos, p.lbl.pos); all.push(p); }
+      for (const p of plots) if (p.lbl){ p._ld = V3.Distance(camPos, p.lbl.pos); if (p._ld < 3200 || p === S.selected) all.push(p); }   // far away (e.g. behind the mountains): no tag
       const prio = p => (p === S.selected) * 2 + (p.state === 'mine');
       all.sort((a,b) => prio(b) - prio(a) || a._ld - b._ld);
       const taken = [], W = canvas.clientWidth, H = canvas.clientHeight;
@@ -1942,13 +2098,15 @@ const PLACES = [
     view:{ x:-450, z:COAST_Z+20, r:520, b:1.1, a:Math.PI/2.6 } },
   { key:'air', name:'Aeroport', icon:document.querySelector('#goAir svg').outerHTML, pos:new V3(0, 30, AIR.z+250),
     view:{ x:0, z:AIR.z+120, r:620, b:1.0, a:-Math.PI/2.6 } },
+  { key:'forest', name:'Bog‘ va o‘rmon', icon:document.querySelector('#goForest svg').outerHTML, pos:new V3((GARDEN.x0+GARDEN.x1)/2, 30, (GARDEN.z0+GARDEN.z1)/2),
+    view:{ x:(GARDEN.x0+GARDEN.x1)/2, z:(GARDEN.z0+GARDEN.z1)/2 + 40, r:560, b:1.05, a:-Math.PI/2.6 } },
 ];
 function goPlace(pl){
   stopAuto(); select(null); closeSheet();
   const v = pl.view, portrait = canvas.clientHeight > canvas.clientWidth; flyTo(v.x, v.z, v.r * (portrait ? 1.5 : 1), v.b);
   let a = v.a; while (a - camera.alpha > Math.PI) a -= 2*Math.PI; while (camera.alpha - a > Math.PI) a += 2*Math.PI;   // shortest turn
   fly.from.a = camera.alpha; fly.to.a = a;
-  toast(pl.key==='port' ? 'Port: konteyner terminali, kranlar va kemalar' : 'Aeroport: samolyotlar har daqiqada qo‘nadi va uchadi');
+  toast({ port:'Port: konteyner terminali, kranlar va kemalar', air:'Aeroport: samolyotlar har daqiqada qo‘nadi va uchadi', forest:'Tog‘lar ortida: o‘rmon, gullagan bog‘lar va daryo boshlanadigan ko‘l' }[pl.key]);
 }
 for (const pl of PLACES){
   const el = document.createElement('div'); el.className = 'plbl'; el.innerHTML = pl.icon + '<span>' + pl.name + '</span>';
@@ -1957,12 +2115,13 @@ for (const pl of PLACES){
 }
 document.getElementById('goPort').onclick = () => goPlace(PLACES[0]);
 document.getElementById('goAir').onclick = () => goPlace(PLACES[1]);
+document.getElementById('goForest').onclick = () => goPlace(PLACES[2]);
 function updatePlaces(){
   const k = engine.getHardwareScalingLevel(), vp = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()), W = canvas.clientWidth, H = canvas.clientHeight;
   for (const pl of PLACES){
     V3.ProjectToRef(pl.pos, B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), vp, _proj);
     const x = _proj.x*k, y = _proj.y*k, near = Math.hypot(camera.target.x-pl.view.x, camera.target.z-pl.view.z) < 260 && camera.radius < 900;
-    const show = _proj.z > 0 && _proj.z < 1 && x > -80 && y > -40 && x < W+80 && y < H+40 && !near;
+    const show = _proj.z > 0 && _proj.z < 1 && x > -80 && y > -40 && x < W+80 && y < H+40 && !near && V3.Distance(camera.position, pl.pos) < 4200;
     pl.el.style.display = show ? '' : 'none';
     if (show) pl.el.style.transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0) translate(-50%,-100%)`;
   }
@@ -2369,7 +2528,7 @@ function updateSky(){
 // 1 finger / left mouse: grab-pan anywhere · 2 fingers: pinch zoom, twist rotate, parallel vertical drag tilts
 // right mouse / Ctrl+left: orbit + tilt · wheel: zoom to cursor · keys: WASD/arrows, Q/E, R/F, +/-
 // Rotation pivot = selected plot (if any), otherwise the point between the fingers / screen centre.
-const LIM = { x0: X0-700, x1: X0+W+700, z0: AIR.z-700, z1: COAST_Z+700 };
+const LIM = { x0: FOREST.x0, x1: FOREST.x1, z0: FOREST.z0, z1: COAST_Z+700 };
 const ptrs = new Map();
 let gest = null, tapStart = null;
 const vel = { x:0, z:0 };
