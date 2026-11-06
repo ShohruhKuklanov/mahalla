@@ -43,7 +43,7 @@ export async function seed(db: Db, opts: { demo: boolean; log?: (m: string) => v
   await seedLandmarks(db, log);
 }
 
-const NICKS = ['sardor_77', 'Malika', 'jasur.dev', 'Dilnoza', 'bekzod_uz', 'Aziza.k', 'Otabek', 'Shahzoda', 'timur99', 'nodira', 'Ulug‘bek', 'Sevara', 'Javohir', 'Kamola', 'rustam_b', 'Laylo', 'Akmal', 'Madina', 'Sherzod', 'Zarina', 'Bobur', 'Gulnoza', 'Islom', 'Feruza'];
+const NICKS = ['sardor_77', 'Malika', 'jasur.dev', 'Dilnoza', 'bekzod_uz', 'Aziza.k', 'Otabek', 'Shahzoda', 'timur99', 'nodira', 'Ulug‘bek', 'Sevara', 'Javohir', 'Kamola', 'rustam_b', 'Laylo', 'Akmal', 'Madina', 'Sherzod', 'Zarina', 'Bobur', 'Jahongir', 'Islom', 'Feruza'];
 
 /** Demo neighbours (role = 'bot') so a new city is not empty. Deterministic; runs only once. */
 async function seedDemo(db: Db, log: (m: string) => void) {
