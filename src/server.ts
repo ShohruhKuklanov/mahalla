@@ -266,7 +266,11 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
   app.get('/api/health', async () => { await db.query('select 1'); return { ok: true }; });
 
   // ---------- the 3D client ----------
-  await app.register(fstatic, { root: webDir, prefix: '/', index: ['index.html'] });
+  await app.register(fstatic, {
+    root: webDir, prefix: '/', index: ['index.html'],
+    // the page changes with every deploy: always revalidate it, so phones never keep an old city
+    setHeaders: (res, filePath) => { if (filePath.endsWith('.html')) res.header('cache-control', 'no-cache'); },
+  });
 
   return app;
 }
