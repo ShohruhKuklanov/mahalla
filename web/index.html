@@ -1696,15 +1696,71 @@ const head = B.MeshBuilder.CreateBox('hl',{width:1.6, height:0.25, depth:0.08},s
 head.material = stdMat('hlM',{diffuse:hex('#fff6d8'), emissive:hex('#fff3c4')}); head.isPickable = false;
 const tail = B.MeshBuilder.CreateBox('tl',{width:1.6, height:0.25, depth:0.08},scene); tail.position.set(0,0.75,-2.12); tail.bakeCurrentTransformIntoVertices();
 tail.material = stdMat('tlM',{diffuse:hex('#ff3b30'), emissive:hex('#ff2a1f')}); tail.isPickable = false;
+// ---------- traffic lights at every intersection ----------
+// 4 signal heads per crossing (one per approach, on the far-right corner). Phases are offset between neighbouring
+// crossings so the whole city does not switch at once. Cars stop at red/amber and queue behind each other.
+const SIG = { cycle:20, gx:8, yx:2, gz:8 };           // x-road: green 0–8, amber 8–10, red 10–20; z-road: red 0–10, green 10–18, amber 18–20
+const sigOffset = (ix, iz) => ((ix*3 + iz*5) % 4) * 5;
+function sigState(ix, iz, axisX, t){                 // 0 green, 1 amber, 2 red
+  const u = (t + sigOffset(ix, iz)) % SIG.cycle;
+  if (axisX) return u < SIG.gx ? 0 : u < SIG.gx+SIG.yx ? 1 : 2;
+  return u < 10 ? 2 : u < 10+SIG.gz ? 0 : 1;
+}
+const sigPoleBase = B.MeshBuilder.CreateCylinder('sigPole',{diameter:0.16, height:4.4, tessellation:4, cap:B.Mesh.NO_CAP},scene); sigPoleBase.position.y = 2.2; sigPoleBase.bakeCurrentTransformIntoVertices();
+sigPoleBase.material = darkM;
+const sigHeadBase = B.MeshBuilder.CreateBox('sigHead',{width:0.42, height:1.35, depth:0.42},scene); sigHeadBase.position.y = 4.75; sigHeadBase.bakeCurrentTransformIntoVertices();
+sigHeadBase.material = stdMat('sigHeadM',{diffuse:hex('#1d2026'), spec:new C3(.2,.2,.2)});
+const lampMat = (n, c) => { const m = stdMat('sig'+n,{diffuse:hex(c), emissive:hex(c)}); m.disableLighting = true; return m; };
+const sigLampBase = ['R','Y','G'].map((n, k) => { const d = B.MeshBuilder.CreateDisc('sigLamp'+n,{radius:0.15, tessellation:8, sideOrientation:B.Mesh.DOUBLESIDE},scene);
+  d.position.y = 5.17 - k*0.42; d.position.z = -0.215; d.bakeCurrentTransformIntoVertices(); d.material = lampMat(n, ['#ff3b30','#ffb020','#2bd96b'][k]); return d; });
+const sigPoles = chunkSet(sigPoleBase, 700), sigHeads = chunkSet(sigHeadBase, 800), sigLamps = sigLampBase.map(b => chunkSet(b, 1000));
+const approaches = [], SIG_AT = new Map();        // key ix|iz → true (crossing has lights)
+const OFF = B.Matrix.Compose(V3.Zero(), B.Quaternion.Identity(), V3.Zero());
+for (let ix = 0; ix <= GX; ix++) for (let iz = 0; iz <= GZ; iz++){
+  const cx = X0 - RD/2 + ix*PITCH, cz = Z0 - RD/2 + iz*PITCH;
+  if (inPark(cx, cz)) continue;
+  SIG_AT.set(ix*1000+iz, true);
+  // [travel axis, travel dir]: the head stands past the crossing on the driver's side and faces the oncoming cars
+  for (const [axisX, d] of [[true,1],[true,-1],[false,1],[false,-1]]){
+    const side = axisX ? d : -d;                     // lane side (matches the car lanes below)
+    const x = axisX ? cx + d*(RD/2+0.8) : cx + side*(RD/2+0.8);     // on the corner street-lamp pole
+    const z = axisX ? cz + side*(RD/2+0.8) : cz + d*(RD/2+0.8);
+    const yaw = axisX ? d*Math.PI/2 : (d > 0 ? 0 : Math.PI);   // lamp face (−z of the base) → towards the cars
+    const m = B.Matrix.Compose(new V3(1,1,1), B.Quaternion.RotationAxis(V3.Up(), yaw), new V3(x, 0.3, z));
+    sigPoles.add(m, x, z); sigHeads.add(m, x, z);
+    const a = { ix, iz, axisX, m, x, z, st:-1, lamps: sigLamps.map(set => set.add(OFF, x, z)) };
+    for (const l of a.lamps) l.c.mesh.thinInstanceSetMatrixAt(l.i, B.Matrix.Compose(V3.Zero(), B.Quaternion.Identity(), new V3(x, 0.3, z)), false);
+    approaches.push(a);
+  }
+}
+sigPoles.flush(); sigHeads.flush(); sigLamps.forEach(l => l.flush());
+let sigT = 0;
+const sigClock = () => performance.now()/1000;
+function updateSignals(dt){
+  sigT -= dt; if (sigT > 0) return; sigT = 0.2;
+  const t = sigClock(); let changed = false;
+  for (const a of approaches){
+    const st = sigState(a.ix, a.iz, a.axisX, t); if (st === a.st) continue;
+    for (let k = 0; k < 3; k++){ const l = a.lamps[2-k];                 // lamps: [R, Y, G]; state: 0 G, 1 Y, 2 R
+      l.c.mesh.thinInstanceSetMatrixAt(l.i, k === st ? a.m : B.Matrix.Compose(V3.Zero(), B.Quaternion.Identity(), new V3(a.x, 0.3, a.z)), false); }
+    a.st = st; changed = true;
+  }
+  if (changed) for (const set of sigLamps) for (const c of set.map.values()) c.mesh.thinInstanceBufferUpdated('matrix');
+}
+
 const cars = [];
 const CAR_N = 420;
 const carBuf = new Float32Array(CAR_N*16);
+const lanes = new Map();
 (function spawnCars(){
   for (let i=0;i<CAR_N;i++){
     const alongX = rnd() < 0.5, dir = rnd() < 0.5 ? 1 : -1;
-    const line = alongX ? Z0 - RD/2 + Math.floor(rnd()*(NBZ+1))*PITCH : X0 - RD/2 + Math.floor(rnd()*(NBX+1))*PITCH;
+    const road = alongX ? Math.floor(rnd()*(NBZ+1)) : Math.floor(rnd()*(NBX+1));
+    const line = alongX ? Z0 - RD/2 + road*PITCH : X0 - RD/2 + road*PITCH;
     const len = alongX ? W + 2*RD : D + 2*RD, start = alongX ? X0 - RD : Z0 - RD;
-    cars.push({ alongX, dir, line: line + dir*2.6*(alongX ? 1 : -1), start, len, pos: rnd()*len, speed: lerp(7, 15, rnd()) });
+    const c = { alongX, dir, road, line: line + dir*2.6*(alongX ? 1 : -1), start, len, pos: rnd()*len, speed: lerp(8, 15, rnd()), v: 0 };
+    cars.push(c);
+    const key = (alongX ? 1 : 0) + '|' + road + '|' + dir; if (!lanes.has(key)) lanes.set(key, []); lanes.get(key).push(c);
   }
   carMesh.thinInstanceSetBuffer('matrix', carBuf, 16, false);
   head.thinInstanceSetBuffer('matrix', carBuf, 16, false);
@@ -1715,10 +1771,37 @@ const carBuf = new Float32Array(CAR_N*16);
   [carMesh, head, tail].forEach(m => { m.alwaysSelectAsActiveMesh = true; m.receiveShadows = true; });
 })();
 let carsVisible = CAR_N;
+const STOP_BACK = RD/2 + 1.6, CAR_HALF = 2.1;
+// distance from the car's nose to the stop line of the next crossing ahead, and that crossing's signal
+function nextSignal(c, t){
+  const origin = c.alongX ? X0 - RD/2 : Z0 - RD/2, u = (c.start + c.pos - origin)/PITCH, m = (CAR_HALF + STOP_BACK)/PITCH, n = c.alongX ? NBX : NBZ;
+  const k = c.dir > 0 ? Math.floor(u + m) + 1 : Math.ceil(u - m) - 1;
+  if (k < 0 || k > n) return null;
+  const ix = c.alongX ? k : c.road, iz = c.alongX ? c.road : k;
+  if (!SIG_AT.has(ix*1000+iz)) return null;
+  const dist = (c.dir > 0 ? (k - u) : (u - k))*PITCH - STOP_BACK - CAR_HALF;
+  return { dist, st: sigState(ix, iz, c.alongX, t) };
+}
 function updateCars(dt){
+  const t = sigClock();
+  for (const lane of lanes.values()){
+    lane.sort((a,b) => (b.pos - a.pos) * a.dir);                 // front car first
+    for (let q = 0; q < lane.length; q++){
+      const c = lane[q];
+      let want = c.speed;
+      const sg = nextSignal(c, t);
+      if (sg && sg.dist < 40){
+        const stop = sg.st === 2 || (sg.st === 1 && sg.dist > 4 + c.v*0.6);   // amber: go only if too close to stop
+        if (stop) want = Math.min(want, Math.max(0, (sg.dist - 0.3) * 0.7));
+      }
+      if (q > 0){ const ahead = lane[q-1], gap = (ahead.pos - c.pos) * c.dir - 2*CAR_HALF;   // keep 3 m behind the car ahead
+        if (gap > -2) want = Math.min(want, Math.max(0, (gap - 3) * 0.9)); }
+      c.v = want < c.v ? Math.max(want, c.v - 14*dt) : Math.min(want, c.v + 3.5*dt);
+      c.pos = (c.pos + c.dir*c.v*dt + c.len) % c.len;
+    }
+  }
   for (let i=0;i<CAR_N;i++){
     const c = cars[i], o = i*16;
-    c.pos = (c.pos + c.dir*c.speed*dt + c.len) % c.len;
     const along = c.start + c.pos, x = c.alongX ? along : c.line, z = c.alongX ? c.line : along;
     const hide = i >= carsVisible || (x > parkMin.x-2 && x < parkMax.x+2 && z > parkMin.z-2 && z < parkMax.z+2);
     const th = c.alongX ? (c.dir > 0 ? Math.PI/2 : -Math.PI/2) : (c.dir > 0 ? 0 : Math.PI), cs = Math.cos(th), sn = Math.sin(th), k = hide ? 0 : 1;
@@ -2224,7 +2307,7 @@ function applyQuality(q){
       pipeline.imageProcessing.vignetteEnabled = true; pipeline.imageProcessing.vignetteWeight = 1.4;
       glow = new B.GlowLayer('glow', scene, { blurKernelSize: 32, mainTextureRatio: 0.5 });
       glow.intensity = 0.6;
-      for (const m of [...bulbs.meshes(), ...dots.meshes(), head, tail]) glow.addIncludedOnlyMesh(m);
+      for (const m of [...bulbs.meshes(), ...dots.meshes(), ...sigLamps.flatMap(l => l.meshes()), head, tail]) glow.addIncludedOnlyMesh(m);
     }
   }
   scene.fogDensity = q==='low' ? 0.00034 : 0.00028;
@@ -2494,7 +2577,7 @@ scene.onBeforeRenderObservable.add(()=>{
   // water shimmer + traffic
   jet.scaling.y = 1 + Math.sin(now/160)*0.06;
   lakeTex.uOffset += dt*0.004; lakeTex.vOffset += dt*0.002;
-  updateCars(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
+  updateSignals(dt); updateCars(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
   // fps + auto quality
   fpsAcc += engine.getFps(); fpsN++; fpsT += dt;
   if (fpsT > 0.5){
@@ -2771,7 +2854,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
