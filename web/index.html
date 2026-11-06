@@ -49,11 +49,23 @@
   .tool:active{transform:scale(.94)}
 
   /* bottom nav */
-  #nav{position:fixed;left:50%;transform:translateX(-50%);bottom:max(12px,env(safe-area-inset-bottom));z-index:5;display:flex;gap:4px;padding:6px;border-radius:22px}
-  #nav button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 12px;border-radius:16px;font-size:11.5px;font-weight:700;color:var(--muted);min-width:72px}
-  #nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-  #nav button.primary{background:var(--accent);color:var(--accent-ink)}
-  #nav button:active{transform:scale(.96)}
+  /* bottom menu — design A: floating capsule with a raised gold centre button */
+  #nav{position:fixed;left:50%;transform:translateX(-50%);bottom:max(14px,env(safe-area-inset-bottom));z-index:5;width:min(440px,calc(100% - 28px));height:72px;
+       display:flex;align-items:center;padding:0 6px;border-radius:26px;background:rgba(18,22,40,.88);border:1px solid rgba(255,255,255,.09);
+       box-shadow:0 18px 40px rgba(0,0,0,.45);backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3)}
+  #nav .ni{flex:1;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11.5px;font-weight:700;color:#8e94a8;min-width:0}
+  #nav .ni svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  #nav .ni i{width:4px;height:4px;border-radius:2px;background:transparent}
+  #nav .ni.on{color:#f6c453} #nav .ni.on i{background:#f6c453}
+  #nav .ni:active{transform:scale(.94)}
+  #nav .gap{flex:1.15;height:100%}
+  #fab{position:absolute;left:50%;top:-30px;width:66px;height:66px;margin-left:-33px;border-radius:33px;border:4px solid #12162a;background:#f6c453;color:#22180a;
+       display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 6px rgba(246,196,83,.18),0 10px 26px rgba(246,196,83,.35);transition:transform .15s}
+  #fab svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+  #fab:active{transform:scale(.93)}
+  #fab + b{position:absolute;left:0;right:0;bottom:7px;text-align:center;font-size:11.5px;font-weight:800;color:#f6c453;pointer-events:none}
+  #sheet{bottom:0}
+  body:not(.hero) #tools{top:auto;bottom:118px;transform:none}
 
   /* sheet */
   #sheet{position:fixed;left:50%;bottom:0;transform:translate(-50%,105%);width:min(520px,100%);z-index:10;border-radius:22px 22px 0 0;padding:10px 18px calc(18px + env(safe-area-inset-bottom));transition:transform .28s cubic-bezier(.2,.8,.2,1);max-height:78vh;overflow:auto;background:rgba(20,25,34,.94)}
@@ -234,11 +246,14 @@
   <button class="tool glass" id="home" title="Mening yerim"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg></button>
 </div>
 
-<div id="nav" class="glass">
-  <button class="primary" id="findBtn"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>Yer top</button>
-  <button id="mineBtn"><svg viewBox="0 0 24 24"><path d="M4 21V9l8-6 8 6v12"/><path d="M9 21v-6h6v6"/></svg>Mulkim</button>
-  <button id="setBtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Sozlamalar</button>
-</div>
+<nav id="nav" aria-label="Asosiy menyu">
+  <button class="ni on" id="cityBtn" data-tab="city"><svg viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V9l5-3v15"/><path d="M14 21V4l5 3v14"/></svg><span>Shahar</span><i></i></button>
+  <button class="ni" id="mineBtn" data-tab="mine"><svg viewBox="0 0 24 24"><path d="M4 11l8-6 8 6"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/></svg><span>Mulkim</span><i></i></button>
+  <div class="gap"></div>
+  <button class="ni" id="marketBtn" data-tab="market"><svg viewBox="0 0 24 24"><path d="M4 9l1.5-5h13L20 9"/><path d="M4 9h16v1.5a3 3 0 0 1-5.3 1.9 3 3 0 0 1-5.4 0A3 3 0 0 1 4 10.5z"/><path d="M6 13v7h12v-7"/></svg><span>Bozor</span><i></i></button>
+  <button class="ni" id="setBtn" data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M2.5 12h3M18.5 12h3M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/></svg><span>Sozlamalar</span><i></i></button>
+  <button id="fab" aria-label="Yer top"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button><b>Yer top</b>
+</nav>
 
 <div id="tut" class="glass"><div class="n" id="tutN">1</div><p id="tutT"></p><button id="tutSkip">O‘tkazish</button></div>
 
@@ -1423,7 +1438,7 @@ const myPlots = () => plots.filter(p=>p.state==='mine');
 // ---------- UI helpers ----------
 const sheet = $('#sheet'), body = $('#sheetBody');
 function openSheet(html, kind){ body.innerHTML = html; sheet.classList.add('open'); S.sheet = kind; }
-function closeSheet(){ sheet.classList.remove('open'); S.sheet = null; clearGhost(); }
+function closeSheet(){ sheet.classList.remove('open'); S.sheet = null; clearGhost(); if (typeof setTab === 'function') setTab('city'); }
 $('#sheetX').onclick = ()=>{ closeSheet(); select(null); };
 let toastT;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2600); }
@@ -1922,9 +1937,19 @@ function handleTap(x, y){
   showPlot(p);
 }
 
-$('#findBtn').onclick = findLand;
-$('#mineBtn').onclick = ()=>{ select(null); openMine(); };
-$('#setBtn').onclick = ()=>{ select(null); openSettings(); };
+function setTab(t){ document.querySelectorAll('#nav .ni').forEach(b => b.classList.toggle('on', b.dataset.tab === t)); }
+$('#fab').onclick = findLand;
+$('#cityBtn').onclick = ()=>{ closeSheet(); setTab('city'); const m = myPlots()[0]; if (m) { select(m); flyTo(m.x, m.z, 90, 1.0); } else { select(null); flyTo(0, 0, 330, 1.05); } };
+$('#mineBtn').onclick = ()=>{ select(null); openMine(); setTab('mine'); };
+$('#marketBtn').onclick = ()=>{ select(null); openMarket(); setTab('market'); };
+$('#setBtn').onclick = ()=>{ select(null); openSettings(); setTab('settings'); };
+function openMarket(){
+  const list = plots.filter(p => p.state === 'sale').map(p => ({ p, price: salePrice(p) })).sort((a,b) => a.price - b.price);
+  const items = list.length ? list.map(({p, price}) => `<div class="item"><div><b>${p.tpl ? esc(buildingName(p)) : 'Bo‘sh yer'}</b><small>${esc(ZONES[p.zone].name)} · ${esc(DISTRICTS[p.district])} · sotuvchi ${esc(p.owner || '—')}</small><small style="color:#f6c453;font-weight:800">${fmt(price)} tanga${p.tpl ? ' · +' + fmt(specIncome(p)) + '/kun' : ''}</small></div><button data-id="${p.id}">Ko‘rish</button></div>`).join('')
+    : '<div class="note">Hozircha sotuvda hech narsa yo‘q.</div>';
+  openSheet(`<h3>Bozor</h3><div class="sub">${list.length} ta e’lon · arzonidan qimmatiga. Bo‘sh yerni xaritadan yoki “Yer top” bilan tanlang.</div><div class="list">${items}</div>`, 'market');
+  body.querySelectorAll('.item button').forEach(el => el.onclick = () => visitPlot(plots[+el.dataset.id]));
+}
 $('#rotL').onclick = ()=>{ stopAuto(); S.orbitAnim = -Math.PI/4; };
 $('#rotR').onclick = ()=>{ stopAuto(); S.orbitAnim = Math.PI/4; };
 let tiltMode = 0;
