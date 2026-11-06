@@ -109,6 +109,15 @@
   #tut p{margin:0;font-size:14px;line-height:1.4;flex:1}
   #tut button{color:var(--muted);font-size:12.5px;font-weight:700;padding:4px}
 
+  /* owner labels over buildings */
+  #labels{position:fixed;inset:0;z-index:3;pointer-events:none;overflow:hidden}
+  .olbl{position:absolute;left:0;top:0;display:flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:11px;background:rgba(14,18,26,.80);
+        border:1.5px solid rgba(255,255,255,.22);color:#fff;font:700 12px/1 Manrope,system-ui,sans-serif;white-space:nowrap;max-width:170px;will-change:transform}
+  .olbl span{overflow:hidden;text-overflow:ellipsis}
+  .olbl.tg{border-color:rgba(42,171,238,.85)}
+  .olbl.mine{background:rgba(14,64,58,.92);border-color:#2fb5a3}
+  .olbl.mine i{width:7px;height:7px;border-radius:50%;background:#2fb5a3;display:inline-block}
+  .olbl::after{content:'';position:absolute;left:50%;bottom:-5px;width:8px;height:8px;margin-left:-4px;background:inherit;border-right:inherit;border-bottom:inherit;transform:rotate(45deg);border-radius:0 0 2px 0}
   /* login / nickname */
   #auth{position:fixed;inset:0;z-index:40;display:grid;place-items:center;padding:16px;background:rgba(8,11,16,.55)}
   .authbox{width:min(420px,100%);border-radius:22px;padding:22px;background:rgba(20,25,34,.94);max-height:92vh;overflow:auto}
@@ -180,6 +189,8 @@
 (function(){
 'use strict';
 const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ownerHtml = p => p.ownerTg ? `<a href="https://t.me/${esc(p.ownerTg)}" target="_blank" rel="noopener" style="color:#5cc2f2">@${esc(p.ownerTg)}</a> (${esc(p.owner)})` : `<b>${esc(p.owner)}</b>`;
 const fmt = n => Math.round(n).toLocaleString('ru-RU').replace(/,/g,' ');
 
 if (!window.BABYLON) { $('#loadMsg').textContent=''; const e=$('#err'); e.style.display='block'; e.textContent='3D kutubxona yuklanmadi. Internetni tekshirib, sahifani yangilang.'; return; }
@@ -405,7 +416,7 @@ for (const p of plots) pad.thinInstanceAdd(B.Matrix.Translation(p.x,0.36,p.z), f
 pad.thinInstanceBufferUpdated('matrix');
 pad.thinInstanceEnablePicking = true;
 const PAD_COL = { empty:[.43,.68,.30,1], owned:[.86,.83,.78,1], sale:[1,.80,.30,1], mine:[.42,.64,1,1] };
-function paintPad(p, refresh=true){ pad.thinInstanceSetAttributeAt('color', p.id, PAD_COL[p.state], refresh); }
+function paintPad(p, refresh=true){ pad.thinInstanceSetAttributeAt('color', p.id, PAD_COL[p.state], refresh); setLabel(p); }
 
 // ---------- building parts ----------
 function box(w,h,d,x,y,z){ const m=B.MeshBuilder.CreateBox('b',{width:w,height:h,depth:d,wrap:true},scene); m.position.set(x,y,z); return m; }
@@ -557,6 +568,7 @@ function addBuilding(p, refresh){
     if (!pt.mesh.isEnabled()) pt.mesh.setEnabled(true);
   }
   t.plotsByInst[idx] = p.id; p.inst = idx;
+  setLabel(p);
   if (refresh) for (const pt of t.parts) pt.mesh.thinInstanceRefreshBoundingInfo(false);
 }
 function populateDemo(){
@@ -591,6 +603,74 @@ function hideBuilding(p){
   const t = T[p.tpl]; if (!t || p.inst==null) return;
   for (const pt of t.parts) pt.mesh.thinInstanceSetMatrixAt(p.inst, B.Matrix.Scaling(0,0,0), true);
   t.plotsByInst[p.inst] = undefined; p.inst = null;
+}
+
+// ---------- owner name over every building (Telegram @username, otherwise the nickname) ----------
+// HTML labels over the 3D view: always crisp, always the same size on screen, near or far.
+// Every 250 ms the nearest labels are picked and those that would overlap a nearer one are dropped,
+// so a far view of the whole city stays readable; own plots and the selected plot always win.
+const LBL = { on:true, max:140, px:26 };
+const lblLayer = document.createElement('div'); lblLayer.id = 'labels'; document.body.insertBefore(lblLayer, document.getElementById('top'));
+const TOP = { house:5.8, villa:9.2, flat:18.3, shop:6.4, cafe:6.8, office:27, tower:56 };
+const labelY = p => 0.42 + (p.tpl ? TOP[TPL[p.tpl].kind] : 0) + 2.5;
+const TG_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2AABEE"/><path d="M5.5 11.8l11-4.3c.5-.2 1 .1.8.9l-1.9 8.8c-.1.6-.5.8-1 .5l-2.8-2.1-1.4 1.3c-.2.2-.3.3-.6.3l.2-2.9 5.3-4.8c.2-.2 0-.3-.3-.1l-6.6 4.1-2.8-.9c-.6-.2-.6-.6.1-.8z" fill="#fff"/></svg>';
+function setLabel(p){
+  const text = p.owner ? (p.ownerTg ? '@' + p.ownerTg : p.owner) : null;
+  if (!text){ p.lbl = null; return; }
+  const kind = p.state==='mine' ? 'mine' : p.ownerTg ? 'tg' : 'nick';
+  p.lbl = { text, kind, pos: new V3(p.x, labelY(p), p.z), key: kind + '|' + text };
+}
+const lblPool = [];
+function lblEl(i){
+  while (lblPool.length <= i){ const d = document.createElement('div'); d.className = 'olbl'; d.style.display = 'none'; lblLayer.appendChild(d); lblPool.push(d); }
+  return lblPool[i];
+}
+let lblTimer = 0, lblShown = [];
+const _proj = new V3();
+function projectLbl(p){
+  const k = engine.getHardwareScalingLevel(), vp = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight());
+  V3.ProjectToRef(p.lbl.pos, B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), vp, _proj);
+  return { x: _proj.x*k, y: _proj.y*k, z: _proj.z };
+}
+function updateLabels(dt){
+  lblTimer -= dt;
+  if (lblTimer <= 0){
+    lblTimer = 0.25;
+    lblShown = [];
+    if (LBL.on){
+      const camPos = camera.position, all = [];
+      for (const p of plots) if (p.lbl){ p._ld = V3.Distance(camPos, p.lbl.pos); all.push(p); }
+      const prio = p => (p === S.selected) * 2 + (p.state === 'mine');
+      all.sort((a,b) => prio(b) - prio(a) || a._ld - b._ld);
+      const taken = [], W = canvas.clientWidth, H = canvas.clientHeight;
+      for (const p of all){
+        if (lblShown.length >= LBL.max) break;
+        const s = projectLbl(p);
+        if (s.z < 0 || s.z > 1 || s.x < -60 || s.y < -30 || s.x > W+60 || s.y > H+30) continue;
+        const hw = Math.min(170, p.lbl.text.length*7.4 + (p.lbl.kind==='tg'?40:22))/2 + 3, hh = LBL.px/2 + 2, cy = s.y - LBL.px/2;
+        if (prio(p) === 0 && taken.some(r => Math.abs(r.x-s.x) < r.hw+hw && Math.abs(r.y-cy) < r.hh+hh)) continue;
+        taken.push({ x:s.x, y:cy, hw, hh }); lblShown.push(p);
+      }
+    }
+    for (let i = 0; i < lblPool.length; i++) if (i >= lblShown.length) lblPool[i].style.display = 'none';
+    lblShown.forEach((p, i) => {
+      const el = lblEl(i);
+      if (el._key !== p.lbl.key){
+        el._key = p.lbl.key; el.className = 'olbl ' + p.lbl.kind;
+        el.innerHTML = (p.lbl.kind==='tg' ? TG_ICON : p.lbl.kind==='mine' ? '<i></i>' : '') + '<span></span>';
+        el.lastChild.textContent = p.lbl.text;
+      }
+      el.style.display = '';
+    });
+  }
+  // follow the camera every frame
+  for (let i = 0; i < lblShown.length; i++){
+    const p = lblShown[i]; if (!p.lbl) continue;
+    const s = projectLbl(p), el = lblPool[i];
+    if (s.z < 0 || s.z > 1){ el.style.visibility = 'hidden'; continue; }
+    el.style.visibility = '';
+    el.style.transform = `translate3d(${s.x.toFixed(1)}px,${s.y.toFixed(1)}px,0) translate(-50%,-100%)`;
+  }
 }
 
 // ---------- selection marker ----------
@@ -661,12 +741,12 @@ function showPlot(p){
     $('#buyBtn').onclick = ()=>buy(p, price);
   } else if (p.state==='sale'){
     const price = salePrice(p), mine = myPlots().length, can = S.coins>=price && mine<S.limit;
-    openSheet(`<h3>${TPL[p.tpl].name}</h3><div class="sub">${sub} · sotuvchi: <b>${p.owner}</b></div>${kv([...base,['Narx',fmt(price)+' tanga'],['Kunlik daromad',fmt(TPL[p.tpl].income)+' tanga']])}
+    openSheet(`<h3>${TPL[p.tpl].name}</h3><div class="sub">${sub} · sotuvchi: ${ownerHtml(p)}</div>${kv([...base,['Narx',fmt(price)+' tanga'],['Kunlik daromad',fmt(TPL[p.tpl].income)+' tanga']])}
       <div class="row"><button class="btn gold" id="buyBtn" ${can?'':'disabled'}>Sotib olish · ${fmt(price)}</button></div>
       ${S.coins<price?`<div class="note warn">Tanga yetmaydi: yana ${fmt(price-S.coins)} kerak.</div>`:mine>=S.limit?`<div class="note warn">Uchastkalar limiti: ${S.limit} ta.</div>`:'<div class="note">Bino bilan birga o‘tadi va darhol daromad beradi.</div>'}${orbitRow()}`, 'plot'); bindOrbit();
     $('#buyBtn').onclick = ()=>buy(p, price);
   } else if (p.state==='owned'){
-    openSheet(`<h3>${TPL[p.tpl].name}</h3><div class="sub">${sub} · egasi: <b>${p.owner}</b></div>${kv([...base,['Yoqdi',`<span id="lk">${p.likes}</span> ♥`],['Bino turi',TPL[p.tpl].name]])}
+    openSheet(`<h3>${TPL[p.tpl].name}</h3><div class="sub">${sub} · egasi: ${ownerHtml(p)}</div>${kv([...base,['Yoqdi',`<span id="lk">${p.likes}</span> ♥`],['Bino turi',TPL[p.tpl].name]])}
       <div class="row"><button class="btn primary" id="likeBtn" ${p.liked?'disabled':''}>${p.liked?'Yoqdi ♥':'Yoqdi ♡'}</button><button class="btn" id="visitBtn">Tashrif</button><button class="btn" id="repBtn">Shikoyat</button></div>${orbitRow()}`, 'plot'); bindOrbit();
     $('#likeBtn').onclick = async ()=>{
       $('#likeBtn').disabled=true;
@@ -827,6 +907,8 @@ function openSettings(){
     <div class="seg" id="qseg">${['auto','low','medium','high'].map(q=>`<button data-q="${q}" class="${S.quality===q?'on':''}">${QNAMES[q]}</button>`).join('')}</div>
     <div class="lbl2" style="margin-bottom:6px">Vaqt: <span id="hrs">${clockStr()}</span></div>
     <input type="range" id="timeR" min="0" max="23.99" step="0.05" value="${S.hours}">
+    <label class="chk" style="margin:0 0 10px"><input type="checkbox" id="lblToggle" ${LBL.on?'checked':''}> Bino ustida egalarning nomlari</label>
+    ${API.on && API.me && API.me.telegram ? `<label class="chk" style="margin:0 0 14px"><input type="checkbox" id="tgToggle" ${API.me.showTelegram?'checked':''}> Mening Telegram nikim (@${esc(API.me.telegram)}) boshqalarga ko‘rinsin</label>` : ''}
     <div class="lbl2" style="margin-bottom:6px">Vaqt tezligi</div>
     <div class="seg" id="sseg">${[[0,'To‘xtatish'],[1,'1× (kun = 6 daq)'],[10,'10×']].map(([v,l])=>`<button data-s="${v}" class="${sp===v?'on':''}">${l}</button>`).join('')}</div>
     ${API.on ? '<div class="row" style="margin-bottom:12px"><button class="btn" id="logoutBtn">Chiqish</button></div>' : ''}
@@ -834,6 +916,10 @@ function openSettings(){
   body.querySelectorAll('[data-q]').forEach(el=>el.onclick=()=>{ S.quality=el.dataset.q; applyQuality(S.quality==='auto'?autoStart():S.quality); openSettings(); });
   body.querySelectorAll('[data-s]').forEach(el=>el.onclick=()=>{ S.speed=+el.dataset.s; openSettings(); });
   if ($('#logoutBtn')) $('#logoutBtn').onclick = async ()=>{ try { await api('POST','/api/auth/logout'); } catch(_){} location.reload(); };
+  $('#lblToggle').onchange = e=>{ LBL.on = e.target.checked; lblTimer = 0; };
+  if ($('#tgToggle')) $('#tgToggle').onchange = async e=>{
+    try { await api('POST','/api/me/privacy',{ showTelegram: e.target.checked }); await refreshMe(); toast(e.target.checked ? 'Telegram nikingiz ko‘rinadi' : 'Telegram nikingiz yashirildi, o‘rniga o‘yin niki chiqadi'); }
+    catch(err){ toast(err.message); e.target.checked = !e.target.checked; } };
   $('#timeR').oninput = e=>{ S.hours = +e.target.value; $('#hrs').textContent = clockStr(); };
 }
 
@@ -845,6 +931,7 @@ const casters = () => {
   return list;
 };
 const isMobile = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
+if (isMobile){ LBL.max = 45; }
 function autoStart(){ return isMobile ? 'low' : 'medium'; }
 function applyQuality(q){
   S.qActive = q;
@@ -1107,6 +1194,7 @@ scene.onBeforeRenderObservable.add(()=>{
   if (S.autoOrbit) orbitBy(dt*0.35);
   keyboard(dt);
   camera.target.y = 0;
+  updateLabels(dt);
   // selector pulse
   if (selector.isEnabled()){ const s = 1 + Math.sin(now/220)*0.03; selector.scaling.set(s,1,s); mats.sel.emissiveColor = hex('#2fb5a3').scale(0.6+0.4*Math.sin(now/220)); }
   // water shimmer
@@ -1143,6 +1231,7 @@ function applyDTO(p, d, animate){
   p.listed = d.state === 'sale';
   p.state = mine ? 'mine' : d.state;
   p.price = d.price; p.likes = d.likes;
+  p.ownerTg = d.owner ? (d.owner.telegram || null) : null;
   const b = d.building;
   if (b && (!p.tpl || p.tpl !== b.template || p.inst == null)){
     if (p.tpl) hideBuilding(p);
@@ -1288,7 +1377,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { scene, engine, plots, S, applyQuality, camera, T, vel };
+window.__mahalla = { scene, engine, plots, S, applyQuality, camera, T, vel, setLabel };
 })();
 </script>
 </body>

@@ -27,13 +27,15 @@ async function occupancy(c: Db | Tx): Promise<Map<number, number>> {
 export interface PlotDTO {
   id: number; x: number; z: number; zone: ZoneCode; district: number;
   state: 'empty' | 'owned' | 'sale'; price: number | null;
-  owner: { id: number; nickname: string | null } | null;
+  /** telegram = @username without @, only when the owner allows it */
+  owner: { id: number; nickname: string | null; telegram: string | null } | null;
   building: { template: string; rotation: number; color: string; accent: string; level: number; readyAt: string } | null;
   likes: number;
 }
 
 const PLOT_SQL = `
   select p.id, p.x, p.z, p.zone, p.district_id, p.location_factor, p.status, p.owner_id, u.nickname as owner_nick,
+         case when u.show_telegram then u.telegram_username end as owner_tg,
          b.template, b.rotation, b.color, b.accent, b.level, b.ready_at, b.status as bstatus,
          l.price as listing_price, coalesce(k.n, 0)::int as likes
   from plots p
@@ -47,7 +49,7 @@ function toDTO(r: any, occ: Map<number, number>, eco: Economy): PlotDTO {
   return {
     id: r.id, x: r.x, z: r.z, zone: r.zone, district: r.district_id, state,
     price: state === 'empty' ? landPrice(r.zone, r.location_factor, occ.get(r.district_id) || 0, eco) : state === 'sale' ? r.listing_price : null,
-    owner: r.owner_id ? { id: r.owner_id, nickname: r.owner_nick } : null,
+    owner: r.owner_id ? { id: r.owner_id, nickname: r.owner_nick, telegram: r.owner_tg || null } : null,
     building: r.template && r.bstatus === 'active'
       ? { template: r.template, rotation: r.rotation, color: r.color, accent: r.accent, level: r.level, readyAt: r.ready_at.toISOString() }
       : null,

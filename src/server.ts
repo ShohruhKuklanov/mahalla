@@ -84,6 +84,9 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
     const data = z.record(z.string(), z.union([z.string(), z.number()])).parse(req.body);
     if (!verifyTelegram(data, config.telegramBotToken)) throw new AppError(401, 'bad_telegram', 'Telegram tasdiqlamadi. Qayta urinib ko‘ring.');
     const { userId } = await upsertIdentity(db, 'telegram', String(data.id), await startCoins());
+    // keep the @username current (people change it); Telegram usernames are 5–32 of [A-Za-z0-9_]
+    const tg = typeof data.username === 'string' && /^[A-Za-z0-9_]{5,32}$/.test(data.username) ? data.username : null;
+    await db.query('update users set telegram_username = $2 where id = $1', [userId, tg]);
     const s = await createSession(db, userId);
     setSession(reply, s.token, s.expires);
     return { ok: true };
@@ -98,13 +101,15 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
   // ---------- me ----------
   app.get('/api/me', async (req) => {
     const u = req.user; if (!u) throw E.auth();
-    const [w, plots, inc, eco] = await Promise.all([
+    const [w, plots, inc, eco, extra] = await Promise.all([
       db.query('select balance from wallets where user_id = $1', [u.id]),
       db.query('select id from plots where owner_id = $1 order by id', [u.id]),
       game.pendingIncome(db, u.id),
       game.economy(db),
+      db.query('select telegram_username, show_telegram from users where id = $1', [u.id]),
     ]);
     return {
+      telegram: extra.rows[0]?.telegram_username ?? null, showTelegram: extra.rows[0]?.show_telegram ?? true,
       id: u.id, nickname: u.nickname, role: u.role, status: u.status,
       balance: w.rows[0]?.balance ?? 0, plots: plots.rows.map((r) => r.id),
       pending: inc.pending, dailyIncome: inc.dailyIncome, plotLimit: eco.plot_limit,
@@ -123,6 +128,15 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
       throw e;
     }
     return { nickname: chk.nick };
+  });
+
+  app.post('/api/me/privacy', async (req) => {
+    const u = req.user; if (!u) throw E.auth();
+    const { showTelegram } = z.object({ showTelegram: z.boolean() }).parse(req.body);
+    await db.query('update users set show_telegram = $2 where id = $1', [u.id, showTelegram]);
+    const plots = (await db.query('select id from plots where owner_id = $1', [u.id])).rows;
+    for (const p of plots) await pushPlot(p.id); // everyone's labels update live
+    return { showTelegram };
   });
 
   app.get('/api/nickname/available', async (req) => {

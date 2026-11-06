@@ -5,6 +5,8 @@ import { createPool, migrate, Db } from '../src/db.js';
 import { seed } from '../src/seed.js';
 import { buildApp } from '../src/server.js';
 import { ledgerMismatches, clearEconomyCache } from '../src/game.js';
+import { config } from '../src/config.js';
+import crypto from 'node:crypto';
 
 let db: Db, app: Awaited<ReturnType<typeof buildApp>>;
 
@@ -212,6 +214,31 @@ test('city endpoint returns the same 1 216-plot layout as the 3D client', async 
   assert.equal(c.plots.length, 1216);
   assert.deepEqual([c.plots[0].x, c.plots[0].z], [-267, -211]); // same formula as web/index.html
   clearEconomyCache();
+});
+
+test('Telegram login: signature checked, @username shown over the owner’s plots unless hidden', async () => {
+  (config as any).telegramBotToken = '123456:TEST-TOKEN';
+  const sign = (d: Record<string, string | number>) => {
+    const s = Object.keys(d).sort().map((k) => `${k}=${d[k]}`).join('\n');
+    const secret = crypto.createHash('sha256').update(config.telegramBotToken).digest();
+    return { ...d, hash: crypto.createHmac('sha256', secret).update(s).digest('hex') };
+  };
+  const payload = sign({ id: 777001, first_name: 'Shohrux', username: 'shohruh_k', auth_date: Math.floor(Date.now() / 1000) });
+  const forged = { ...payload, username: 'someone_else' };
+  assert.equal((await app.inject({ method: 'POST', url: '/api/auth/telegram', payload: forged })).statusCode, 401, 'tampered data rejected');
+  const r = await app.inject({ method: 'POST', url: '/api/auth/telegram', payload });
+  assert.equal(r.statusCode, 200, r.body);
+  const cookie = String(r.headers['set-cookie']).split(';')[0];
+  const call = (method: any, url: string, body?: any) => app.inject({ method, url, payload: body, headers: { cookie } });
+  await call('POST', '/api/me/nickname', { nickname: 'TgShohrux', confirm16: true });
+  const p = await emptyPlot('res', 60);
+  const bought = (await call('POST', `/api/plots/${p.id}/buy`)).json();
+  assert.equal(bought.plot.owner.telegram, 'shohruh_k');
+  assert.equal((await call('GET', '/api/me')).json().telegram, 'shohruh_k');
+  await call('POST', '/api/me/privacy', { showTelegram: false });
+  assert.equal((await app.inject({ method: 'GET', url: `/api/plots/${p.id}` })).json().owner.telegram, null, 'hidden when the owner turns it off');
+  assert.equal((await app.inject({ method: 'GET', url: `/api/plots/${p.id}` })).json().owner.nickname, 'TgShohrux');
+  (config as any).telegramBotToken = '';
 });
 
 test('guest login is off unless GUEST_LOGIN=1', async () => {
