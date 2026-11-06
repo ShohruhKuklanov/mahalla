@@ -1,0 +1,32 @@
+# Bitta buyruq bilan ishga tushirish:  docker compose up -d   →  http://localhost:3000
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: mahalla
+      POSTGRES_PASSWORD: mahalla        # production'da o'zgartiring
+      POSTGRES_DB: mahalla
+    volumes: [ "pgdata:/var/lib/postgresql/data" ]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mahalla"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+  app:
+    build: .
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://mahalla:mahalla@db:5432/mahalla
+      EMBEDDED_DB: "0"
+      PORT: "3000"
+      NODE_ENV: production
+      DEV_LOGIN: "0"
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-}
+      SEED_DEMO: "1"
+      DAY_SECONDS: "86400"
+    ports: [ "3000:3000" ]
+    restart: unless-stopped
+volumes:
+  pgdata:

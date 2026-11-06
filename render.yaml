@@ -1,0 +1,39 @@
+# Render Blueprint: Dashboard → New → Blueprint → shu repozitoriyni tanlang.
+# Bitta veb-xizmat (server + 3D sahifa) va bitta PostgreSQL yaratadi.
+services:
+  - type: web
+    name: mahalla
+    runtime: node
+    plan: free                      # bepul: 15 daqiqa trafik bo'lmasa "uxlaydi"
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: EMBEDDED_DB
+        value: "0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mahalla-db
+          property: connectionString
+      - key: GUEST_LOGIN              # Telegram sozlanguncha hamma "mehmon" bo'lib kira oladi
+        value: "1"
+      - key: DEV_LOGIN
+        value: "0"
+      - key: SEED_DEMO
+        value: "1"
+      - key: DAY_SECONDS              # 1 o'yin kuni = 1 soat (beta uchun). Haqiqiy kun: 86400
+        value: "3600"
+      - key: TELEGRAM_BOT_TOKEN       # keyinroq: @BotFather tokeni
+        sync: false
+      - key: TELEGRAM_BOT_NAME        # keyinroq: bot nomi (masalan mahalla_bot)
+        sync: false
+
+databases:
+  - name: mahalla-db
+    plan: free                      # bepul: 1 GB, 30 kundan keyin muddati tugaydi
+    databaseName: mahalla
+    user: mahalla
