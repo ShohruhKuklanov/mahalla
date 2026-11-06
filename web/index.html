@@ -996,11 +996,11 @@ varying float vWaveH;
 #endif`,
       CUSTOM_VERTEX_UPDATE_POSITION: `#ifdef WATER_VTX
 vec2 wpos = positionUpdated.xz + wOrigin;
-float wfade = 1.0 - smoothstep(${SEA_FADE0.toFixed(2)}, 1.0, length(positionUpdated.xz)/wHalf);
+float wfade = (1.0 - smoothstep(${SEA_FADE0.toFixed(2)}, 1.0, length(positionUpdated.xz)/wHalf)) * smoothstep(${(COAST_Z+10).toFixed(1)}, ${(COAST_Z+140).toFixed(1)}, wpos.y);
 float wh = 0.0, wdx = 0.0, wdz = 0.0; vec2 wshift = vec2(0.0);
 #define wave(D, L, A, Q) { float k = 6.2831853/(L); float f = k*dot(D, wpos) - sqrt(9.81*k)*wTime; float c = cos(f); wh += (A)*sin(f); wdx += (A)*k*(D).x*c; wdz += (A)*k*(D).y*c; wshift += (Q)*(A)*(D)*c; }
 ${SWELL_GLSL}
-positionUpdated.y += wh*wfade; positionUpdated.xz += wshift*wfade; vWaveH = wh*wfade;
+positionUpdated.y += wh*wfade; positionUpdated.xz += wshift*wfade; vWaveH = wh*wfade;\nif (wpos.y < ${(COAST_Z-4).toFixed(1)}) positionUpdated.y -= 40.0;                 // under the land: tuck the sea away (never shows through)
 #endif`,
       CUSTOM_VERTEX_UPDATE_NORMAL: `#ifdef WATER_VTX
 normalUpdated = normalize(vec3(-wdx*wfade, 1.0, -wdz*wfade));
@@ -1779,7 +1779,8 @@ addShip('ferry',  { cx:200,  cz:COAST_Z+900,  r:500,  v:-9 });
 for (let i = 0; i < 4; i++) addShip('yacht', { cx:850+i*40, cz:COAST_Z+330+i*60, r:140+i*30, v:(i%2?-1:1)*(5+i) });
 // a ship sits on the swell under it: heave from the mean height, pitch and roll from the slope along / across the hull
 function shipOnSwell(n, x, z, yaw, len){
-  const t = waterClock(), fade = 1 - Math.min(1, Math.max(0, (Math.hypot(x - seaGrid.position.x, z - seaGrid.position.z)/SEA_HALF - SEA_FADE0)/(1 - SEA_FADE0)));
+  const sm = (a, b, v) => { const k = Math.min(1, Math.max(0, (v-a)/(b-a))); return k*k*(3-2*k); };
+  const t = waterClock(), fade = (1 - Math.min(1, Math.max(0, (Math.hypot(x - seaGrid.position.x, z - seaGrid.position.z)/SEA_HALF - SEA_FADE0)/(1 - SEA_FADE0)))) * sm(COAST_Z + 10, COAST_Z + 140, z);
   const fx = Math.cos(yaw), fz = -Math.sin(yaw), half = len*0.3;
   const a = swellAt(x + fx*half, z + fz*half, t), b = swellAt(x - fx*half, z - fz*half, t), m = swellAt(x, z, t);
   n.position.y = WATER_Y + (a.h + b.h + m.h)/3*fade*0.8;
@@ -1885,30 +1886,139 @@ const LIVERIES = ['#1f6fb2','#c0392b','#0f8a6e','#d4a72c','#5b2a86'];
 for (let i = 0; i < 6; i++){                                  // parked at the jet bridges, nose to the terminal
   for (const m of planeParts(LIVERIES[i % LIVERIES.length])){ m.position.set(-240 + i*90, 0.25, APRON.z1-46); m.rotation.y = -Math.PI/2; }
 }
-const flights = [];
-for (let i = 0; i < 2; i++){
-  const root = new B.TransformNode('flight'+i, scene); for (const m of planeParts(LIVERIES[(i+2) % LIVERIES.length])) m.parent = root;
-  flights.push({ root, t: i*35, land: i === 0 });
-}
-function updateFlights(dt){
-  for (const f of flights){
-    f.t = (f.t + dt) % 70; const t = f.t, n = f.root;
-    let x, y, pitch = 0, show = true;
-    if (f.land){                                              // approach from the east, touch down, roll out
-      if (t < 26){ const k = t/26; x = lerp(RW.x1+2600, RW.x1-120, k); y = lerp(190, 0.25, k); pitch = 0.05; }
-      else if (t < 44){ const k = (t-26)/18, e = 1-Math.pow(1-k, 2); x = lerp(RW.x1-120, -260, e); y = 0.25; }
-      else { show = false; x = -260; y = 0.25; }
-      n.rotation.y = Math.PI;                                 // flying west (−x)
-    } else {                                                  // take-off roll to the west, climb out
-      if (t < 6){ show = false; x = RW.x1-40; y = 0.25; }
-      else if (t < 26){ const k = (t-6)/20; x = lerp(RW.x1-40, -120, k*k); y = 0.25; }
-      else if (t < 50){ const k = (t-26)/24; x = lerp(-120, -4200, k); y = 0.25 + Math.pow(k, 1.4)*420; pitch = 0.16; }
-      else { show = false; x = -4200; y = 400; }
-      n.rotation.y = Math.PI;
-    }
-    n.setEnabled(show); n.position.set(x, y, RW.z + (f.land ? -6 : 6)); n.rotation.z = -pitch;
+// ---------- flights: one continuous life per aircraft ----------
+// approach on a 3° glide path → flare → touchdown → braking roll → turn-off → taxi to the stand → park → push-back →
+// taxi out → hold short (runway clearance) → line up → take-off roll → rotation → climb-out with a banked turn → away.
+// Runway rule: nobody lines up while a plane is on final or rolling out; no approach starts while a plane is lining up
+// or taking off. Planes on the ground also keep their distance from each other.
+const G = { approachV: 66, glide: 3*Math.PI/180, flareD: 350, td: RW.x1 - 250, exitX: -200, taxiV: 10, rotateV: 69, liftV: 75, climbV: 82, decel: 3.1, accel: 2.6 };
+const STAND_Z = APRON.z1 - 46;
+function mkPath(pts, r){
+  const out = [];
+  const push = (x, z) => { const l = out[out.length-1]; if (!l || Math.hypot(l.x-x, l.z-z) > 0.05) out.push({ x, z }); };
+  push(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length-1; i++){
+    const [ax, az] = pts[i-1], [px, pz] = pts[i], [cx, cz] = pts[i+1];
+    const la = Math.hypot(ax-px, az-pz), lc = Math.hypot(cx-px, cz-pz), rr = Math.min(r, la/2, lc/2);
+    const p1 = [px + (ax-px)/la*rr, pz + (az-pz)/la*rr], p2 = [px + (cx-px)/lc*rr, pz + (cz-pz)/lc*rr];
+    push(p1[0], p1[1]);
+    for (let k = 1; k <= 14; k++){ const t = k/14, u = 1-t; push(u*u*p1[0] + 2*u*t*px + t*t*p2[0], u*u*p1[1] + 2*u*t*pz + t*t*p2[1]); }
   }
+  push(pts[pts.length-1][0], pts[pts.length-1][1]);
+  const cum = [0]; for (let i = 1; i < out.length; i++) cum.push(cum[i-1] + Math.hypot(out[i].x-out[i-1].x, out[i].z-out[i-1].z));
+  return { len: cum[cum.length-1], at(s){
+    s = Math.max(0, Math.min(this.len, s)); let i = 1; while (i < cum.length-1 && cum[i] < s) i++;
+    const a = out[i-1], b = out[i], seg = (cum[i]-cum[i-1]) || 1, t = (s-cum[i-1])/seg, l = Math.hypot(b.x-a.x, b.z-a.z) || 1;
+    return { x: a.x + (b.x-a.x)*t, z: a.z + (b.z-a.z)*t, dx: (b.x-a.x)/l, dz: (b.z-a.z)/l };
+  } };
 }
+const planes = [];
+function makeFlight(i, standX){
+  const root = new B.TransformNode('flight'+i, scene); for (const m of planeParts(LIVERIES[(i+2) % LIVERIES.length])) m.parent = root;
+  root.rotationQuaternion = B.Quaternion.Identity();
+  const sx = standX;
+  // push-back: tail first towards the west, so the nose ends up pointing east (towards the departure end)
+  const P = {
+    root, sx,
+    inPath:   mkPath([[G.td, RW.z], [G.exitX, RW.z], [G.exitX, TWY_Z], [sx, TWY_Z], [sx, STAND_Z]], 34),
+    pushPath: mkPath([[sx, STAND_Z], [sx, STAND_Z - 40], [sx - 40, STAND_Z - 40]], 40),
+    outPath:  mkPath([[sx - 40, STAND_Z - 40], [sx + 20, STAND_Z - 40], [sx + 20, TWY_Z], [RW.x1 - 70, TWY_Z], [RW.x1 - 70, RW.z], [RW.x1 - 150, RW.z]], 30),
+    st: 'park', s: 0, v: 0, t: 0, x: sx, y: 0.25, z: STAND_Z, yaw: -Math.PI/2, pitch: 0, bank: 0, cleared: false, shown: true,
+  };
+  P.holdS = P.outPath.len - 150;
+  planes.push(P); return P;
+}
+const f0 = makeFlight(0, 300), f1 = makeFlight(1, -330);
+f0.st = 'approach'; f0.s = 0; f1.st = 'park'; f1.t = 70;
+const onRunwayArrival = p => p.st === 'approach' || (p.st === 'in' && p.s < 760);
+const onRunwayDeparture = p => p.st === 'lineup' || p.st === 'takeoff' || (p.st === 'out' && p.cleared);
+function groundTraffic(p){   // another aircraft on the ground just ahead → stop
+  for (const o of planes){ if (o === p || !o.shown || o.y > 2) continue;
+    const dx = o.x - p.x, dz = o.z - p.z, d = Math.hypot(dx, dz), fx = Math.cos(p.yaw), fz = -Math.sin(p.yaw);
+    if (d < 85 && (dx*fx + dz*fz) > d*0.6) return true; }
+  return false;
+}
+function stepFlight(p, dt){
+  const others = planes.filter(o => o !== p);
+  let yawT = p.yaw, pitchT = 0, bankT = 0, followPath = null, reverse = false;
+  p.t += dt;
+  switch (p.st){
+    case 'approach': {                                   // straight-in final from the east, 3° glide path
+      const d0 = 2150 + G.flareD; p.s += G.approachV*dt;
+      const d = d0 - p.s, x = G.td + Math.max(0, d);
+      p.x = x; p.z = RW.z; p.v = G.approachV; yawT = Math.PI;              // heading west (−x)
+      if (d > G.flareD){ p.y = 0.25 + d*Math.tan(G.glide); pitchT = 2.5*Math.PI/180; }
+      else { const k = Math.max(0, d/G.flareD); p.y = 0.25 + G.flareD*Math.tan(G.glide)*Math.pow(k, 1.8); pitchT = (2.5 + 4*(1-k))*Math.PI/180; }
+      if (d <= 0){ p.st = 'in'; p.s = 0; p.y = 0.25; }
+      break;
+    }
+    case 'in': {                                         // braking roll-out, turn-off, taxi to the stand
+      const exitS = G.td - G.exitX - 34;
+      let v = p.s < exitS ? Math.max(G.taxiV, Math.sqrt(Math.max(0, G.approachV*G.approachV - 2*G.decel*p.s))) : G.taxiV;
+      const left = p.inPath.len - p.s; v = Math.min(v, Math.sqrt(2*1.0*Math.max(0, left)) + 0.3);
+      if (p.s > exitS + 40 && groundTraffic(p)) v = 0;
+      p.v += Math.max(-4*dt, Math.min(2*dt, v - p.v)); if (p.s < exitS) p.v = v;
+      p.s += p.v*dt; followPath = p.inPath;
+      pitchT = p.s < 60 ? (6.5*(1 - p.s/60))*Math.PI/180 : 0;            // nose-wheel comes down after touchdown
+      if (left < 0.5){ p.st = 'park'; p.t = 0; p.v = 0; }
+      break;
+    }
+    case 'park': if (p.t > 18){ p.st = 'push'; p.s = 0; } break;
+    case 'push': {                                       // push-back, tail first, 2.5 m/s
+      p.v = 2.5; p.s += p.v*dt; followPath = p.pushPath; reverse = true;
+      if (p.s >= p.pushPath.len){ p.st = 'pause'; p.t = 0; }
+      break;
+    }
+    case 'pause': if (p.t > 4){ p.st = 'out'; p.s = 0; p.cleared = false; } break;
+    case 'out': {                                        // taxi out, hold short until the runway is free
+      let v = G.taxiV;
+      if (!p.cleared && p.s >= p.holdS - 1){ if (others.some(o => onRunwayArrival(o) || onRunwayDeparture(o))) v = 0; else p.cleared = true; }
+      if (!p.cleared) v = Math.min(v, Math.sqrt(2*1.2*Math.max(0, p.holdS - p.s)));
+      const left = p.outPath.len - p.s; v = Math.min(v, Math.sqrt(2*1.2*Math.max(0, left)) + 0.2);
+      if (groundTraffic(p)) v = 0;
+      p.v += Math.max(-4*dt, Math.min(1.5*dt, v - p.v)); p.s += p.v*dt; followPath = p.outPath;
+      if (left < 0.5){ p.st = 'lineup'; p.t = 0; p.v = 0; }
+      break;
+    }
+    case 'lineup': yawT = Math.PI; if (p.t > 4){ p.st = 'takeoff'; p.v = 0; } break;
+    case 'takeoff': {                                    // full-power roll, rotation, lift-off, initial climb
+      p.v = Math.min(G.climbV, p.v + G.accel*dt); p.x -= p.v*dt; yawT = Math.PI;
+      if (p.v > G.rotateV) pitchT = Math.min(9, (p.v - G.rotateV)*2.2)*Math.PI/180;
+      if (p.v >= G.liftV){ p.vy = (p.vy || 0) + 2.2*dt; p.vy = Math.min(p.vy, p.v*Math.sin(7*Math.PI/180)); p.y += p.vy*dt; pitchT = 11*Math.PI/180; }
+      if (p.y > 35){ p.st = 'climb'; p.t = 0; }
+      break;
+    }
+    case 'climb': {                                      // climb-out, then a gentle banked turn to the south-west over the sea
+      p.v = Math.min(G.climbV + 10, p.v + 1*dt);
+      const turnRate = (p.t > 9 && p.t < 25) ? 2.4*Math.PI/180 : 0;      // yaw increasing = turning left, towards +z (out over the sea)
+      p.yaw += turnRate*dt; yawT = p.yaw;
+      bankT = -Math.sign(turnRate)*0.36;                                  // bank into the turn (local +x roll lifts the right wing)
+      p.vy = Math.min(p.v*Math.sin(7*Math.PI/180), (p.vy || 0) + 1*dt);
+      p.x += Math.cos(p.yaw)*p.v*dt; p.z += -Math.sin(p.yaw)*p.v*dt; p.y += p.vy*dt; pitchT = 10*Math.PI/180;
+      if (p.t > 60){ p.st = 'away'; p.t = 0; p.shown = false; }
+      break;
+    }
+    case 'away': {                                       // re-enters on final when the runway is free
+      if (p.t > 25 && !others.some(o => onRunwayDeparture(o) || o.st === 'approach')){ p.st = 'approach'; p.s = 0; p.shown = true; p.vy = 0; p.yaw = Math.PI; }
+      break;
+    }
+  }
+  if (followPath){
+    const q = followPath.at(p.s); p.x = q.x; p.z = q.z; p.y = 0.25;
+    yawT = reverse ? Math.atan2(q.dz, -q.dx) : Math.atan2(-q.dz, q.dx);
+  }
+  // smooth attitude: yaw follows the track, pitch and bank ease in
+  let dy = yawT - p.yaw; while (dy > Math.PI) dy -= 2*Math.PI; while (dy < -Math.PI) dy += 2*Math.PI;
+  p.yaw += dy*Math.min(1, dt*(followPath ? 12 : 3));
+  p.pitch += (pitchT - p.pitch)*Math.min(1, dt*1.6);
+  p.bank += (bankT - p.bank)*Math.min(1, dt*1.2);
+  const n = p.root;
+  n.setEnabled(p.shown);
+  n.position.set(p.x, p.y, p.z);
+  B.Quaternion.RotationAxisToRef(V3.Up(), p.yaw, n.rotationQuaternion);
+  n.rotationQuaternion.multiplyInPlace(B.Quaternion.RotationAxis(B.Axis.Z, p.pitch)).multiplyInPlace(B.Quaternion.RotationAxis(B.Axis.X, p.bank));
+}
+function updateFlights(dt){ dt = Math.min(dt, 0.1); for (const p of planes) stepFlight(p, dt); }
 
 // =================== RIVER, BRIDGES, FOREST & GARDENS ===================
 const riverTex = noiseTex('river','#8fa3ad',0.35,256,2); riverTex.uScale = 6; riverTex.vScale = 60;
@@ -3300,7 +3410,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
