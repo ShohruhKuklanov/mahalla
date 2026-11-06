@@ -668,7 +668,7 @@
    ]
   }
  },
- "landmarkScale": 0.15,
+ "landmarkScale": 0.5,
  "landmarks": {
   "lm_burj": {
    "name": "Burj Khalifa",
@@ -1294,14 +1294,17 @@ function lmFacade(key){
 const x0n = (x,w) => ((x % w) + w) % w;
 function lmGlass(key, uRep, vRep){
   if (LMMAT[key]) return LMMAT[key];
-  const base = lmFacade(key), d = base.dif, e = base.emi; d.uScale = e.uScale = uRep; d.vScale = e.vScale = vRep;
+  const base = lmFacade(key), d = base.dif, e = base.emi; d.uScale = e.uScale = uRep*LM_K; d.vScale = e.vScale = vRep*LM_K;
   const stone = LMLOOK[key].pat === 'stone';
   const m = stdMat('lm_'+key,{dt:d, et:e, spec: stone ? new C3(.12,.12,.12) : new C3(.75,.78,.82), power: stone ? 20 : 120});
   m.emissiveColor = hex(stone ? LMLOOK[key].frame : LMLOOK[key].g1).scale(0.16);   // sky light on the shaded faces, keeps the real colour readable
   nightMats.push(m); return (LMMAT[key] = m);
 }
+// Skyscraper copies: real proportions at CAT.landmarkScale (½ of the real height); each one fills its own block.
+// The shapes are modelled at a 0.15 design scale, then scaled up uniformly by LM_K (window tiles scale with them).
+const LM_DESIGN = 0.15, LM_K = CAT.landmarkScale / LM_DESIGN;
 function landmarkParts(key){
-  const H = lmHeight(key), P = [], add = (m, mat) => P.push([m, mat, null]);
+  const H = Math.round(CAT.landmarks[key].realHeight * LM_DESIGN), P = [], add = (m, mat) => P.push([m, mat, null]);
   const gl = (tint, r) => lmGlass(key, Math.max(4, Math.round(2*Math.PI*r/TILE_W*0.8)), H/(4*FLOOR_H)*1.6);
   if (key==='lm_burj'){
     const lv = steps(H, [[.18,4.8],[.33,4.3],[.46,3.7],[.58,3.1],[.68,2.5],[.76,1.9],[.80,1.4]]).map(L=>({...L, rot:Math.PI/2}));
@@ -1357,7 +1360,8 @@ function landmarkParts(key){
     add(shaft(lv, 4, 0.35, 40), gl('#cfd6dc', 5));
     add(box(8.4, 0.8, 8.4, 0, H+0.4, 0), steelM);
   }
-  return { P, height: H + 2 };
+  for (const [m] of P){ m.scaling.scaleInPlace(LM_K); m.position.scaleInPlace(LM_K); m.bakeCurrentTransformIntoVertices(); }
+  return { P, height: H*LM_K + 2 };
 }
 
 // ---- variants: one set of thin-instanced meshes per (type, style, floors, roof) or per landmark ----
@@ -1537,57 +1541,150 @@ flatBox('bw2', PORT.x0-40, PORT.x0+520, COAST_Z+440, COAST_Z+466, -2, 3.4, stone
   [t,band,lamp,cap].forEach(m=>m.isPickable=false); })();
 // cruise pier in the east
 const CRUISE_X = 520;
-flatBox('cruisePier', CRUISE_X-14, CRUISE_X+14, COAST_Z, COAST_Z+230, -1, 1.35, portConcrete);
+flatBox('cruisePier', CRUISE_X-14, CRUISE_X+14, COAST_Z, COAST_Z+300, -1, 1.35, portConcrete);
 flatBox('cruiseTerm', CRUISE_X-70, CRUISE_X-18, COAST_Z-24, COAST_Z+10, 0.3, 10, stdMat('ctM',{diffuse:hex('#e9eef2'), spec:new C3(.6,.6,.6), power:80}));
 // marina: small jetties + yachts
 for (let i = 0; i < 6; i++) flatBox('jetty', 760+i*26, 763+i*26, COAST_Z, COAST_Z+70, -1, 1.25, stdMat('woodM',{diffuse:hex('#8a6a4a')}));
 
 // ---------- ships ----------
-function shipMesh(kind){
-  // modelled along +x; waterline at y = 0
-  const hullC = { cargo:'#23324a', cruise:'#f4f4f2', ferry:'#f2f2ee', yacht:'#f7f7f5' }[kind];
-  const L = { cargo:170, cruise:200, ferry:80, yacht:22 }[kind], Bm = { cargo:26, cruise:30, ferry:18, yacht:6 }[kind];
-  const hull = [], deck = [], accent = [], cargoBoxes = [];
-  hull.push(box(L*0.86, Bm*0.42, Bm, -L*0.07, Bm*0.1, 0));
-  const bow = B.MeshBuilder.CreateCylinder('bow',{diameter:1, height:Bm*0.42, tessellation:3},scene); bow.scaling.set(L*0.3, 1, Bm*1.155); bow.position.set(L*0.36, Bm*0.1, 0); bow.rotation.y = Math.PI; hull.push(bow);
-  hull.push(box(L*0.9, Bm*0.06, Bm*1.0, -L*0.05, -Bm*0.12, 0));
-  if (kind === 'cargo'){
-    accent.push(box(L*0.86, Bm*0.12, Bm*1.01, -L*0.07, -Bm*0.06, 0));                       // red antifouling at the waterline
-    deck.push(box(14, 22, Bm*0.9, -L*0.40, Bm*0.3+11, 0), box(4, 6, Bm*1.1, -L*0.40, Bm*0.3+24, 0)); // bridge
-    for (let x = -L*0.32; x < L*0.3; x += 13) for (let z = -Bm*0.4; z < Bm*0.42; z += 2.6){ const h = 2 + Math.floor(rnd()*4); for (let k = 0; k < h; k++) cargoBoxes.push([x, Bm*0.31+1.3+k*2.6, z]); }
-  } else if (kind === 'cruise'){
-    accent.push(box(L*0.86, Bm*0.1, Bm*1.01, -L*0.07, -Bm*0.04, 0));
-    for (let k = 0; k < 6; k++) deck.push(box(L*(0.78-k*0.05), 3.1, Bm*(0.96-k*0.03), -L*0.08 - k*1.2, Bm*0.31+1.55+k*3.1, 0));
-    accent.push(cyl({diameterTop:5, diameterBottom:7, height:9, tessellation:12}, Bm*0.31+18.6+4.5)); accent[accent.length-1].position.x = -L*0.28;
-  } else if (kind === 'ferry'){
-    accent.push(box(L*0.86, Bm*0.1, Bm*1.01, -L*0.07, Bm*0.24, 0));
-    deck.push(box(L*0.62, 4, Bm*0.92, -L*0.06, Bm*0.31+2, 0), box(L*0.4, 3.4, Bm*0.8, -L*0.06, Bm*0.31+5.7, 0));
-  } else {
-    deck.push(box(L*0.42, 2.2, Bm*0.7, -L*0.08, Bm*0.31+1.1, 0), box(L*0.22, 1.6, Bm*0.55, -L*0.12, Bm*0.31+3, 0));
+// ---------- solid shapes for vehicles: two matching outlines joined into a closed, flat-shaded solid ----------
+const FLIP_WIND = false;
+function solidFromRings(A, Bq, name, uvScale){
+  const n = A.length, all = [...A, ...Bq], pos = [], idx = [];
+  for (const v of all) pos.push(v.x, v.y, v.z);
+  const C = all.reduce((s, v) => s.addInPlace(v), V3.Zero()).scale(1/all.length);
+  const tri = (a, b, c) => {
+    const va = all[a], vb = all[b], vc = all[c], nrm = V3.Cross(vb.subtract(va), vc.subtract(va)), mid = va.add(vb).add(vc).scale(1/3);
+    if ((V3.Dot(nrm, mid.subtract(C)) > 0) !== FLIP_WIND) idx.push(a, c, b); else idx.push(a, b, c);
+  };
+  for (let i = 1; i < n-1; i++){ tri(0, i, i+1); tri(n, n+i, n+i+1); }
+  for (let i = 0; i < n; i++){ const j = (i+1) % n; tri(i, j, n+j); tri(i, n+j, n+i); }
+  const m = new B.Mesh(name || 'solid', scene), vd = new B.VertexData(), nr = [];
+  vd.positions = pos; vd.indices = idx;
+  { const us = uvScale || [10, 10], uv = []; for (const v of all) uv.push((v.x + v.z)/us[0], v.y/us[1]); vd.uvs = uv; }   // uvs always: merged meshes need the same attributes
+  B.VertexData.ComputeNormals(pos, idx, nr); vd.normals = nr; vd.applyToMesh(m);
+  m.convertToFlatShadedMesh();
+  return m;
+}
+// outline in the x–z plane (convex, in order) extruded upwards from y0 to y1
+const prismY = (outline, y0, y1, name, uv) => solidFromRings(outline.map(([x,z]) => new V3(x, y0, z)), outline.map(([x,z]) => new V3(x, y1, z)), name, uv);
+// outline in the x–y plane (convex) extruded across z
+const prismZ = (outline, z0, z1, name) => solidFromRings(outline.map(([x,y]) => new V3(x, y, z0)), outline.map(([x,y]) => new V3(x, y, z1)), name);
+// side profile (z forward, y up) lofted across the width; the top can be narrower than the bottom
+function loftSide(prof, wb, wt, name){
+  const ys = prof.map(p => p[1]), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const ring = s => prof.map(([z, y]) => new V3(s*lerp(wb, wt, (y-y0)/((y1-y0) || 1))/2, y, z));
+  return solidFromRings(ring(-1), ring(1), name);
+}
+
+// ---------- ships: a real hull (ribbon of cross-sections), modelled along +x, waterline at y = 0 ----------
+function hullMesh(o){
+  const { L, Bm, D, draft, bowLen, sternLen = 0.05, colTop, colBottom, bottomTo = 1.4, band, name } = o;
+  const prof = [[1,1],[1,0.6],[0.98,0.3],[0.88,0.1],[0.5,0.0],[0,0]];
+  const pts = [...prof, ...prof.slice(0, -1).reverse().map(([w,h]) => [-w, h])];
+  const paths = pts.map(() => []), N = 40;
+  for (let i = 0; i <= N; i++){
+    const t = i/N, x = -L/2 + t*L;
+    let hw = Bm/2, rise = 0;
+    if (t > 1-bowLen){ const u = (t-(1-bowLen))/bowLen; hw *= Math.sqrt(Math.max(0, 1-u*u)); rise = u*u*D*0.45; }
+    if (t < sternLen){ const u = 1 - t/sternLen; hw *= o.doubleEnded ? Math.sqrt(Math.max(0, 1-u*u)) : 1 - 0.12*u; if (o.doubleEnded) rise = u*u*D*0.45; }
+    pts.forEach(([w, h], k) => { const y = -draft + rise + h*(D - rise), flare = h >= 0.6 ? 1 : 0.84 + 0.16*h/0.6; paths[k].push(new V3(x, y, w*hw*flare)); });
   }
-  const root = new B.TransformNode('ship_'+kind, scene);
-  const mk = (list, mat) => { if (!list.length) return; const m = merge(list); m.material = mat; m.parent = root; m.isPickable = false; m.receiveShadows = true; };
-  mk(hull, stdMat('hull_'+kind+'_'+rnd(),{diffuse:hex(hullC), spec:new C3(.3,.3,.3)}));
-  mk(deck, kind === 'cruise' || kind === 'yacht' || kind === 'ferry' ? shipWindowsM : whiteM);
-  mk(accent, kind === 'cruise' ? stdMat('cruiseAcc',{diffuse:hex('#1f4e8c')}) : craneRed);
+  const hull = B.MeshBuilder.CreateRibbon(name+'Hull', { pathArray: paths, sideOrientation: B.Mesh.DOUBLESIDE }, scene);
+  const p = hull.getVerticesData('position'), cols = [];
+  const cT = hex(colTop), cB = hex(colBottom), cBand = band ? hex(band.c) : null;
+  for (let i = 0; i < p.length; i += 3){
+    const y = p[i+1], c = y < bottomTo ? cB : (band && y > band.y0 && y < band.y1 ? cBand : cT);
+    cols.push(c.r, c.g, c.b, 1);
+  }
+  hull.setVerticesData(B.VertexBuffer.ColorKind, cols);
+  const deck = B.MeshBuilder.CreateRibbon(name+'Deck', { pathArray: [paths[0], paths[paths.length-1]], sideOrientation: B.Mesh.DOUBLESIDE }, scene);
+  const deckY = (t) => { const k = Math.round(t*N); return paths[0][k].y; };
+  const hwAt = (t) => { const k = Math.round(Math.max(0, Math.min(1, t))*N); return Math.abs(paths[0][k].z); };
+  return { hull, deck, deckY, hwAt, freeboard: D - draft };
+}
+const hullMat = stdMat('hullM', { diffuse: new C3(1,1,1), spec: new C3(.35,.35,.35), power: 48 });
+const deckMat = stdMat('shipDeckM', { diffuse: hex('#7d858c') });
+const glassDarkM = stdMat('glassDarkM', { diffuse: hex('#1c2733'), spec: new C3(.9,.9,.95), power: 120 });
+const lifeboatM = stdMat('lifeboatM', { diffuse: hex('#f28a1a') });
+const deckWinM = (() => {
+  const t = new B.DynamicTexture('deckWin', { width: 256, height: 64 }, scene, true), c = t.getContext(), e = new B.DynamicTexture('deckWinE', { width: 256, height: 64 }, scene, true), ce = e.getContext();
+  c.fillStyle = '#f6f6f2'; c.fillRect(0, 0, 256, 64); ce.fillStyle = '#000'; ce.fillRect(0, 0, 256, 64);
+  c.fillStyle = '#2a3a4c'; c.fillRect(0, 18, 256, 26);                                  // continuous window band
+  for (let x = 0; x < 256; x += 16){ c.fillStyle = '#e9e9e4'; c.fillRect(x, 18, 2, 26); if (rnd() < 0.55){ ce.fillStyle = '#ffd9a0'; ce.fillRect(x+3, 20, 11, 22); } }
+  c.fillStyle = '#d7d9dc'; c.fillRect(0, 56, 256, 4);                                   // balcony rail line
+  t.update(true); e.update(true);
+  for (const x of [t, e]) x.wrapU = x.wrapV = B.Texture.WRAP_ADDRESSMODE;
+  const m = stdMat('deckWinM', { dt: t, et: e, spec: new C3(.4,.4,.4), power: 60 }); nightMats.push(m); return m;
+})();
+// deck outline: stern square, bow rounded to a point
+const deckOutline = (xs, xf, hw) => [[xs,-hw],[xf-hw*0.9,-hw],[xf-hw*0.35,-hw*0.72],[xf,0],[xf-hw*0.35,hw*0.72],[xf-hw*0.9,hw],[xs,hw]];
+
+function shipMesh(kind){
+  const root = new B.TransformNode('ship_'+kind, scene), white = [], dark = [], acc = [], glass = [], decks = [], boats = [], cargoBoxes = [];
+  let H, livery = '#c0392b';
+  if (kind === 'cargo'){
+    // Panamax-class container ship ~230 m (real: 290 m)
+    H = hullMesh({ L:230, Bm:32, D:21, draft:9, bowLen:0.16, colTop:'#22344f', colBottom:'#a3392a', bottomTo:1.6, name:'cargo' });
+    const fb = H.freeboard, xs = -115;
+    white.push(box(16, 22, 27, xs+22, fb+11, 0));                                       // accommodation block
+    for (let k = 0; k < 7; k++) dark.push(box(16.2, 1.1, 27.2, xs+22, fb+3 + k*2.9, 0)); // window rows
+    white.push(box(6, 1.4, 34, xs+27, fb+22.7, 0));                                     // bridge wings
+    glass.push(box(6.2, 1.6, 26, xs+29.6, fb+21, 0));                                   // bridge windows
+    acc.push(box(8, 12, 6.5, xs+10, fb+24, 0)); dark.push(box(8.2, 2.2, 6.7, xs+10, fb+30.6, 0));   // funnel, black top
+    for (let x = xs+40; x < 115-34; x += 13.2) for (let z = -14.4; z <= 14.4; z += 2.6){
+      const tiers = 2 + Math.floor(rnd()*5); for (let k = 0; k < tiers; k++) cargoBoxes.push([x, fb+1.3+k*2.6, z]);
+    }
+    livery = ['#c0392b','#1f6fb2','#e67e22'][Math.floor(rnd()*3)];
+  } else if (kind === 'cruise'){
+    // cruise liner ~260 m: white hull with a navy band, 9 stepped decks with balconies, red funnel, lifeboats
+    H = hullMesh({ L:260, Bm:34, D:20, draft:8, bowLen:0.2, sternLen:0.04, colTop:'#f6f6f2', colBottom:'#1f3a66', bottomTo:3.2, band:{ y0:9.5, y1:11, c:'#1f4e8c' }, name:'cruise' });
+    const fb = H.freeboard;
+    for (let k = 0; k < 9; k++){
+      const xs = -128 + 6 + k*2.2, xf = 130 - 48 - k*5.5, hw = 16.5 - (k > 5 ? (k-5)*1.6 : 0);
+      decks.push(prismY(deckOutline(xs, xf, hw), fb + k*3.2, fb + (k+1)*3.2, 'cdeck', [16, 3.2]));
+    }
+    white.push(prismY(deckOutline(-90, 20, 10), fb + 28.8, fb + 30, 'ctop'));
+    glass.push(prismY(deckOutline(10, 46, 12), fb + 25.6, fb + 28.8, 'cbridge'));
+    acc.push(prismZ([[-70,fb+30],[-52,fb+30],[-56,fb+42],[-72,fb+42]], -4.5, 4.5, 'cfun')); dark.push(prismZ([[-72,fb+42],[-56,fb+42],[-56.6,fb+44],[-72.4,fb+44]], -4.6, 4.6, 'cfunT'));
+    for (let x = -95; x < 60; x += 9) for (const s of [-1, 1]) boats.push(box(7.5, 2.2, 2.6, x, fb + 9.6, s*15.3));
+    livery = '#c8372d';
+  } else if (kind === 'ferry'){
+    H = hullMesh({ L:110, Bm:22, D:11, draft:4.5, bowLen:0.18, sternLen:0.18, doubleEnded:true, colTop:'#f4f4ef', colBottom:'#1f3a66', bottomTo:1.6, band:{ y0:4.2, y1:5.4, c:'#1f6fb2' }, name:'ferry' });
+    const fb = H.freeboard;
+    for (let k = 0; k < 3; k++) decks.push(prismY(deckOutline(-38 + k*6, 38 - k*6, 10.2 - k*1.2).map(([x,z]) => [x, z]), fb + k*3.1, fb + (k+1)*3.1, 'fdeck', [16, 3.1]));
+    glass.push(box(9, 2.4, 14, 0, fb + 10.5, 0)); white.push(box(10, 0.5, 15, 0, fb + 11.9, 0));
+    acc.push(box(4, 6, 3, -14, fb + 12, 0));
+    livery = '#1f6fb2';
+  } else {
+    // motor yacht ~32 m
+    H = hullMesh({ L:32, Bm:7, D:4.4, draft:1.4, bowLen:0.38, colTop:'#f7f7f5', colBottom:'#2a3644', bottomTo:0.5, band:{ y0:1.4, y1:1.9, c:'#2a3644' }, name:'yacht' });
+    const fb = H.freeboard;
+    white.push(prismY(deckOutline(-14, 6, 3.1), fb, fb + 2.3, 'y1'));
+    glass.push(prismY(deckOutline(-13.6, 5.6, 3.15), fb + 0.8, fb + 1.9, 'y1g'));
+    white.push(prismY(deckOutline(-10, 1.5, 2.5), fb + 2.3, fb + 4.2, 'y2'));
+    glass.push(prismY(deckOutline(-9.6, 1.2, 2.55), fb + 2.9, fb + 3.8, 'y2g'));
+    dark.push(box(1, 2.2, 0.25, -6, fb + 5.2, 0));
+  }
+  const mk = (list, mat) => { if (!list.length) return null; const m = list.length > 1 ? merge(list) : list[0]; m.material = mat; m.parent = root; m.isPickable = false; m.receiveShadows = true; return m; };
+  H.hull.material = hullMat; H.hull.parent = root; H.hull.isPickable = false; H.hull.receiveShadows = true;
+  H.deck.material = deckMat; H.deck.parent = root; H.deck.isPickable = false;
+  mk(white, whiteM); mk(dark, darkM); mk(glass, glassDarkM); mk(decks, deckWinM); mk(boats, lifeboatM);
+  mk(acc, stdMat('shipAcc_'+kind+'_'+livery, { diffuse: hex(livery), spec: new C3(.3,.3,.3) }));
   if (cargoBoxes.length){
-    const cb = B.MeshBuilder.CreateBox('shipCont',{width:12.2, height:2.6, depth:2.44},scene); cb.material = cont.material; cb.isPickable = false; cb.parent = root; // own geometry: thin-instance buffers live on the geometry
-    cb.thinInstanceRegisterAttribute('color',4);
-    for (const [x,y,z] of cargoBoxes){ const i = cb.thinInstanceAdd(B.Matrix.Translation(x,y,z), false), c = hex(CONT_COLORS[Math.floor(rnd()*CONT_COLORS.length)]); cb.thinInstanceSetAttributeAt('color', i, [c.r,c.g,c.b,1], false); }
-    cb.thinInstanceBufferUpdated('matrix'); cb.thinInstanceBufferUpdated('color'); cb.alwaysSelectAsActiveMesh = true;
+    const cb = B.MeshBuilder.CreateBox('shipCont', { width:12.2, height:2.6, depth:2.44 }, scene); cb.material = cont.material; cb.isPickable = false; cb.parent = root;
+    cb.thinInstanceRegisterAttribute('color', 4);
+    for (const [x,y,z] of cargoBoxes){ const i = cb.thinInstanceAdd(B.Matrix.Translation(x,y,z), false), c = hex(CONT_COLORS[Math.floor(rnd()*CONT_COLORS.length)]), g = 0.8 + rnd()*0.25; cb.thinInstanceSetAttributeAt('color', i, [c.r*g, c.g*g, c.b*g, 1], false); }
+    cb.thinInstanceBufferUpdated('matrix'); cb.thinInstanceBufferUpdated('color'); cb.thinInstanceRefreshBoundingInfo(false);
   }
   return root;
 }
-const shipWindowsM = (()=>{ const t = new B.DynamicTexture('shipWin',{width:256,height:64},scene,true), c = t.getContext(), e = new B.DynamicTexture('shipWinE',{width:256,height:64},scene,true), ce = e.getContext();
-  c.fillStyle='#f6f6f2'; c.fillRect(0,0,256,64); ce.fillStyle='#000'; ce.fillRect(0,0,256,64);
-  for (let x=4;x<256;x+=12){ c.fillStyle='#24384f'; c.fillRect(x,22,8,20); if (rnd()<0.6){ ce.fillStyle='#ffd9a0'; ce.fillRect(x,22,8,20); } }
-  t.update(true); e.update(true); t.uScale = e.uScale = 6; const m = stdMat('shipWinM',{dt:t, et:e}); nightMats.push(m); return m; })();
 const WATER_Y = lake.position.y;
 const ships = [];
 function addShip(kind, path){ const n = shipMesh(kind); n.position.y = WATER_Y; ships.push({ n, path, t: rnd()*1000 }); return n; }
 // docked
-for (const x of [PORT.x0+140, PORT.x0+330]){ const s = shipMesh('cargo'); s.position.set(x, WATER_Y, COAST_Z+15); }
-{ const s = shipMesh('cruise'); s.position.set(CRUISE_X+30, WATER_Y, COAST_Z+120); s.rotation.y = -Math.PI/2; }
+for (const x of [PORT.x0+180, PORT.x0+430]){ const s = shipMesh('cargo'); s.position.set(x, WATER_Y, COAST_Z+19); }
+{ const s = shipMesh('cruise'); s.position.set(CRUISE_X+33, WATER_Y, COAST_Z+150); s.rotation.y = -Math.PI/2; }
 // sailing (circular routes out at sea; speed in m/s)
 addShip('cargo',  { cx:-300, cz:COAST_Z+1500, r:950,  v:7 });
 addShip('cargo',  { cx:1400, cz:COAST_Z+2600, r:1500, v:-8 });
@@ -1645,29 +1742,55 @@ for (const x of [-240,-150,-60,30,120,210]){ flatBox('bridge', x-2, x+2, APRON.z
 // hangars
 for (let i = 0; i < 3; i++){ const hx = -650 + i*90; flatBox('hangar', hx-38, hx+38, APRON.z0+10, APRON.z0+80, 0.2, 18, stdMat('hgM'+i,{diffuse:hex('#cfd5da')}));
   flatBox('hangarDoor', hx-34, hx+34, APRON.z0+9, APRON.z0+10, 0.2, 15, darkM); }
-// planes: modelled along +x, wheels at y = 0
+// planes: A320-class airliner (~38 m long, 34 m span), modelled along +x, wheels at y = 0
 function planeParts(livery){
-  const body = [], acc = [];
-  const fus = B.MeshBuilder.CreateCylinder('fus',{diameter:4.2, height:40, tessellation:16},scene); fus.rotation.z = Math.PI/2; fus.position.y = 4; body.push(fus);
-  const nose = B.MeshBuilder.CreateSphere('nose',{diameter:4.2, segments:12},scene); nose.scaling.x = 1.8; nose.position.set(20, 4, 0); body.push(nose);
-  const tailc = B.MeshBuilder.CreateCylinder('tc',{diameterTop:4.2, diameterBottom:1.0, height:10, tessellation:16},scene); tailc.rotation.z = -Math.PI/2; tailc.position.set(-25, 4.6, 0); body.push(tailc);
-  const wing = B.MeshBuilder.CreateBox('wing',{width:7, height:0.5, depth:38},scene); wing.position.set(1, 3, 0); body.push(wing);
-  const stab = B.MeshBuilder.CreateBox('stab',{width:3.6, height:0.4, depth:13},scene); stab.position.set(-27, 5.4, 0); body.push(stab);
-  const fin = B.MeshBuilder.CreateBox('fin',{width:6, height:8, depth:0.5},scene); fin.position.set(-27, 9.6, 0); fin.rotation.z = -0.35; acc.push(fin);
-  for (const z of [-8, 8]){ const e = B.MeshBuilder.CreateCylinder('eng',{diameter:2.4, height:4.6, tessellation:12},scene); e.rotation.z = Math.PI/2; e.position.set(3.5, 1.9, z); acc.push(e); }
-  const stripe = B.MeshBuilder.CreateBox('stripe',{width:34, height:0.7, depth:4.3},scene); stripe.position.set(-1, 3.4, 0); acc.push(stripe);
-  const b = merge(body), a = merge(acc); b.material = whiteM; a.material = stdMat('liv_'+livery,{diffuse:hex(livery), spec:new C3(.4,.4,.4)});
-  for (const m of [b,a]){ m.isPickable = false; m.receiveShadows = true; }
-  return [b, a];
+  const white = [], acc = [], dark = [];
+  // fuselage: lathe of the real profile (tail cone → cabin tube → rounded nose), then laid along +x with an upswept tail
+  const prof = [[0.05,0],[0.6,1.4],[1.3,4.2],[1.85,8],[2.0,11],[2.0,32.6],[1.94,34.6],[1.66,36.3],[1.15,37.5],[0.55,38.2],[0.05,38.5]].map(([r,y]) => new V3(r, y, 0));
+  const fus = B.MeshBuilder.CreateLathe('fus', { shape: prof, tessellation: 20, updatable: true }, scene);
+  fus.rotation.z = -Math.PI/2; fus.position.set(-19.2, 3.6, 0); fus.bakeCurrentTransformIntoVertices();
+  const pos = fus.getVerticesData(B.VertexBuffer.PositionKind);
+  for (let i = 0; i < pos.length; i += 3){ const x = pos[i]; if (x < -8) pos[i+1] += Math.pow((-8 - x)/11, 1.6)*1.7; }
+  fus.updateVerticesData(B.VertexBuffer.PositionKind, pos); fus.createNormals(true); white.push(fus);
+  for (const s of [-1, 1]){
+    // swept wings with dihedral, winglets
+    const wing = [[4.6, 1.9], [-6.4, 17.2], [-8.5, 17.2], [-3.9, 1.9]];
+    const yOf = z => 2.75 + (Math.abs(z) - 1.9)/15.3*1.0;
+    white.push(solidFromRings(wing.map(([x,z]) => new V3(x, yOf(z), s*z)), wing.map(([x,z]) => new V3(x, yOf(z) + (Math.abs(z) < 3 ? 0.5 : 0.25), s*z)), 'wing'));
+    acc.push(prismZ([[-6.5,3.95],[-8.5,3.95],[-9.4,6.3],[-8.3,6.3]], s*17.15, s*17.35, 'winglet'));
+    // horizontal stabiliser
+    const st = [[-14.9, 1.0], [-19.0, 6.3], [-20.2, 6.3], [-18.6, 1.0]];
+    white.push(solidFromRings(st.map(([x,z]) => new V3(x, 5.45, s*z)), st.map(([x,z]) => new V3(x, 5.7, s*z)), 'stab'));
+    // engine under the wing: nacelle, dark intake and exhaust, pylon
+    const nac = B.MeshBuilder.CreateCylinder('nac', { diameterTop: 2.1, diameterBottom: 2.35, height: 4.6, tessellation: 18 }, scene);
+    nac.rotation.z = -Math.PI/2; nac.position.set(4.0, 1.9, s*6.0); acc.push(nac);
+    const inl = B.MeshBuilder.CreateCylinder('inl', { diameter: 1.9, height: 0.12, tessellation: 18 }, scene); inl.rotation.z = Math.PI/2; inl.position.set(6.33, 1.9, s*6.0); dark.push(inl);
+    const exh = B.MeshBuilder.CreateCylinder('exh', { diameterTop: 0.4, diameterBottom: 1.4, height: 1.3, tessellation: 12 }, scene); exh.rotation.z = Math.PI/2; exh.position.set(1.15, 1.9, s*6.0); dark.push(exh);
+    white.push(box(3.4, 0.9, 0.35, 3.4, 2.9, s*6.0));
+    // passenger windows and main landing gear
+    for (let x = -12.5; x < 13.5; x += 1.02) dark.push(box(0.34, 0.42, 0.08, x, 4.15, s*1.93));
+    dark.push(box(0.9, 1.9, 0.08, 15.2, 3.4, s*1.9), box(0.9, 1.9, 0.08, -13.4, 3.6, s*1.8));   // doors
+    for (const dz of [-0.35, 0.35]){ const wh = B.MeshBuilder.CreateCylinder('mw', { diameter: 1.15, height: 0.4, tessellation: 12 }, scene); wh.rotation.x = Math.PI/2; wh.position.set(-1.2, 0.58, s*2.7 + dz); dark.push(wh); }
+    dark.push(box(0.3, 1.5, 0.3, -1.2, 1.6, s*2.7));
+  }
+  // vertical fin in the airline's colour, cockpit windows, nose gear, cheat line
+  acc.push(prismZ([[-13.4,5.4],[-18.7,5.4],[-20.6,12.6],[-18.3,12.6]], -0.22, 0.22, 'fin'));
+  const ck = box(1.3, 0.55, 2.6, 17.35, 4.55, 0); ck.rotation.z = -0.55; dark.push(ck);
+  const nw = B.MeshBuilder.CreateCylinder('nw', { diameter: 0.75, height: 0.45, tessellation: 12 }, scene); nw.rotation.x = Math.PI/2; nw.position.set(14.6, 0.38, 0); dark.push(nw);
+  dark.push(box(0.22, 1.5, 0.22, 14.6, 1.3, 0));
+  acc.push(box(25, 0.28, 4.03, 0.5, 3.45, 0));
+  const w = merge(white), a = merge(acc), d = merge(dark);
+  w.material = whiteM; a.material = stdMat('liv_'+livery, { diffuse: hex(livery), spec: new C3(.4,.4,.4) }); d.material = glassDarkM;
+  for (const m of [w, a, d]){ m.isPickable = false; m.receiveShadows = true; }
+  return [w, a, d];
 }
 const LIVERIES = ['#1f6fb2','#c0392b','#0f8a6e','#d4a72c','#5b2a86'];
 for (let i = 0; i < 6; i++){                                  // parked at the jet bridges, nose to the terminal
-  const [b, a] = planeParts(LIVERIES[i % LIVERIES.length]);
-  for (const m of [b, a]){ m.position.set(-240 + i*90, 0.25, APRON.z1-50); m.rotation.y = -Math.PI/2; }
+  for (const m of planeParts(LIVERIES[i % LIVERIES.length])){ m.position.set(-240 + i*90, 0.25, APRON.z1-46); m.rotation.y = -Math.PI/2; }
 }
 const flights = [];
 for (let i = 0; i < 2; i++){
-  const [b, a] = planeParts(LIVERIES[(i+2) % LIVERIES.length]), root = new B.TransformNode('flight'+i, scene); b.parent = root; a.parent = root;
+  const root = new B.TransformNode('flight'+i, scene); for (const m of planeParts(LIVERIES[(i+2) % LIVERIES.length])) m.parent = root;
   flights.push({ root, t: i*35, land: i === 0 });
 }
 function updateFlights(dt){
@@ -1841,15 +1964,46 @@ for (const p of plots){ const r = dots.add(B.Matrix.Translation(p.x, 0.47, p.z),
 dots.flush();
 
 // traffic: cars with head- and tail-lights on every road
-const CAR_COLORS = ['#e9e6dc','#2b2f36','#c0503b','#1f6fb2','#9aa3ad','#d4a72c','#f4f1ea','#3f9a5a'];
-const carBody = B.MeshBuilder.CreateBox('car',{width:1.9, height:1.0, depth:4.2},scene); carBody.position.y = 0.6; carBody.bakeCurrentTransformIntoVertices();
-const cabin = B.MeshBuilder.CreateBox('cab',{width:1.7, height:0.7, depth:2.2},scene); cabin.position.set(0,1.35,-0.2); cabin.bakeCurrentTransformIntoVertices();
-const carMesh = B.Mesh.MergeMeshes([carBody, cabin], true, true);
-carMesh.material = stdMat('carM',{diffuse:new C3(1,1,1), spec:new C3(.6,.6,.6), power:64}); carMesh.isPickable = false;
-const head = B.MeshBuilder.CreateBox('hl',{width:1.6, height:0.25, depth:0.08},scene); head.position.set(0,0.75,2.12); head.bakeCurrentTransformIntoVertices();
-head.material = stdMat('hlM',{diffuse:hex('#fff6d8'), emissive:hex('#fff3c4')}); head.isPickable = false;
-const tail = B.MeshBuilder.CreateBox('tl',{width:1.6, height:0.25, depth:0.08},scene); tail.position.set(0,0.75,-2.12); tail.bakeCurrentTransformIntoVertices();
-tail.material = stdMat('tlM',{diffuse:hex('#ff3b30'), emissive:hex('#ff2a1f')}); tail.isPickable = false;
+// traffic: sedans, SUVs and city buses — bodies lofted from real side profiles, glass, wheels, head- and tail-lights
+const CAR_COLORS = ['#e9e6dc','#2b2f36','#c0503b','#1f6fb2','#9aa3ad','#d4a72c','#f4f1ea','#3f9a5a','#7a1f2b','#e3c22a'];
+const BUS_COLORS = ['#1f6fb2','#2e8b57','#d4a72c','#c0392b'];
+const carBodyM = stdMat('carM', { diffuse: new C3(1,1,1), spec: new C3(.75,.75,.75), power: 90 });
+const carDarkM = stdMat('carDarkM', { diffuse: hex('#16181c'), spec: new C3(.2,.2,.2) });
+const carHeadM = stdMat('hlM', { diffuse: hex('#fff6d8'), emissive: hex('#fff3c4') });
+const carTailM = stdMat('tlM', { diffuse: hex('#ff3b30'), emissive: hex('#ff2a1f') });
+function carKind(kind){
+  const body = [], glass = [], dark = [], hl = [], tl = [];
+  const wheel = (x, z, r, w) => { const c = B.MeshBuilder.CreateCylinder('wh', { diameter: 2*r, height: w, tessellation: 12 }, scene); c.rotation.z = Math.PI/2; c.position.set(x, r, z); dark.push(c); };
+  let half;
+  if (kind === 'sedan'){                                     // ~4.6 m saloon
+    body.push(loftSide([[-2.25,0.32],[2.28,0.32],[2.34,0.62],[2.2,0.84],[0.85,0.97],[-1.4,1.0],[-2.22,0.93],[-2.3,0.62]], 1.8, 1.66, 'sedan'));
+    glass.push(loftSide([[0.95,0.95],[0.05,1.42],[-0.95,1.44],[-1.5,0.98]], 1.64, 1.28, 'sedanG'));
+    body.push(box(1.26, 0.06, 0.95, 0, 1.45, -0.45));
+    for (const [x, z] of [[-0.8,1.4],[0.8,1.4],[-0.8,-1.38],[0.8,-1.38]]) wheel(x, z, 0.33, 0.24);
+    dark.push(box(1.0, 0.18, 0.06, 0, 0.55, 2.33), box(1.7, 0.16, 0.08, 0, 0.36, -2.29));
+    for (const s of [-1, 1]){ hl.push(box(0.42, 0.12, 0.06, s*0.6, 0.7, 2.32)); tl.push(box(0.42, 0.12, 0.06, s*0.62, 0.8, -2.31)); }
+    half = 2.3;
+  } else if (kind === 'suv'){                                // ~4.8 m SUV
+    body.push(loftSide([[-2.35,0.42],[2.38,0.42],[2.44,0.8],[2.3,1.12],[1.05,1.22],[-2.3,1.25],[-2.42,0.82]], 1.95, 1.84, 'suv'));
+    glass.push(loftSide([[1.1,1.18],[0.25,1.82],[-2.12,1.84],[-2.3,1.2]], 1.82, 1.56, 'suvG'));
+    body.push(box(1.5, 0.06, 2.3, 0, 1.86, -0.95)); dark.push(box(0.06, 0.08, 2.0, -0.7, 1.93, -0.95), box(0.06, 0.08, 2.0, 0.7, 1.93, -0.95));
+    for (const [x, z] of [[-0.88,1.5],[0.88,1.5],[-0.88,-1.48],[0.88,-1.48]]) wheel(x, z, 0.4, 0.28);
+    dark.push(box(1.2, 0.3, 0.06, 0, 0.72, 2.43), box(1.9, 0.2, 0.08, 0, 0.48, -2.4));
+    for (const s of [-1, 1]){ hl.push(box(0.45, 0.14, 0.06, s*0.66, 0.95, 2.42)); tl.push(box(0.16, 0.42, 0.06, s*0.86, 1.05, -2.41)); }
+    half = 2.42;
+  } else {                                                   // ~11.5 m city bus
+    body.push(loftSide([[-5.75,0.38],[5.75,0.38],[5.82,0.9],[5.74,3.0],[5.52,3.15],[-5.6,3.15],[-5.78,2.95]], 2.5, 2.42, 'bus'));
+    glass.push(box(2.53, 1.15, 10.0, 0, 2.15, -0.35), box(2.3, 1.75, 0.06, 0, 2.05, 5.8));
+    dark.push(box(2.54, 2.2, 1.1, 0, 1.45, 4.3), box(2.54, 2.2, 1.1, 0, 1.45, -0.6));  // doors
+    for (const [x, z] of [[-1.05,3.7],[1.05,3.7],[-1.05,-3.4],[1.05,-3.4]]) wheel(x, z, 0.52, 0.34);
+    for (const s of [-1, 1]){ hl.push(box(0.4, 0.18, 0.06, s*0.9, 0.85, 5.84)); tl.push(box(0.2, 0.5, 0.06, s*1.1, 1.1, -5.8)); }
+    half = 5.8;
+  }
+  const mk = (list, mat, name) => { const m = list.length > 1 ? merge(list) : list[0]; m.name = name; m.material = mat; m.isPickable = false; m.receiveShadows = true; return m; };
+  return { kind, half, parts: [mk(body, carBodyM, kind+'Body'), mk(glass, glassDarkM, kind+'Glass'), mk(dark, carDarkM, kind+'Dark'), mk(hl, carHeadM, kind+'Head'), mk(tl, carTailM, kind+'Tail')] };
+}
+const CAR_KINDS = [ { k: carKind('sedan'), n: 300 }, { k: carKind('suv'), n: 90 }, { k: carKind('bus'), n: 30 } ];
+const carLights = CAR_KINDS.flatMap(c => [c.k.parts[3], c.k.parts[4]]);
 // ---------- traffic lights at every intersection ----------
 // 4 signal heads per crossing (one per approach, on the far-right corner). Phases are offset between neighbouring
 // crossings so the whole city does not switch at once. Cars stop at red/amber and queue behind each other.
@@ -1903,39 +2057,46 @@ function updateSignals(dt){
 }
 
 const cars = [];
-const CAR_N = 420;
-const carBuf = new Float32Array(CAR_N*16);
+const CAR_N = CAR_KINDS.reduce((s, c) => s + c.n, 0);
 const lanes = new Map();
 (function spawnCars(){
-  for (let i=0;i<CAR_N;i++){
-    const alongX = rnd() < 0.5, dir = rnd() < 0.5 ? 1 : -1;
-    let road = alongX ? Math.floor(rnd()*(NBZ+1)) : Math.floor(rnd()*(NBX+1));
-    if (alongX && road === RIVER_ROW) road++;                 // those two roads are the river now
-    if (!alongX && road === RIVER_K) road++;
-    const line = alongX ? Z0 - RD/2 + road*PITCH : X0 - RD/2 + road*PITCH;
-    const len = alongX ? W + 2*RD : D + 2*RD, start = alongX ? X0 - RD : Z0 - RD;
-    const c = { alongX, dir, road, line: line + dir*2.6*(alongX ? 1 : -1), start, len, pos: rnd()*len, speed: lerp(8, 15, rnd()), v: 0 };
-    cars.push(c);
-    const key = (alongX ? 1 : 0) + '|' + road + '|' + dir; if (!lanes.has(key)) lanes.set(key, []); lanes.get(key).push(c);
+  // visibility order is shuffled so that a lower graphics level still shows every kind (sedans, SUVs, buses)
+  const total = CAR_KINDS.reduce((s, c) => s + c.n, 0), order = [...Array(total).keys()];
+  for (let i = total-1; i > 0; i--){ const j = Math.floor(rnd()*(i+1)); [order[i], order[j]] = [order[j], order[i]]; }
+  let idx = 0;
+  for (const ck of CAR_KINDS){
+    ck.buf = new Float32Array(ck.n*16);
+    for (let slot = 0; slot < ck.n; slot++, idx++){
+      const gi = order[idx];
+      const alongX = rnd() < 0.5, dir = rnd() < 0.5 ? 1 : -1;
+      let road = alongX ? Math.floor(rnd()*(NBZ+1)) : Math.floor(rnd()*(NBX+1));
+      if (alongX && road === RIVER_ROW) road++;                 // those two roads are the river now
+      if (!alongX && road === RIVER_K) road++;
+      const line = alongX ? Z0 - RD/2 + road*PITCH : X0 - RD/2 + road*PITCH;
+      const len = alongX ? W + 2*RD : D + 2*RD, start = alongX ? X0 - RD : Z0 - RD;
+      const bus = ck.k.kind === 'bus';
+      const c = { gi, ck, slot, half: ck.k.half, alongX, dir, road, line: line + dir*2.6*(alongX ? 1 : -1), start, len, pos: rnd()*len, speed: bus ? lerp(7, 10, rnd()) : lerp(8, 15, rnd()), v: 0 };
+      cars.push(c);
+      const key = (alongX ? 1 : 0) + '|' + road + '|' + dir; if (!lanes.has(key)) lanes.set(key, []); lanes.get(key).push(c);
+    }
+    const [bodyM] = ck.k.parts;
+    for (const m of ck.k.parts){ m.thinInstanceSetBuffer('matrix', ck.buf, 16, false); m.alwaysSelectAsActiveMesh = true; }
+    bodyM.thinInstanceRegisterAttribute('color', 4);
+    const pal = ck.k.kind === 'bus' ? BUS_COLORS : CAR_COLORS;
+    for (let s = 0; s < ck.n; s++){ const col = hex(pal[Math.floor(rnd()*pal.length)]); bodyM.thinInstanceSetAttributeAt('color', s, [col.r, col.g, col.b, 1], false); }
+    bodyM.thinInstanceBufferUpdated('color');
   }
-  carMesh.thinInstanceSetBuffer('matrix', carBuf, 16, false);
-  head.thinInstanceSetBuffer('matrix', carBuf, 16, false);
-  tail.thinInstanceSetBuffer('matrix', carBuf, 16, false);
-  carMesh.thinInstanceRegisterAttribute('color', 4);
-  cars.forEach((c, i) => { const col = hex(CAR_COLORS[i % CAR_COLORS.length]); carMesh.thinInstanceSetAttributeAt('color', i, [col.r, col.g, col.b, 1], false); });
-  carMesh.thinInstanceBufferUpdated('color');
-  [carMesh, head, tail].forEach(m => { m.alwaysSelectAsActiveMesh = true; m.receiveShadows = true; });
 })();
 let carsVisible = CAR_N;
-const STOP_BACK = RD/2 + 1.6, CAR_HALF = 2.1;
+const STOP_BACK = RD/2 + 1.6;
 // distance from the car's nose to the stop line of the next crossing ahead, and that crossing's signal
 function nextSignal(c, t){
-  const origin = c.alongX ? X0 - RD/2 : Z0 - RD/2, u = (c.start + c.pos - origin)/PITCH, m = (CAR_HALF + STOP_BACK)/PITCH, n = c.alongX ? NBX : NBZ;
+  const origin = c.alongX ? X0 - RD/2 : Z0 - RD/2, u = (c.start + c.pos - origin)/PITCH, m = (c.half + STOP_BACK)/PITCH, n = c.alongX ? NBX : NBZ;
   const k = c.dir > 0 ? Math.floor(u + m) + 1 : Math.ceil(u - m) - 1;
   if (k < 0 || k > n) return null;
   const ix = c.alongX ? k : c.road, iz = c.alongX ? c.road : k;
   if (!SIG_AT.has(ix*1000+iz)) return null;
-  const dist = (c.dir > 0 ? (k - u) : (u - k))*PITCH - STOP_BACK - CAR_HALF;
+  const dist = (c.dir > 0 ? (k - u) : (u - k))*PITCH - STOP_BACK - c.half;
   return { dist, st: sigState(ix, iz, c.alongX, t) };
 }
 function updateCars(dt){
@@ -1950,31 +2111,45 @@ function updateCars(dt){
         const stop = sg.st === 2 || (sg.st === 1 && sg.dist > 4 + c.v*0.6);   // amber: go only if too close to stop
         if (stop) want = Math.min(want, Math.max(0, (sg.dist - 0.3) * 0.7));
       }
-      if (q > 0){ const ahead = lane[q-1], gap = (ahead.pos - c.pos) * c.dir - 2*CAR_HALF;   // keep 3 m behind the car ahead
+      if (q > 0){ const ahead = lane[q-1], gap = (ahead.pos - c.pos) * c.dir - ahead.half - c.half;   // keep 3 m behind the car ahead
         if (gap > -2) want = Math.min(want, Math.max(0, (gap - 3) * 0.9)); }
-      c.v = want < c.v ? Math.max(want, c.v - 14*dt) : Math.min(want, c.v + 3.5*dt);
+      c.v = want < c.v ? Math.max(want, c.v - 14*dt) : Math.min(want, c.v + (c.half > 4 ? 1.8 : 3.5)*dt);
       c.pos = (c.pos + c.dir*c.v*dt + c.len) % c.len;
     }
   }
-  for (let i=0;i<CAR_N;i++){
-    const c = cars[i], o = i*16;
+  for (const c of cars){
+    const buf = c.ck.buf, o = c.slot*16;
     const along = c.start + c.pos, x = c.alongX ? along : c.line, z = c.alongX ? c.line : along;
-    const hide = i >= carsVisible || (x > parkMin.x-2 && x < parkMax.x+2 && z > parkMin.z-2 && z < parkMax.z+2);
+    const hide = c.gi >= carsVisible || (x > parkMin.x-2 && x < parkMax.x+2 && z > parkMin.z-2 && z < parkMax.z+2);
     const th = c.alongX ? (c.dir > 0 ? Math.PI/2 : -Math.PI/2) : (c.dir > 0 ? 0 : Math.PI), cs = Math.cos(th), sn = Math.sin(th), k = hide ? 0 : 1;
-    carBuf[o]=cs*k; carBuf[o+1]=0; carBuf[o+2]=-sn*k; carBuf[o+3]=0;
-    carBuf[o+4]=0; carBuf[o+5]=k; carBuf[o+6]=0; carBuf[o+7]=0;
-    carBuf[o+8]=sn*k; carBuf[o+9]=0; carBuf[o+10]=cs*k; carBuf[o+11]=0;
-    carBuf[o+12]=x; carBuf[o+13]=0.05; carBuf[o+14]=z; carBuf[o+15]=1;
+    buf[o]=cs*k; buf[o+1]=0; buf[o+2]=-sn*k; buf[o+3]=0;
+    buf[o+4]=0; buf[o+5]=k; buf[o+6]=0; buf[o+7]=0;
+    buf[o+8]=sn*k; buf[o+9]=0; buf[o+10]=cs*k; buf[o+11]=0;
+    buf[o+12]=x; buf[o+13]=0.05; buf[o+14]=z; buf[o+15]=1;
   }
-  carMesh.thinInstanceBufferUpdated('matrix'); head.thinInstanceBufferUpdated('matrix'); tail.thinInstanceBufferUpdated('matrix');
+  for (const ck of CAR_KINDS) for (const m of ck.k.parts) m.thinInstanceBufferUpdated('matrix');
 }
 
 // ---------- populate others ----------
 function hexArr(h){ const c=hex(h); return [c.r,c.g,c.b,1]; }
 function templatesFor(zone){ return TPL_KEYS.filter(k=>TPL[k].zones.includes(zone)); }
 const landmarkTaken = k => plots.some(q => q.tpl === k);
+const isLm = p => !!(p.tpl && TPL[p.tpl] && TPL[p.tpl].landmark);
+// where a building stands: its plot, or for a skyscraper copy the centre of its block (plots are 16 per block, in order)
+function bpos(p){
+  if (!isLm(p)) return { x:p.x, z:p.z };
+  const b = Math.floor(p.id/16)*16, a = plots[b], c = plots[b+15];
+  return { x:(a.x+c.x)/2, z:(a.z+c.z)/2 };
+}
+// a tap on city land around a skyscraper selects the skyscraper
+function landmarkOfBlock(p){
+  const b = Math.floor(p.id/16)*16;
+  for (let i = b; i < b+16 && i < plots.length; i++) if (isLm(plots[i])) return plots[i];
+  return null;
+}
 function plotMatrix(p, sy=1){
-  return B.Matrix.Compose(new V3(1,sy,1), B.Quaternion.RotationAxis(V3.Up(), p.rot*Math.PI/2), new V3(p.x,0.42,p.z));
+  const c = bpos(p);
+  return B.Matrix.Compose(new V3(1,sy,1), B.Quaternion.RotationAxis(V3.Up(), p.rot*Math.PI/2), new V3(c.x,0.42,c.z));
 }
 function addBuilding(p, refresh){
   const t = getVariant(p); p.vkey = t.key;
@@ -2002,13 +2177,22 @@ function populateDemo(){
     addBuilding(p, false);
   }
   // the 10 landmark copies around the park, owned by the city and for sale (same rule as the server's seed)
-  const spots = [], free = plots.filter(q => q.zone==='cen' && q.state==='empty').sort((a,b) => (a.x*a.x+a.z*a.z) - (b.x*b.x+b.z*b.z) || a.id - b.id);
-  for (const k of LM_KEYS){
-    const p = free.find(q => !spots.includes(q) && spots.every(t => Math.hypot(t.x-q.x, t.z-q.z) >= 40)); if (!p) break;
-    spots.push(p);
+  // the 10 skyscraper copies, each alone in a free block around the park (same rule as the server's landmarkBlocks)
+  const freeBlocks = [];
+  for (let b = 0; b + 16 <= plots.length; b += 16){
+    const ps = plots.slice(b, b+16);
+    if (ps.every(q => q.state==='empty')) freeBlocks.push({ ps, z: ps[0].zone, d: Math.hypot((ps[0].x+ps[15].x)/2, (ps[0].z+ps[15].z)/2) });
+  }
+  const zr = z => z==='cen' ? 0 : z==='com' ? 1 : 2;
+  freeBlocks.sort((a,b) => zr(a.z) - zr(b.z) || a.d - b.d);
+  const byHeight = [...LM_KEYS].sort((a,b) => CAT.landmarks[b].realHeight - CAT.landmarks[a].realHeight);
+  byHeight.forEach((k, i) => {
+    const blk = freeBlocks[i]; if (!blk) return;
+    const p = blk.ps[5];
+    for (const q of blk.ps) if (q !== p) Object.assign(q, { state:'owned', owner:'Shahar hokimligi' });
     Object.assign(p, { state:'sale', owner:'Shahar hokimligi', tpl:k, style:'hitech', floors:1, roof:'none', color:'#cfe3ee', accent:'#2a9d8f', rot:0, likes: 40 });
     addBuilding(p, false);
-  }
+  });
   for (const p of plots) paintPad(p, false);
 }
 function flushBuffers(){
@@ -2031,13 +2215,15 @@ const labelY = p => 0.42 + (p.tpl && T[p.vkey] ? T[p.vkey].height : 0) + 2.5;
 const TG_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2AABEE"/><path d="M5.5 11.8l11-4.3c.5-.2 1 .1.8.9l-1.9 8.8c-.1.6-.5.8-1 .5l-2.8-2.1-1.4 1.3c-.2.2-.3.3-.6.3l.2-2.9 5.3-4.8c.2-.2 0-.3-.3-.1l-6.6 4.1-2.8-.9c-.6-.2-.6-.6.1-.8z" fill="#fff"/></svg>';
 function setLabel(p){
   let text = p.owner ? (p.ownerTg ? '@' + p.ownerTg : p.owner) : null;
+  if (!p.tpl && p.owner === 'Shahar hokimligi') text = null;          // city land around a skyscraper: no tag
   if (text && p.tpl && TPL[p.tpl] && TPL[p.tpl].landmark){ // landmarks: the building's name first
     const nm = TPL[p.tpl].name.replace(/ \(.*\)$/, '');
     text = p.owner === 'Shahar hokimligi' ? nm : `${nm} · ${text}`;
   }
   if (!text){ p.lbl = null; return; }
   const kind = p.state==='mine' ? 'mine' : p.ownerTg ? 'tg' : 'nick';
-  p.lbl = { text, kind, pos: new V3(p.x, labelY(p), p.z), key: kind + '|' + text };
+  const bp = bpos(p);
+  p.lbl = { text, kind, pos: new V3(bp.x, labelY(p), bp.z), key: kind + '|' + text };
 }
 const lblPool = [];
 function lblEl(i){
@@ -2144,7 +2330,7 @@ const zoneOf = p => ZONES[p.zone];
 // per-mahalla occupancy and "my plots", cached; any plot repaint (state change) invalidates them
 let occCache = null, mineCache = null;
 function occOf(d){
-  if (!occCache){ const n = {}, t = {}; for (const q of plots){ t[q.district] = (t[q.district]||0) + 1; if (q.state!=='empty') n[q.district] = (n[q.district]||0) + 1; } occCache = {}; for (const k in t) occCache[k] = (n[k]||0) / t[k]; }
+  if (!occCache){ const n = {}, t = {}; for (const q of plots){ t[q.district] = (t[q.district]||0) + 1; if (q.state!=='empty' && !(q.owner==='Shahar hokimligi' && !q.tpl)) n[q.district] = (n[q.district]||0) + 1; } occCache = {}; for (const k in t) occCache[k] = (n[k]||0) / t[k]; }
   return occCache[d] || 0;
 }
 function landPrice(p){
@@ -2181,7 +2367,7 @@ function flyTo(x,z,radius,beta){
 function select(p){
   S.selected = p;
   if (!p){ selector.setEnabled(false); stopAuto(); return; }
-  selector.position.set(p.x,0.62,p.z); selector.setEnabled(true);
+  { const c = bpos(p); selector.position.set(c.x,0.62,c.z); selector.scaling.setAll(isLm(p) ? 4.6 : 1); } selector.setEnabled(true);
   // bring the selected plot to the centre: it becomes the rotation pivot
   if (!fly || fly.to.x!==p.x || fly.to.z!==p.z) flyTo(p.x, p.z);
 }
@@ -2466,7 +2652,7 @@ function applyQuality(q){
       pipeline.imageProcessing.vignetteEnabled = true; pipeline.imageProcessing.vignetteWeight = 1.4;
       glow = new B.GlowLayer('glow', scene, { blurKernelSize: 32, mainTextureRatio: 0.5 });
       glow.intensity = 0.6;
-      for (const m of [...bulbs.meshes(), ...dots.meshes(), ...sigLamps.flatMap(l => l.meshes()), head, tail]) glow.addIncludedOnlyMesh(m);
+      for (const m of [...bulbs.meshes(), ...dots.meshes(), ...sigLamps.flatMap(l => l.meshes()), ...carLights]) glow.addIncludedOnlyMesh(m);
     }
   }
   scene.fogDensity = q==='low' ? 0.00034 : 0.00028;
@@ -2653,6 +2839,7 @@ function handleTap(x, y){
   let p = null;
   if (!hit || !hit.hit){
     const g = groundAt(x, y); p = g ? plotAtPoint(g.x, g.z) : null;
+    if (p && !p.tpl && p.owner === 'Shahar hokimligi') p = landmarkOfBlock(p) || p;
     if (!p){ if (S.sheet!=='build'){ closeSheet(); select(null); } return; }
   }
   else for (const t of Object.values(T)){ if (t.parts.some(pt=>pt.mesh===hit.pickedMesh)){ const pid=t.plotsByInst[hit.thinInstanceIndex]; if(pid!=null) p=plots[pid]; break; } }

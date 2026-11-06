@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createPool, migrate, Db } from '../src/db.js';
-import { seed } from '../src/seed.js';
+import { seed, landmarkBlocks } from '../src/seed.js';
 import { buildApp } from '../src/server.js';
 import { ledgerMismatches, clearEconomyCache, allPlots } from '../src/game.js';
 import { config } from '../src/config.js';
@@ -309,6 +309,35 @@ test('landmark copies: all 10 stand in the centre from the start, for sale, one 
   assert.equal(r.json().plot.owner.nickname, 'tycoon');
   assert.equal(r.json().plot.building.template, 'lm_lotte');
   assert.equal((await a.me()).balance, before - lotte.price);
+  assert.deepEqual(await ledgerMismatches(db), []);
+});
+
+test('skyscraper copies: each alone in its own block, the rest of the block is city land; a crowded one is moved', async () => {
+  const blockOf = (id: number) => Math.floor(id / 16);
+  const check = async () => {
+    const all = await everyPlot();
+    const lm = all.filter((x: any) => x.building && x.building.template.startsWith('lm_'));
+    assert.equal(lm.length, 10);
+    assert.equal(new Set(lm.map((x: any) => blockOf(x.id))).size, 10, 'one block each');
+    for (const l of lm) for (const q of all.filter((y: any) => blockOf(y.id) === blockOf(l.id) && y.id !== l.id)) {
+      assert.ok(!q.building, 'no other building in a skyscraper block');
+    }
+    return lm;
+  };
+  const lm = await check();
+  // a player's building appears in Shanghai Tower's block (e.g. an old city): the tower moves, the player keeps the plot
+  const sh = lm.find((x: any) => x.building.template === 'lm_shanghai');
+  const neighbour = (await everyPlot()).find((y: any) => blockOf(y.id) === blockOf(sh.id) && y.id !== sh.id);
+  const me = (await db.query("select id from users where role <> 'bot' limit 1")).rows[0].id;
+  await db.query("update plots set owner_id = $1, status = 'owned' where id = $2", [me, neighbour.id]);
+  await db.query("insert into buildings(plot_id,template,style,floors,roof,rotation,color,accent,ready_at,last_collected_at) values ($1,'house','milliy',1,'gable',0,'#ecd9b4','#2a9d8f',now(),now())", [neighbour.id]);
+  await landmarkBlocks(db);
+  const after = await check();
+  const sh2 = after.find((x: any) => x.building.template === 'lm_shanghai');
+  assert.notEqual(blockOf(sh2.id), blockOf(sh.id), 'moved to a free block');
+  assert.equal(sh2.state, sh.state); assert.equal(sh2.owner.nickname, sh.owner.nickname);
+  const kept = (await db.query('select owner_id from plots where id = $1', [neighbour.id])).rows[0];
+  assert.equal(Number(kept.owner_id), Number(me), 'the player keeps their plot');
   assert.deepEqual(await ledgerMismatches(db), []);
 });
 

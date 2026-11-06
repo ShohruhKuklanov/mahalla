@@ -41,6 +41,7 @@ export async function seed(db: Db, opts: { demo: boolean; log?: (m: string) => v
   });
   if (opts.demo) await seedDemo(db, log);
   await seedLandmarks(db, log);
+  await landmarkBlocks(db, log);
 }
 
 const NICKS = ['sardor_77', 'Malika', 'jasur.dev', 'Dilnoza', 'bekzod_uz', 'Aziza.k', 'Otabek', 'Shahzoda', 'timur99', 'nodira', 'Ulug‘bek', 'Sevara', 'Javohir', 'Kamola', 'rustam_b', 'Laylo', 'Akmal', 'Madina', 'Sherzod', 'Zarina', 'Bobur', 'Jahongir', 'Islom', 'Feruza'];
@@ -115,5 +116,61 @@ export async function seedLandmarks(db: Db, log: (m: string) => void = () => {})
       n++;
     }
     if (n) log(`landmarks placed: ${n}`);
+  });
+}
+
+/**
+ * Every skyscraper copy stands alone in its own block (45 × 45 m, real proportions at half the real height).
+ * - A copy that shares its block with another building or a player's plot is moved to a block where all 16 plots are
+ *   free (nearest to the centre, 'cen' zone first); its owner, listing and likes move with it.
+ * - The other free plots of its block become city land (owned by "Shahar hokimligi", not for sale).
+ * Players' plots are never taken. Idempotent: runs on every start, does nothing once settled.
+ */
+export async function landmarkBlocks(db: Db, log: (m: string) => void = () => {}) {
+  await tx(db, async (c) => {
+    const city = (await c.query("select id from users where nickname_lower = 'shahar hokimligi'")).rows[0]?.id;
+    if (!city) return;
+    const plots = (await c.query(
+      `select p.id, p.x, p.z, p.zone, p.status, p.owner_id, b.template
+         from plots p left join buildings b on b.plot_id = p.id order by p.id for update of p`)).rows as
+      { id: number; x: number; z: number; zone: string; status: string; owner_id: number | null; template: string | null }[];
+    const byId = new Map(plots.map((p) => [p.id, p]));
+    const blockOf = (id: number) => Math.floor(id / 16);            // plots are laid out 16 per block, block by block
+    const blockPlots = (b: number) => plots.filter((p) => blockOf(p.id) === b);
+    const lms = plots.filter((p) => p.template && p.template.startsWith('lm_'))
+      .sort((a, b) => (CATALOG.landmarks[b.template!]?.realHeight ?? 0) - (CATALOG.landmarks[a.template!]?.realHeight ?? 0));
+    const used = new Set<number>();
+    const freeForCity = (p: typeof plots[0]) => (p.status === 'empty' && p.owner_id === null) || (p.owner_id === city && !p.template && p.status === 'owned');
+    let moved = 0, claimed = 0;
+    for (const lm of lms) {
+      let blk = blockOf(lm.id);
+      const ok = !used.has(blk) && blockPlots(blk).every((q) => q.id === lm.id || freeForCity(q));
+      if (!ok) {
+        const cand = new Map<number, typeof plots>();
+        for (const p of plots) { const b = blockOf(p.id); if (!cand.has(b)) cand.set(b, []); cand.get(b)!.push(p); }
+        const zoneRank = (z: string) => (z === 'cen' ? 0 : z === 'com' ? 1 : 2);
+        const choices = [...cand.entries()]
+          .filter(([b, ps]) => !used.has(b) && ps.length === 16 && ps.every(freeForCity))
+          .map(([b, ps]) => ({ b, ps, cx: ps.reduce((s, p) => s + p.x, 0) / 16, cz: ps.reduce((s, p) => s + p.z, 0) / 16 }))
+          .sort((a, b) => zoneRank(a.ps[0].zone) - zoneRank(b.ps[0].zone) || Math.hypot(a.cx, a.cz) - Math.hypot(b.cx, b.cz));
+        if (!choices.length) { log(`landmark ${lm.template}: no free block`); used.add(blk); continue; }
+        const target = choices[0], anchor = target.ps[5];             // an inner plot of the block
+        const old = (await c.query('select owner_id, status, purchased_at from plots where id = $1', [lm.id])).rows[0];
+        await c.query('update plots set owner_id = $1, status = $2, purchased_at = $3 where id = $4', [old.owner_id, old.status, old.purchased_at, anchor.id]);
+        await c.query('update buildings set plot_id = $1 where plot_id = $2', [anchor.id, lm.id]);
+        await c.query("update listings set plot_id = $1 where plot_id = $2 and status = 'active'", [anchor.id, lm.id]);
+        await c.query('update likes set plot_id = $1 where plot_id = $2', [anchor.id, lm.id]);
+        await c.query("update plots set owner_id = null, status = 'empty', purchased_at = null where id = $1", [lm.id]);
+        Object.assign(byId.get(anchor.id)!, { owner_id: old.owner_id, status: old.status, template: lm.template });
+        Object.assign(byId.get(lm.id)!, { owner_id: null, status: 'empty', template: null });
+        blk = target.b; moved++;
+      }
+      used.add(blk);
+      for (const q of blockPlots(blk)) if (q.status === 'empty' && q.owner_id === null) {
+        await c.query("update plots set owner_id = $1, status = 'owned', purchased_at = now() where id = $2 and status = 'empty'", [city, q.id]);
+        q.owner_id = city; q.status = 'owned'; claimed++;
+      }
+    }
+    if (moved || claimed) log(`landmark blocks: ${moved} moved, ${claimed} plots reserved`);
   });
 }

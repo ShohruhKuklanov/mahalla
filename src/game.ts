@@ -19,7 +19,9 @@ export async function economy(db: Db | Tx): Promise<Economy> {
 export function clearEconomyCache() { ecoCache = null; }
 
 async function occupancy(c: Db | Tx): Promise<Map<number, number>> {
-  const r = await c.query("select district_id, avg((status <> 'empty')::int)::float occ from plots group by district_id");
+  // city land around the skyscrapers (owned by the city, no building) does not push land prices up
+  const r = await c.query(`select p.district_id, avg((p.status <> 'empty' and not coalesce(u.nickname_lower = 'shahar hokimligi' and b.id is null, false))::int)::float occ
+                             from plots p left join users u on u.id = p.owner_id left join buildings b on b.plot_id = p.id group by p.district_id`);
   return new Map(r.rows.map((x) => [x.district_id, x.occ]));
 }
 
