@@ -12,7 +12,7 @@ import { AppError, E } from './errors.js';
 import { SESSION_COOKIE, SessionUser, createSession, destroySession, sessionUser, upsertIdentity, verifyTelegram } from './auth.js';
 import { checkNickname, isCleanText, suggestions } from './nickname.js';
 import * as game from './game.js';
-import { DISTRICTS, ZONES, TEMPLATES, COLORS } from './economy.js';
+import { DISTRICTS, ZONES } from './economy.js';
 
 declare module 'fastify' { interface FastifyRequest { user: SessionUser | null } }
 
@@ -153,8 +153,7 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
   app.get('/api/city', async () => {
     const eco = await game.economy(db);
     return {
-      districts: DISTRICTS, zones: ZONES, colors: COLORS,
-      templates: Object.fromEntries(Object.entries(TEMPLATES).map(([k, t]) => [k, { name: t.name, zones: t.zones, cost: t.cost, income: t.income, buildSeconds: t.buildSeconds }])),
+      districts: DISTRICTS, zones: ZONES, // building types, styles, prices: the catalog block in index.html
       economy: { plotLimit: eco.plot_limit, saleFee: eco.sale_fee, daySeconds: config.daySeconds },
       plots: await game.allPlots(db),
     };
@@ -171,7 +170,11 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
   });
   app.post('/api/plots/:id/build', async (req) => {
     const id = plotId(req);
-    const body = z.object({ template: z.string(), rotation: z.number().int().min(0).max(3), color: z.string(), accent: z.string() }).parse(req.body);
+    const body = z.object({
+      template: z.string().max(40), rotation: z.number().int().min(0).max(3).optional(),
+      color: z.string().max(9).optional(), accent: z.string().max(9).optional(),
+      style: z.string().max(10).optional(), floors: z.number().int().optional(), roof: z.string().max(10).optional(),
+    }).parse(req.body);
     const r = await game.buildOnPlot(db, req.user, id, body, idem(req));
     await pushPlot(id);
     return { ...r, plot: await game.onePlot(db, id) };

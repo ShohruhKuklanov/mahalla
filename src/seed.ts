@@ -1,6 +1,6 @@
 import type { Db } from './db.js';
 import { tx } from './db.js';
-import { cityPlots, DISTRICTS, ZONES, TEMPLATES, ECONOMY_DEFAULTS, COLORS, ZoneCode } from './economy.js';
+import { cityPlots, DISTRICTS, ZONES, ECONOMY_DEFAULTS, CATALOG, ZoneCode } from './economy.js';
 
 /** Idempotent: safe to run on every start. */
 export async function seed(db: Db, opts: { demo: boolean; log?: (m: string) => void }) {
@@ -12,11 +12,15 @@ export async function seed(db: Db, opts: { demo: boolean; log?: (m: string) => v
     for (const [code, z] of Object.entries(ZONES)) {
       await c.query('insert into zones(code,name,base_price) values ($1,$2,$3) on conflict (code) do update set name = excluded.name, base_price = excluded.base_price', [code, z.name, z.base]);
     }
-    for (const [code, t] of Object.entries(TEMPLATES)) {
+    // building_templates keeps the "active" switch per type (admin can retire one); prices live in the catalog
+    const tplRows: [string, string, string[], number, number, number][] = [
+      ...Object.entries(CATALOG.types).map(([k, t]) => [k, t.name, t.zones, t.cost[0], t.build[0], t.income[0]] as [string, string, string[], number, number, number]),
+      ...Object.entries(CATALOG.landmarks).map(([k, l]) => [k, l.name + ' nusxasi', ['cen'], l.cost, l.build, l.income] as [string, string, string[], number, number, number]),
+    ];
+    for (const r of tplRows) {
       await c.query(
         `insert into building_templates(code,name,zones,cost,build_seconds,income_per_day) values ($1,$2,$3,$4,$5,$6)
-         on conflict (code) do update set name=excluded.name, zones=excluded.zones, cost=excluded.cost, build_seconds=excluded.build_seconds, income_per_day=excluded.income_per_day`,
-        [code, t.name, t.zones, t.cost, t.buildSeconds, t.income]);
+         on conflict (code) do update set name=excluded.name, zones=excluded.zones, cost=excluded.cost, build_seconds=excluded.build_seconds, income_per_day=excluded.income_per_day`, r);
     }
     for (const [k, v] of Object.entries(ECONOMY_DEFAULTS)) {
       await c.query('insert into economy_config(key,value) values ($1,$2) on conflict (key) do nothing', [k, JSON.stringify(v)]);
@@ -46,7 +50,6 @@ async function seedDemo(db: Db, log: (m: string) => void) {
   if (rows[0].n > 0) return;
   let s = 20261105;
   const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
-  const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)];
   await tx(db, async (c) => {
     const botIds: number[] = [];
     for (const nick of NICKS) {
@@ -58,33 +61,24 @@ async function seedDemo(db: Db, log: (m: string) => void) {
       await c.query("insert into auth_identities(user_id,provider,subject) values ($1,'bot',$2)", [id, nick]);
       await c.query('insert into wallets(user_id,balance) values ($1,0)', [id]);
     }
-    const occ: Record<ZoneCode, number> = { res: 0.55, com: 0.5, cen: 0.38 };
-    const plots = (await c.query('select id, zone from plots order by id')).rows as { id: number; zone: ZoneCode }[];
+    // one showcase building per mahalla (one per style); everything else is free land for real players
+    const show = [
+      { district: 0, template: 'cafe',   style: 'milliy', floors: 2,  roof: 'dome',    color: '#ecd9b4', accent: '#2a9d8f' },
+      { district: 1, template: 'office', style: 'hitech', floors: 12, roof: 'helipad', color: '#b7d3e3', accent: '#1f6fb2' },
+      { district: 2, template: 'flat',   style: 'modern', floors: 9,  roof: 'garden',  color: '#f4f1ea', accent: '#e08a2c' },
+    ];
     let n = 0;
-    for (const p of plots) {
-      if (rnd() >= occ[p.zone]) continue;
-      const owner = pick(botIds);
-      const opts = Object.keys(TEMPLATES).filter((k) => TEMPLATES[k].zones.includes(p.zone));
-      let k = pick(opts);
-      if (p.zone === 'res' && rnd() < 0.5) k = rnd() < 0.6 ? 'house' : 'villa';
-      if (p.zone === 'cen' && rnd() < 0.22) k = rnd() < 0.5 ? 'tower' : 'office';
-      const color = k === 'tower' ? pick(COLORS.glass) : pick(COLORS.wall);
+    for (const sh of show) {
+      const p = (await c.query("select id from plots where district_id = $1 and zone <> 'res' and status = 'empty' order by id limit 1", [sh.district])).rows[0];
+      if (!p) continue;
+      const owner = botIds[n % botIds.length];
       await c.query("update plots set owner_id=$1, status='owned', purchased_at=now() - interval '20 days' where id=$2", [owner, p.id]);
       await c.query(
-        `insert into buildings(plot_id,template,rotation,color,accent,ready_at,last_collected_at)
-         values ($1,$2,$3,$4,$5, now() - interval '19 days', now())`,
-        [p.id, k, Math.floor(rnd() * 4), color, pick(COLORS.accent)]);
-      if (rnd() < 0.07) {
-        // a few demo plots are for sale
-        await c.query('insert into listings(plot_id,seller_id,price) values ($1,$2,$3)', [p.id, owner, 1]);
-      }
+        `insert into buildings(plot_id,template,style,floors,roof,rotation,color,accent,ready_at,last_collected_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8, now() - interval '19 days', now())`,
+        [p.id, sh.template, sh.style, sh.floors, sh.roof, Math.floor(rnd() * 4), sh.color, sh.accent]);
       n++;
     }
-    // price the demo listings at the system estimate (needs occupancy, so done after placement)
-    await c.query(`
-      update listings l set price = greatest(100, round(( z.base_price * p.location_factor * 1.25 * 1.25 + t.cost * 0.9) / 100) * 100)
-      from plots p join zones z on z.code = p.zone join buildings b on b.plot_id = p.id join building_templates t on t.code = b.template
-      where l.plot_id = p.id and l.status = 'active' and l.price = 1`);
     log(`demo city: ${botIds.length} neighbours, ${n} buildings`);
   });
 }

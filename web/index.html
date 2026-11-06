@@ -88,6 +88,10 @@
   .sw.sel{border-color:var(--ink)}
   .lbl2{font-size:12px;color:var(--muted);font-weight:700;margin:0 4px 0 0;text-transform:uppercase;letter-spacing:.6px}
 
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+  .chipb{padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.07);font-weight:700;font-size:13px;color:var(--muted)}
+  .chipb.on{background:var(--ink);color:#141922}
+  .tpl small+small{margin-top:0}
   .seg{display:flex;background:rgba(255,255,255,.06);border-radius:12px;padding:4px;gap:4px;margin-bottom:14px}
   .seg button{flex:1;padding:10px 6px;border-radius:9px;font-weight:700;font-size:13px;color:var(--muted)}
   .seg button.on{background:var(--ink);color:#141922}
@@ -184,6 +188,370 @@
 <div id="sheet" class="glass"><div class="grab"></div><button class="x" id="sheetX" aria-label="Yopish">✕</button><div id="sheetBody"></div></div>
 <div id="toast" class="glass"></div>
 
+<script id="catalog" type="application/json">
+{
+ "_comment": "Yagona katalog: 3D mijoz ham, server ham shu blokni o'qiydi (src/economy.ts). O'zgartirsangiz, ikkalasi birga o'zgaradi.",
+ "floorHeight": 3.4,
+ "styles": {
+  "modern": {
+   "name": "Zamonaviy",
+   "walls": [
+    "#f4f1ea",
+    "#e9e4da",
+    "#dfe3e8",
+    "#efd9c8",
+    "#cfe0ea",
+    "#d6e6d4",
+    "#3a4049"
+   ]
+  },
+  "hitech": {
+   "name": "High-tech",
+   "walls": [
+    "#cfe3ee",
+    "#b7d3e3",
+    "#d9e2e8",
+    "#c2cfdb",
+    "#bfdcd5",
+    "#e3dccb"
+   ]
+  },
+  "milliy": {
+   "name": "Milliy",
+   "walls": [
+    "#ecd9b4",
+    "#f2e6d0",
+    "#e0bf94",
+    "#f6efe2",
+    "#d9a882",
+    "#eadcc0"
+   ]
+  }
+ },
+ "accents": [
+  "#2a9d8f",
+  "#1f6fb2",
+  "#c0503b",
+  "#e08a2c",
+  "#3f9a5a",
+  "#7b5ea7",
+  "#d4a72c",
+  "#e9e6dc"
+ ],
+ "roofs": {
+  "flat": "Tekis",
+  "gable": "Ikki nishabli",
+  "hip": "To‘rt nishabli",
+  "dome": "Gumbaz",
+  "garden": "Bog‘ tom",
+  "antenna": "Antenna",
+  "helipad": "Vertolyot maydoni",
+  "spire": "Shpil"
+ },
+ "types": {
+  "house": {
+   "name": "Uy",
+   "zones": [
+    "res"
+   ],
+   "floors": [
+    1,
+    3
+   ],
+   "w": 7.0,
+   "d": 6.4,
+   "cost": [
+    2000,
+    900
+   ],
+   "income": [
+    150,
+    60
+   ],
+   "build": [
+    20,
+    10
+   ],
+   "roofs": [
+    "gable",
+    "hip",
+    "flat",
+    "dome",
+    "garden"
+   ]
+  },
+  "villa": {
+   "name": "Hovli uy",
+   "zones": [
+    "res"
+   ],
+   "floors": [
+    2,
+    3
+   ],
+   "w": 8.0,
+   "d": 7.0,
+   "cost": [
+    3600,
+    900
+   ],
+   "income": [
+    240,
+    60
+   ],
+   "build": [
+    30,
+    10
+   ],
+   "roofs": [
+    "hip",
+    "gable",
+    "flat",
+    "dome",
+    "garden"
+   ]
+  },
+  "flat": {
+   "name": "Ko‘p qavatli uy",
+   "zones": [
+    "res",
+    "com"
+   ],
+   "floors": [
+    4,
+    16
+   ],
+   "w": 8.4,
+   "d": 8.4,
+   "cost": [
+    5000,
+    450
+   ],
+   "income": [
+    300,
+    35
+   ],
+   "build": [
+    40,
+    8
+   ],
+   "roofs": [
+    "flat",
+    "garden",
+    "antenna",
+    "dome"
+   ]
+  },
+  "shop": {
+   "name": "Do‘kon",
+   "zones": [
+    "com",
+    "cen"
+   ],
+   "floors": [
+    1,
+    3
+   ],
+   "w": 8.4,
+   "d": 7.6,
+   "cost": [
+    3000,
+    1000
+   ],
+   "income": [
+    400,
+    120
+   ],
+   "build": [
+    20,
+    10
+   ],
+   "roofs": [
+    "flat",
+    "garden",
+    "gable",
+    "dome"
+   ]
+  },
+  "cafe": {
+   "name": "Choyxona / kafe",
+   "zones": [
+    "res",
+    "com",
+    "cen"
+   ],
+   "floors": [
+    1,
+    2
+   ],
+   "w": 7.6,
+   "d": 7.6,
+   "cost": [
+    3500,
+    1200
+   ],
+   "income": [
+    480,
+    150
+   ],
+   "build": [
+    25,
+    10
+   ],
+   "roofs": [
+    "dome",
+    "flat",
+    "garden",
+    "gable"
+   ]
+  },
+  "office": {
+   "name": "Ofis",
+   "zones": [
+    "com",
+    "cen"
+   ],
+   "floors": [
+    3,
+    16
+   ],
+   "w": 8.6,
+   "d": 8.6,
+   "cost": [
+    6000,
+    500
+   ],
+   "income": [
+    500,
+    45
+   ],
+   "build": [
+    40,
+    8
+   ],
+   "roofs": [
+    "flat",
+    "antenna",
+    "helipad",
+    "garden"
+   ]
+  },
+  "tower": {
+   "name": "Biznes markaz",
+   "zones": [
+    "cen"
+   ],
+   "floors": [
+    12,
+    24
+   ],
+   "w": 8.8,
+   "d": 8.8,
+   "cost": [
+    12000,
+    600
+   ],
+   "income": [
+    1000,
+    45
+   ],
+   "build": [
+    90,
+    6
+   ],
+   "roofs": [
+    "antenna",
+    "helipad",
+    "spire",
+    "flat"
+   ]
+  }
+ },
+ "landmarkScale": 0.15,
+ "landmarks": {
+  "lm_burj": {
+   "name": "Burj Khalifa",
+   "city": "Dubay",
+   "realHeight": 828,
+   "cost": 120000,
+   "income": 6000,
+   "build": 600
+  },
+  "lm_merdeka": {
+   "name": "Merdeka 118",
+   "city": "Kuala-Lumpur",
+   "realHeight": 679,
+   "cost": 100000,
+   "income": 5000,
+   "build": 540
+  },
+  "lm_shanghai": {
+   "name": "Shanghai Tower",
+   "city": "Shanxay",
+   "realHeight": 632,
+   "cost": 95000,
+   "income": 4700,
+   "build": 520
+  },
+  "lm_abraj": {
+   "name": "Abraj Al-Bait (soat minorasi)",
+   "city": "Makka",
+   "realHeight": 601,
+   "cost": 90000,
+   "income": 4500,
+   "build": 500
+  },
+  "lm_pingan": {
+   "name": "Ping An Finance Center",
+   "city": "Shenchjen",
+   "realHeight": 599,
+   "cost": 90000,
+   "income": 4500,
+   "build": 500
+  },
+  "lm_lotte": {
+   "name": "Lotte World Tower",
+   "city": "Seul",
+   "realHeight": 555,
+   "cost": 85000,
+   "income": 4200,
+   "build": 480
+  },
+  "lm_owtc": {
+   "name": "One World Trade Center",
+   "city": "Nyu-York",
+   "realHeight": 541,
+   "cost": 82000,
+   "income": 4100,
+   "build": 470
+  },
+  "lm_gzctf": {
+   "name": "Guangzhou CTF Finance Centre",
+   "city": "Guanchjou",
+   "realHeight": 530,
+   "cost": 80000,
+   "income": 4000,
+   "build": 460
+  },
+  "lm_tjctf": {
+   "name": "Tianjin CTF Finance Centre",
+   "city": "Tyanszin",
+   "realHeight": 530,
+   "cost": 80000,
+   "income": 4000,
+   "build": 460
+  },
+  "lm_citic": {
+   "name": "CITIC Tower (China Zun)",
+   "city": "Pekin",
+   "realHeight": 528,
+   "cost": 80000,
+   "income": 4000,
+   "build": 460
+  }
+ }
+}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/babylonjs@9.34.0/babylon.js"></script>
 <script>
 (function(){
@@ -238,20 +606,29 @@ const parkC = parkMin.add(parkMax).scale(.5);
 
 const NICKS = ['sardor_77','Malika','jasur.dev','Dilnoza','bekzod_uz','Aziza.k','Otabek','Shahzoda','timur99','nodira','Ulug‘bek','Sevara','Javohir','Kamola','rustam_b','Laylo','Akmal','Madina','Sherzod','Zarina','Bobur','Gulnoza','Islom','Feruza'];
 
-// ---------- templates ----------
-const TPL = {
-  house:  { name:'Kichik uy',        zones:['res'],             cost:2000,  income:150, kind:'house' },
-  villa:  { name:'Ikki qavatli uy',  zones:['res'],             cost:4000,  income:260, kind:'villa' },
-  flat:   { name:'Ko‘p qavatli uy',  zones:['res','com'],       cost:6500,  income:420, kind:'flat' },
-  shop:   { name:'Do‘kon',           zones:['com','cen'],       cost:3000,  income:400, kind:'shop' },
-  cafe:   { name:'Choyxona',         zones:['com','cen','res'], cost:3500,  income:480, kind:'cafe' },
-  office: { name:'Ofis',             zones:['com','cen'],       cost:7000,  income:650, kind:'office' },
-  tower:  { name:'Biznes markaz',    zones:['cen'],             cost:15000, income:1200,kind:'tower' }
-};
-const TPL_KEYS = Object.keys(TPL);
-const WALL_COLORS = ['#f2e6d0','#e8d4ae','#f6f3ec','#e3b49c','#cfe0ea','#d6e6d4','#efd9c8'];
-const GLASS_COLORS = ['#dfe9f2','#cfe3e6','#e9e4da','#d5dcef'];
-const ACCENT_COLORS = ['#2a9d8f','#3a6ea5','#c0503b','#e08a2c','#3f9a5a','#7b5ea7'];
+// ---------- building catalog (shared with the server: the <script id="catalog"> block) ----------
+const CAT = JSON.parse(document.getElementById('catalog').textContent);
+const FLOOR_H = CAT.floorHeight;
+const TPL = {};
+for (const [k,t] of Object.entries(CAT.types)) TPL[k] = { ...t, key:k, kind:k, landmark:false };
+for (const [k,l] of Object.entries(CAT.landmarks)) TPL[k] = { ...l, key:k, kind:'landmark', landmark:true, zones:['cen'], floors:[1,1], roofs:['none'] };
+const TPL_KEYS = Object.keys(CAT.types), LM_KEYS = Object.keys(CAT.landmarks), STYLE_KEYS = Object.keys(CAT.styles);
+const ACCENT_COLORS = CAT.accents;
+const specCost   = s => { const t = TPL[s.tpl]; return t.landmark ? t.cost   : t.cost[0]   + t.cost[1]   * ((s.floors||t.floors[0]) - t.floors[0]); };
+const specIncome = s => { const t = TPL[s.tpl]; if (!t) return 0; return t.landmark ? t.income : t.income[0] + t.income[1] * (Math.max(s.floors||0, t.floors[0]) - t.floors[0]); };
+const specBuildS = s => { const t = TPL[s.tpl]; return t.landmark ? t.build  : t.build[0]  + t.build[1]  * ((s.floors||t.floors[0]) - t.floors[0]); };
+const minCost = k => specCost({ tpl:k, floors: TPL[k].floors[0] });
+const lmHeight = k => Math.round(CAT.landmarks[k].realHeight * CAT.landmarkScale);
+function buildingName(p){
+  const t = TPL[p.tpl]; if (!t) return 'Bino';
+  if (t.landmark) return `${t.name} nusxasi`;
+  return `${t.name} · ${p.floors||t.floors[0]} qavat`;
+}
+function buildingSub(p){
+  const t = TPL[p.tpl]; if (!t) return '';
+  if (t.landmark) return `${t.city} · asli ${t.realHeight} m, o‘yinda ${lmHeight(p.tpl)} m`;
+  return `${CAT.styles[p.style||'modern'].name} uslub · ${CAT.roofs[p.roof] || ''} tom`;
+}
 const hex = h => C3.FromHexString(h);
 
 // ---------- textures ----------
@@ -430,69 +807,250 @@ function hip(w,h,d,y){ const m=B.MeshBuilder.CreateCylinder('h',{diameterTop:0,d
 function merge(list){ list.forEach(m=>m.computeWorldMatrix(true)); return B.Mesh.MergeMeshes(list,true,true); }
 
 const roofTile = stdMat('roofTile',{dt:noiseTex('rt','#9c4a32',0.25,128,3)});
-const roofSlate = stdMat('roofSlate',{dt:noiseTex('rs','#5b6470',0.2,128,3)});
+const roofSlate = stdMat('roofSlate',{dt:noiseTex('rs','#4f5763',0.2,128,3)});
 const concrete = stdMat('concrete',{dt:noiseTex('cc','#a7a39b',0.18,128,2)});
+const steelM = stdMat('steel',{diffuse:hex('#c9ced4'), spec:new C3(.7,.7,.75), power:96});
+const darkM = stdMat('darkM',{diffuse:hex('#2b2f36'), spec:new C3(.2,.2,.2)});
+const goldM = stdMat('goldM',{diffuse:hex('#d4a72c'), spec:new C3(.9,.8,.5), power:64});
+const greenRoofM = stdMat('greenRoof',{dt:noiseTex('gr','#4f8a3a',0.3,64,3)});
 const accentM = stdMat('accent',{diffuse:new C3(1,1,1), spec:new C3(.25,.25,.25)});
 const domeM = stdMat('dome',{diffuse:new C3(1,1,1), spec:new C3(.6,.6,.6), power:64});
+const redLightM = stdMat('redLight',{diffuse:hex('#ff3b30'), emissive:hex('#ff3b30')});
+const helipadM = (()=>{ const t = new B.DynamicTexture('heli',{width:256,height:256},scene,true), c = t.getContext();
+  c.fillStyle='#2b2f36'; c.fillRect(0,0,256,256); c.strokeStyle='#f3c14b'; c.lineWidth=12; c.beginPath(); c.arc(128,128,100,0,6.283); c.stroke();
+  c.fillStyle='#ffffff'; c.fillRect(84,70,20,116); c.fillRect(152,70,20,116); c.fillRect(84,118,88,20); t.update(true); return stdMat('heliM',{dt:t}); })();
 
-function wallMat(name, tex, glass){
-  const m = stdMat(name,{dt:tex.dif, et:tex.emi, spec: glass? new C3(.55,.55,.6): new C3(.08,.08,.08), power: glass?96:24});
-  nightMats.push(m); return m;
+// Ornament band for the Milliy style (girih-like stars). Drawn light on mid-grey so the accent colour tints it.
+const ornamentM = (()=>{ const t = new B.DynamicTexture('orn',{width:256,height:64},scene,true), c = t.getContext();
+  c.fillStyle='#8a8a8a'; c.fillRect(0,0,256,64);
+  for (let i=0;i<8;i++){ const cx = 16+i*32, cy = 32;
+    c.fillStyle='#ffffff'; c.beginPath();
+    for (let k=0;k<16;k++){ const r = k%2 ? 7 : 14, a = k/16*6.283; c.lineTo(cx+Math.cos(a)*r, cy+Math.sin(a)*r); } c.closePath(); c.fill();
+    c.fillStyle='#5a5a5a'; c.beginPath(); c.arc(cx,cy,4,0,6.283); c.fill(); }
+  c.fillStyle='#ffffff'; c.fillRect(0,2,256,4); c.fillRect(0,58,256,4);
+  t.update(true); t.wrapU = B.Texture.WRAP_ADDRESSMODE; return stdMat('ornM',{dt:t, spec:new C3(.3,.3,.3)}); })();
+
+// One facade tile = 4 floors × 2 window bays (4.4 m). Repeated on the walls by faceUV, so any floor count fits.
+const TILE_W = 4.4;
+function facadeTile(style, group){
+  const w = 256, h = 512, rows = 4, cols = 2, cw = w/cols, rh = h/rows;
+  const dif = new B.DynamicTexture(`ft_${style}_${group}_d`, {width:w, height:h}, scene, true);
+  const emi = new B.DynamicTexture(`ft_${style}_${group}_e`, {width:w, height:h}, scene, true);
+  const a = dif.getContext(), e = emi.getContext();
+  a.fillStyle = '#ffffff'; a.fillRect(0,0,w,h);
+  for (let i=0;i<900;i++){ const g = 225 + Math.floor(rnd()*30); a.fillStyle=`rgba(${g},${g},${g},.18)`; a.fillRect(rnd()*w, rnd()*h, 2, 2); }
+  e.fillStyle = '#000'; e.fillRect(0,0,w,h);
+  const glass = (x,y,ww,hh) => { const g = a.createLinearGradient(0,y,0,y+hh); g.addColorStop(0,'#4a6782'); g.addColorStop(1,'#1f2d3b'); a.fillStyle = g; a.fillRect(x,y,ww,hh); a.fillStyle='rgba(255,255,255,.13)'; a.fillRect(x,y,ww*0.3,hh); };
+  const lit = (path) => { if (rnd() < 0.62){ e.fillStyle = rnd()<0.8 ? '#ffc66b' : '#cfe3ff'; path(); } };
+  const big = group === 'shop';
+  for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){
+    const x0 = c*cw, y0 = r*rh;
+    if (style === 'hitech'){
+      // curtain wall: full-height glass with slim mullions, a spandrel band per floor
+      a.fillStyle = '#e6eaee'; a.fillRect(x0, y0, cw, rh);
+      const g = a.createLinearGradient(0,y0,0,y0+rh); g.addColorStop(0,'#8fb0c8'); g.addColorStop(1,'#46637d'); a.fillStyle = g; a.fillRect(x0+3, y0+4, cw-6, rh-16);
+      a.fillStyle='rgba(255,255,255,.18)'; a.fillRect(x0+3, y0+4, (cw-6)*0.35, rh-16);
+      a.fillStyle='#d5dbe1'; a.fillRect(x0+cw/2-2, y0+4, 4, rh-16);
+      lit(()=>{ e.fillRect(x0+4, y0+6, cw-8, rh-20); });
+    } else if (style === 'milliy'){
+      // arched windows (or arched shop openings) with carved-wood frames
+      const ww = big ? cw*0.78 : cw*0.46, hh = big ? rh*0.72 : rh*0.56, x = x0+(cw-ww)/2, y = y0 + rh*0.24, rad = ww/2;
+      a.fillStyle = '#6b4a2e'; a.beginPath(); a.moveTo(x-5, y+hh+4); a.lineTo(x-5, y+rad); a.arc(x+rad, y+rad, rad+5, Math.PI, 0); a.lineTo(x+ww+5, y+hh+4); a.closePath(); a.fill();
+      const g = a.createLinearGradient(0,y,0,y+hh); g.addColorStop(0,'#4a6782'); g.addColorStop(1,'#1f2d3b'); a.fillStyle = g;
+      a.beginPath(); a.moveTo(x, y+hh); a.lineTo(x, y+rad); a.arc(x+rad, y+rad, rad, Math.PI, 0); a.lineTo(x+ww, y+hh); a.closePath(); a.fill();
+      a.strokeStyle='#6b4a2e'; a.lineWidth=3; a.beginPath(); a.moveTo(x+rad, y+4); a.lineTo(x+rad, y+hh); a.moveTo(x, y+hh*0.62); a.lineTo(x+ww, y+hh*0.62); a.stroke();
+      a.fillStyle='rgba(0,0,0,.14)'; a.fillRect(x0, y0+rh-6, cw, 6);
+      lit(()=>{ e.beginPath(); e.moveTo(x, y+hh); e.lineTo(x, y+rad); e.arc(x+rad, y+rad, rad, Math.PI, 0); e.lineTo(x+ww, y+hh); e.closePath(); e.fill(); });
+    } else {
+      // modern: wide windows, a white slab line per floor
+      const ww = big ? cw*0.86 : cw*0.62, hh = big ? rh*0.7 : rh*0.5, x = x0+(cw-ww)/2, y = y0 + rh*(big?0.15:0.25);
+      a.fillStyle = '#3c3f44'; a.fillRect(x-3,y-3,ww+6,hh+6); glass(x,y,ww,hh);
+      a.fillStyle='rgba(0,0,0,.10)'; a.fillRect(x0, y0+rh-8, cw, 8); a.fillStyle='rgba(255,255,255,.6)'; a.fillRect(x0, y0+rh-10, cw, 3);
+      lit(()=>{ e.fillRect(x,y,ww,hh); });
+    }
+  }
+  dif.update(true); emi.update(true);
+  for (const t of [dif, emi]){ t.wrapU = t.wrapV = B.Texture.WRAP_ADDRESSMODE; t.anisotropicFilteringLevel = 4; }
+  return { dif, emi };
 }
-const TEX = {
-  house:  facadeTex('fh',{rows:1,cols:3,mx:.2,my:.24,frame:'#7a5a3e',sill:true}),
-  villa:  facadeTex('fv',{rows:2,cols:3,mx:.2,my:.2,frame:'#6a4e36',sill:true}),
-  flat:   facadeTex('ff',{rows:5,cols:4,mx:.18,my:.2,frame:'#5d5952',sill:true,tall:true}),
-  shop:   facadeTex('fs',{rows:2,cols:3,mx:.2,my:.22,shopFront:true,frame:'#3f3a35'}),
-  cafe:   facadeTex('fc',{rows:1,cols:3,mx:.12,my:.16,shopFront:true,frame:'#5a3d2a'}),
-  office: facadeTex('fo',{rows:7,cols:5,mx:.08,my:.12,frame:'#2d3741',tall:true}),
-  tower:  facadeTex('ft',{rows:16,cols:6,curtain:true,tall:true})
-};
+const WALLM = {};
+function wallMatFor(style, group){
+  const k = style + '_' + group; if (WALLM[k]) return WALLM[k];
+  const tex = facadeTile(style, group), glassy = style === 'hitech';
+  const m = stdMat('w_'+k,{dt:tex.dif, et:tex.emi, spec: glassy ? new C3(.6,.62,.66) : new C3(.08,.08,.08), power: glassy ? 96 : 24});
+  nightMats.push(m); return (WALLM[k] = m);
+}
+const groupOf = tpl => (tpl==='shop'||tpl==='cafe') ? 'shop' : (tpl==='office'||tpl==='tower') ? 'office' : 'home';
+// box whose side faces repeat the facade tile: one tile = TILE_W wide, 4 floors high
+function wallBox(w, h, d, floors, y0){
+  const uw = Math.max(1, Math.round(w/TILE_W)), ud = Math.max(1, Math.round(d/TILE_W)), v = floors/4, V4 = B.Vector4, z = new V4(0,0,0.01,0.01);
+  const m = B.MeshBuilder.CreateBox('wb',{width:w, height:h, depth:d, wrap:true, faceUV:[new V4(0,0,uw,v), new V4(0,0,uw,v), new V4(0,0,ud,v), new V4(0,0,ud,v), z, z]}, scene);
+  m.position.y = y0 + h/2; return m;
+}
+function cyl(o, y){ const m = B.MeshBuilder.CreateCylinder('c', o, scene); m.position.y = y; return m; }
 
-// part = {mesh, colorKey:'wall'|'accent'|null}
-function makeTemplate(key){
-  const k = TPL[key].kind, parts = [];
-  const add = (mesh, mat, colorKey) => { mesh.material = mat; mesh.isPickable = true; parts.push({mesh, colorKey}); };
-  if (k==='house'){
-    add(box(7,3.6,6,0,1.8,0), wallMat('w_'+key,TEX.house), 'wall');
-    add(merge([gable(7.8,2.2,6.8,3.6), box(1.2,0.25,1.2,0,0.12,3.6)]), roofTile, null);
-  } else if (k==='villa'){
-    add(box(8,6.6,7,0,3.3,0), wallMat('w_'+key,TEX.villa), 'wall');
-    add(merge([hip(8.8,2.6,7.8,6.6), box(3,0.3,2.2,0,3.4,3.9)]), roofTile, null);
-  } else if (k==='flat'){
-    add(box(8.4,16,8.4,0,8,0), wallMat('w_'+key,TEX.flat), 'wall');
-    add(merge([box(8.9,0.5,8.9,0,16.25,0), box(2.4,1.8,2.4,1.6,17.4,-1.4)]), concrete, null);
-  } else if (k==='shop'){
-    add(box(8.4,6,7.6,0,3,0), wallMat('w_'+key,TEX.shop), 'wall');
-    add(box(8.9,0.45,8.1,0,6.2,0), concrete, null);
-    const aw = box(8.4,0.18,1.8,0,3.15,4.6); aw.rotation.x = -0.28;
-    add(merge([aw]), accentM, 'accent');
-  } else if (k==='cafe'){
-    add(box(7.6,4.2,7.6,0,2.1,0), wallMat('w_'+key,TEX.cafe), 'wall');
-    add(merge([box(8.2,0.4,8.2,0,4.4,0), box(1,0.6,1,0,4.9,0)]), concrete, null);
-    const dome = B.MeshBuilder.CreateSphere('d',{diameter:4.2,segments:20,slice:0.5},scene); dome.position.y = 4.6;
-    const aw = box(7.6,0.16,1.6,0,2.7,4.5); aw.rotation.x = -0.25;
-    add(merge([aw]), accentM, 'accent');
-    add(merge([dome]), domeM, 'accent');
-  } else if (k==='office'){
-    add(box(8.6,24,8.6,0,12,0), wallMat('w_'+key,TEX.office), 'wall');
-    add(merge([box(9,0.6,9,0,24.3,0), box(3,2.4,3,-1.5,25.8,1.2)]), concrete, null);
-  } else if (k==='tower'){
-    add(box(8.8,52,8.8,0,26,0), wallMat('w_'+key,TEX.tower,true), 'wall');
-    const ant = B.MeshBuilder.CreateCylinder('ant',{diameter:0.25,height:8,tessellation:6},scene); ant.position.y = 59.8;
-    add(merge([box(9.2,0.8,9.2,0,52.4,0), box(4,3,4,0,54.3,0), ant]), concrete, null);
+// roofs sit on top of the walls (y0 = wall top); each returns [mesh, material, colorKey] parts + extra height
+function roofParts(kind, w, d, y0, style){
+  const P = [], add = (list, mat, ck=null) => P.push([merge(list), mat, ck]);
+  const parapet = () => [box(w+0.3,0.5,0.3,0,y0+0.25,-d/2), box(w+0.3,0.5,0.3,0,y0+0.25,d/2), box(0.3,0.5,d,-w/2,y0+0.25,0), box(0.3,0.5,d,w/2,y0+0.25,0), box(w,0.15,d,0,y0+0.07,0)];
+  const tile = style==='hitech' ? roofSlate : roofTile;
+  let extra = 0.5;
+  if (kind==='gable'){ add([gable(w+0.8, 2.4, d+0.8, y0)], tile); extra = 2.4; }
+  else if (kind==='hip'){ add([hip(w+0.8, 2.6, d+0.8, y0)], tile); extra = 2.6; }
+  else if (kind==='dome'){
+    const r = Math.min(w,d)*0.32;
+    add([...parapet(), cyl({diameter:r*2.1, height:1.2, tessellation:24}, y0+0.6)], concrete);
+    const dm = B.MeshBuilder.CreateSphere('dm',{diameter:r*2, segments:20, slice:0.5}, scene); dm.position.y = y0+1.2;
+    add([dm], domeM, 'accent');
+    add([cyl({diameter:0.18, height:1.6, tessellation:6}, y0+1.2+r+0.6), (()=>{ const b2=B.MeshBuilder.CreateSphere('fb',{diameter:0.45,segments:6},scene); b2.position.y=y0+1.2+r+0.3; return b2; })()], goldM);
+    extra = 1.2 + r + 1.4;
+  } else if (kind==='garden'){
+    add(parapet(), concrete);
+    add([box(w-0.8,0.4,d-0.8,0,y0+0.35,0)], greenRoofM);
+    const bushes = []; for (const [bx,bz] of [[-w*0.25,-d*0.2],[w*0.22,d*0.18],[w*0.05,-d*0.25]]){ const b2 = B.MeshBuilder.CreateSphere('bu',{diameter:1.6,segments:8},scene); b2.position.set(bx, y0+1.2, bz); bushes.push(b2); }
+    add(bushes, greenRoofM); extra = 2.0;
+  } else if (kind==='antenna'){
+    add([...parapet(), box(2.2,1.6,2.2,w*0.18,y0+0.8,-d*0.15)], concrete);
+    add([cyl({diameter:0.3, height:9, tessellation:6}, y0+4.5), cyl({diameter:0.12, height:5, tessellation:6}, y0+9+2.5)], steelM);
+    const l = B.MeshBuilder.CreateSphere('rl',{diameter:0.5,segments:6},scene); l.position.y = y0+14.1; add([l], redLightM);
+    extra = 14.3;
+  } else if (kind==='helipad'){
+    add([...parapet()], concrete);
+    const hp = cyl({diameter:Math.min(w,d)*0.86, height:0.25, tessellation:32}, y0+0.6); add([hp], helipadM);
+    extra = 1.0;
+  } else if (kind==='spire'){
+    add([box(w*0.75,2.2,d*0.75,0,y0+1.1,0), box(w*0.5,2.0,d*0.5,0,y0+3.2,0)], steelM);
+    add([cyl({diameterTop:0.05, diameterBottom:1.4, height:12, tessellation:8}, y0+4.2+6)], steelM);
+    extra = 16.2;
+  } else { add([...parapet(), box(1.8,1.2,1.8,-w*0.2,y0+0.6,d*0.15)], concrete); extra = 1.2; }
+  return { P, extra };
+}
+
+// ---- landmark copies of the world's 10 tallest buildings (stylised, ~1:6.7 scale) ----
+function ring(r, sides, round, rot, y, n){
+  const out = [], seg = 2*Math.PI/sides;
+  for (let i=0;i<n;i++){
+    const a = rot + i/n*2*Math.PI, local = ((a - rot) % seg + seg) % seg - seg/2;
+    const rp = r*Math.cos(Math.PI/sides)/Math.cos(local), rr = lerp(rp, r*0.94, round);
+    out.push(new V3(Math.cos(a)*rr, y, Math.sin(a)*rr));
+  }
+  return out;
+}
+function shaft(levels, sides, round, n=48){
+  return B.MeshBuilder.CreateRibbon('lm', { pathArray: levels.map(L => ring(L.r, sides, round, L.rot||0, L.y, n)), closePath:true, sideOrientation: B.Mesh.DOUBLESIDE }, scene);
+}
+const steps = (H, tiers) => { const L = []; let prev = 0; for (const [t, r] of tiers){ L.push({ y: prev*H, r }, { y: t*H, r }); prev = t; } return L; };
+const LMMAT = {};
+function lmGlass(key, tint, uRep, vRep){
+  if (LMMAT[key]) return LMMAT[key];
+  const base = facadeTile('hitech', 'office');
+  const d = base.dif, e = base.emi; d.uScale = e.uScale = uRep; d.vScale = e.vScale = vRep;
+  const m = stdMat('lm_'+key,{dt:d, et:e, diffuse:hex(tint), spec:new C3(.7,.72,.78), power:110}); m.diffuseColor = hex(tint);
+  nightMats.push(m); return (LMMAT[key] = m);
+}
+function landmarkParts(key){
+  const H = lmHeight(key), P = [], add = (m, mat) => P.push([m, mat, null]);
+  const gl = (tint, r) => lmGlass(key, tint, Math.max(2, Math.round(2*Math.PI*r/TILE_W/2)), H/(4*FLOOR_H));
+  if (key==='lm_burj'){
+    const lv = steps(H, [[.18,4.8],[.33,4.3],[.46,3.7],[.58,3.1],[.68,2.5],[.76,1.9],[.80,1.4]]).map(L=>({...L, rot:Math.PI/2}));
+    add(shaft(lv, 3, 0.5), gl('#cbd7e1', 4));
+    add(cyl({diameterTop:0.1, diameterBottom:1.8, height:H*0.2, tessellation:12}, H*0.9), steelM);
+  } else if (key==='lm_merdeka'){
+    const lv = []; for (let i=0;i<=10;i++){ const t = i/10*0.74; lv.push({ y:t*H, r: lerp(4.6, 3.3, i/10), rot: i%2 ? Math.PI/8 : 0 }); }
+    lv.push({ y:0.79*H, r:1.0, rot:0 });
+    add(shaft(lv, 8, 0, 16), gl('#a9bccd', 4));
+    add(cyl({diameterTop:0.08, diameterBottom:1.4, height:H*0.21, tessellation:8}, H*0.895), steelM);
+  } else if (key==='lm_shanghai'){
+    const lv = []; for (let i=0;i<=24;i++){ const t = i/24; lv.push({ y: t*0.97*H, r: lerp(4.8, 3.0, t), rot: t*2.09 }); }
+    add(shaft(lv, 3, 0.6), gl('#a9d3d1', 4));
+    const cap = cyl({diameter:5.4, height:1.2, tessellation:24}, 0.97*H+0.6); add(cap, steelM);
+  } else if (key==='lm_abraj'){
+    const ped = box(9.6, 9, 9.6, 0, 4.5, 0), tw = box(6.6, H*0.6-9, 6.6, 0, 9 + (H*0.6-9)/2, 0);
+    add(merge([ped, tw]), wallMatFor('milliy','office'));
+    add(box(7.4, H*0.09, 7.4, 0, H*0.645, 0), stdMat('abrajClockBody',{diffuse:hex('#e9e4d8')}));
+    const faces = []; const hands = [];
+    for (let i=0;i<4;i++){ const f = B.MeshBuilder.CreateDisc('cf',{radius:2.9, tessellation:32}, scene); const a = i*Math.PI/2;
+      f.position.set(Math.sin(a)*3.75, H*0.645, Math.cos(a)*3.75); f.rotation.y = a + Math.PI; faces.push(f);
+      const h1 = box(0.25,2.2,0.1,0,0,0); h1.position.set(Math.sin(a)*3.82, H*0.645+0.9, Math.cos(a)*3.82); h1.rotation.y = a; hands.push(h1);
+      const h2 = box(1.6,0.25,0.1,0,0,0); h2.position.set(Math.sin(a)*3.82+Math.cos(a)*0.7, H*0.645, Math.cos(a)*3.82-Math.sin(a)*0.7); h2.rotation.y = a; hands.push(h2); }
+    add(merge(faces), stdMat('clockFace',{diffuse:hex('#f6f6f0'), emissive:hex('#9fd6a8')}));
+    add(merge(hands), darkM);
+    add(cyl({diameterTop:2.2, diameterBottom:6.6, height:H*0.15, tessellation:8}, H*0.69 + H*0.075), goldM);
+    add(cyl({diameterTop:0.1, diameterBottom:1.4, height:H*0.12, tessellation:8}, H*0.84 + H*0.06), goldM);
+    const cr = B.MeshBuilder.CreateTorus('cr',{diameter:2.2, thickness:0.35, tessellation:24}, scene); cr.rotation.x = Math.PI/2; cr.position.y = H*0.97; add(cr, goldM);
+  } else if (key==='lm_pingan'){
+    const lv = []; for (let i=0;i<=8;i++){ const t = i/8; lv.push({ y: t*0.86*H, r: lerp(6.4, 5.0, t), rot: Math.PI/4 }); }
+    lv.push({ y: H, r: 0.3, rot: Math.PI/4 });
+    add(shaft(lv, 4, 0.12, 32), gl('#d3d8de', 5));
+  } else if (key==='lm_lotte'){
+    const lv = []; for (let i=0;i<=16;i++){ const t = i/16; lv.push({ y: t*0.97*H, r: 6.0*(1-0.78*Math.pow(t,1.3)), rot: Math.PI/4 }); }
+    lv.push({ y: H, r: 0.2, rot: Math.PI/4 });
+    add(shaft(lv, 4, 0.55, 40), gl('#e3eaef', 5));
+  } else if (key==='lm_owtc'){
+    const base = box(9.0, H*0.05, 9.0, 0, H*0.025, 0); add(base, stdMat('owtcBase',{diffuse:hex('#c9ced4')}));
+    const lv = []; for (let i=0;i<=10;i++){ const t = i/10; lv.push({ y: lerp(0.05, 0.75, t)*H, r: lerp(6.3, 4.2, t), rot: Math.PI/4 + t*Math.PI/4 }); }
+    add(shaft(lv, 4, 0, 32), gl('#9fc3e0', 5));
+    add(cyl({diameter:4.6, height:0.8, tessellation:24}, H*0.75+0.4), steelM);
+    add(cyl({diameterTop:0.06, diameterBottom:0.9, height:H*0.25, tessellation:8}, H*0.875), steelM);
+  } else if (key==='lm_gzctf'){
+    const lv = steps(H, [[.55,6.2],[.75,5.6],[.90,5.0],[.97,4.2]]).map(L=>({...L, rot:Math.PI/4}));
+    add(shaft(lv, 4, 0.35, 40), gl('#eef0ee', 5));
+    add(cyl({diameter:5.6, height:1.4, tessellation:24}, H*0.97+0.7), steelM);
+  } else if (key==='lm_tjctf'){
+    const lv = []; for (let i=0;i<=16;i++){ const t = i/16; lv.push({ y: t*0.95*H, r: t<0.15 ? lerp(4.6, 4.9, t/0.15) : lerp(4.9, 2.2, Math.pow((t-0.15)/0.85, 1.4)) }); }
+    add(shaft(lv, 8, 0.85, 48), gl('#e6dcc6', 4));
+    const top = B.MeshBuilder.CreateSphere('tt',{diameter:4.4, segments:16, slice:0.5}, scene); top.scaling.y = 0.9; top.position.y = 0.95*H; add(top, gl('#e6dcc6', 4));
+  } else if (key==='lm_citic'){
+    const lv = []; for (let i=0;i<=16;i++){ const t = i/16; lv.push({ y: t*H, r: 6.2 - 1.3*Math.sin(Math.PI*t), rot: Math.PI/4 }); }
+    add(shaft(lv, 4, 0.35, 40), gl('#cfd6dc', 5));
+    add(box(8.4, 0.8, 8.4, 0, H+0.4, 0), steelM);
+  }
+  return { P, height: H + 2 };
+}
+
+// ---- variants: one set of thin-instanced meshes per (type, style, floors, roof) or per landmark ----
+const T = {};
+const vkey = s => TPL[s.tpl] && TPL[s.tpl].landmark ? s.tpl : `${s.tpl}|${s.style}|${s.floors}|${s.roof}`;
+function getVariant(s){
+  const key = vkey(s); if (T[key]) return T[key];
+  const t = TPL[s.tpl], parts = [];
+  const add = (mesh, mat, colorKey) => { mesh.material = mat; mesh.isPickable = true; parts.push({ mesh, colorKey }); };
+  let height;
+  if (t.landmark){
+    const L = landmarkParts(s.tpl); for (const [m, mat, ck] of L.P) add(m, mat, ck); height = L.height;
+  } else {
+    const style = s.style || 'modern', floors = s.floors || t.floors[0], w = t.w, d = t.d;
+    const wallH = floors*FLOOR_H + (groupOf(s.tpl)==='shop' ? 0.6 : 0);
+    add(wallBox(w, wallH, d, floors, 0), wallMatFor(style, groupOf(s.tpl)), 'wall');
+    const accents = [], steel = [], orn = [];
+    if (style === 'milliy'){
+      orn.push(box(w+0.25, 0.9, d+0.25, 0, wallH-0.45, 0));                         // ornament band under the cornice
+      orn.push(box(Math.min(3.4, w*0.45), Math.min(4.6, wallH*0.9), 0.5, 0, Math.min(4.6, wallH*0.9)/2, d/2+0.2)); // iwan portal
+    } else if (style === 'hitech'){
+      for (const [x,z] of [[-w/2,-d/2],[w/2,-d/2],[-w/2,d/2],[w/2,d/2]]) steel.push(box(0.35, wallH+0.6, 0.35, x, (wallH+0.6)/2, z));
+      steel.push(box(w+0.2, 0.35, d+0.2, 0, wallH+0.1, 0));
+    } else {
+      steel.push(box(w+0.4, 0.3, d+0.4, 0, wallH, 0));
+      if (s.tpl==='flat' || s.tpl==='office') for (let f=1; f<floors; f++) steel.push(box(w*0.7, 0.18, 0.9, 0, f*FLOOR_H, d/2+0.45)); // balconies
+    }
+    if (s.tpl==='shop' || s.tpl==='cafe'){ const aw = box(w*0.9, 0.16, 1.6, 0, 3.0, d/2+0.75); aw.rotation.x = -0.26; accents.push(aw); }
+    if (orn.length) add(merge(orn), ornamentM, 'accent');
+    if (steel.length) add(merge(steel), style==='hitech' ? steelM : concrete, null);
+    if (accents.length) add(merge(accents), accentM, 'accent');
+    const R = roofParts(s.roof || t.roofs[0], w, d, wallH + (style==='hitech'?0.25:0), style);
+    for (const [m, mat, ck] of R.P) add(m, mat, ck);
+    height = wallH + R.extra;
   }
   for (const pt of parts){
     pt.mesh.receiveShadows = true;
-    if (pt.colorKey) pt.mesh.thinInstanceRegisterAttribute('color',4);
+    if (pt.colorKey) pt.mesh.thinInstanceRegisterAttribute('color', 4);
     pt.mesh.thinInstanceEnablePicking = true;
+    pt.mesh.alwaysSelectAsActiveMesh = true;
     pt.mesh.setEnabled(false);
+    if (shadowGen) shadowGen.addShadowCaster(pt.mesh, false);
   }
-  return { key, parts, plotsByInst:[] };
+  return (T[key] = { key, parts, plotsByInst: [], height });
 }
-
-const T = {};
-for (const k of TPL_KEYS) T[k] = makeTemplate(k);
 
 // ---------- trees & lamps ----------
 const trunk = B.MeshBuilder.CreateCylinder('trunk',{diameterTop:0.25,diameterBottom:0.4,height:2.4,tessellation:6},scene); trunk.position.y=1.2; trunk.bakeCurrentTransformIntoVertices();
@@ -555,11 +1113,12 @@ pole.thinInstanceBufferUpdated('matrix'); bulb.thinInstanceBufferUpdated('matrix
 // ---------- populate others ----------
 function hexArr(h){ const c=hex(h); return [c.r,c.g,c.b,1]; }
 function templatesFor(zone){ return TPL_KEYS.filter(k=>TPL[k].zones.includes(zone)); }
+const landmarkTaken = k => plots.some(q => q.tpl === k);
 function plotMatrix(p, sy=1){
   return B.Matrix.Compose(new V3(1,sy,1), B.Quaternion.RotationAxis(V3.Up(), p.rot*Math.PI/2), new V3(p.x,0.42,p.z));
 }
 function addBuilding(p, refresh){
-  const t = T[p.tpl];
+  const t = getVariant(p); p.vkey = t.key;
   let idx = -1;
   for (const pt of t.parts){
     idx = pt.mesh.thinInstanceAdd(plotMatrix(p, refresh?0.02:1), refresh);
@@ -572,35 +1131,27 @@ function addBuilding(p, refresh){
   if (refresh) for (const pt of t.parts) pt.mesh.thinInstanceRefreshBoundingInfo(false);
 }
 function populateDemo(){
-const occ = { res:.55, com:.5, cen:.38 };
-for (const p of plots){
-  if (rnd() < occ[p.zone]){
-    p.state = rnd()<0.07 ? 'sale' : 'owned';
-    p.owner = pick(NICKS);
-    const opts = templatesFor(p.zone);
-    // weight: more small buildings in residential, more towers in centre
-    let k = pick(opts);
-    if (p.zone==='res' && rnd()<0.5) k = rnd()<0.6?'house':'villa';
-    if (p.zone==='cen' && rnd()<0.22) k = 'tower';
-    if (p.zone==='cen' && k==='tower' && rnd()<0.5) k = 'office';
-    p.tpl = k; p.rot = Math.floor(rnd()*4);
-    p.color = TPL[k].kind==='tower' ? pick(GLASS_COLORS) : pick(WALL_COLORS);
-    p.accent = pick(ACCENT_COLORS);
-    p.likes = Math.floor(rnd()*40);
-    addBuilding(p,false);
-    if (p.zone==='res' && rnd()<0.5){ addTree(p.x+3.6*(rnd()<.5?-1:1), p.z+3.6*(rnd()<.5?-1:1), 0.55); }
+  // one showcase building per mahalla (one per style); everything else is free land for real players
+  const show = [
+    { district:0, tpl:'cafe',   style:'milliy', floors:2,  roof:'dome',    color:'#ecd9b4', accent:'#2a9d8f', owner:'Malika' },
+    { district:1, tpl:'office', style:'hitech', floors:12, roof:'helipad', color:'#b7d3e3', accent:'#1f6fb2', owner:'jasur.dev' },
+    { district:2, tpl:'flat',   style:'modern', floors:9,  roof:'garden',  color:'#f4f1ea', accent:'#e08a2c', owner:'Dilnoza' },
+  ];
+  for (const sh of show){
+    const p = plots.find(q => q.district===sh.district && q.zone!=='res' && q.state==='empty'); if (!p) continue;
+    Object.assign(p, { state:'owned', owner:sh.owner, tpl:sh.tpl, style:sh.style, floors:sh.floors, roof:sh.roof, color:sh.color, accent:sh.accent, rot: Math.floor(rnd()*4), likes: 12 });
+    addBuilding(p, false);
   }
-  paintPad(p,false);
-}
+  for (const p of plots) paintPad(p, false);
 }
 function flushBuffers(){
   pad.thinInstanceBufferUpdated('color');
   trunk.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('color');
-  for (const k of TPL_KEYS) for (const pt of T[k].parts){ if (pt.mesh.hasThinInstances){ pt.mesh.thinInstanceBufferUpdated('matrix'); if(pt.colorKey) pt.mesh.thinInstanceBufferUpdated('color'); pt.mesh.thinInstanceRefreshBoundingInfo(false); } }
+  for (const t of Object.values(T)) for (const pt of t.parts){ if (pt.mesh.hasThinInstances){ pt.mesh.thinInstanceBufferUpdated('matrix'); if(pt.colorKey) pt.mesh.thinInstanceBufferUpdated('color'); pt.mesh.thinInstanceRefreshBoundingInfo(false); } }
   pad.thinInstanceRefreshBoundingInfo(false);
 }
 function hideBuilding(p){
-  const t = T[p.tpl]; if (!t || p.inst==null) return;
+  const t = T[p.vkey]; if (!t || p.inst==null) return;
   for (const pt of t.parts) pt.mesh.thinInstanceSetMatrixAt(p.inst, B.Matrix.Scaling(0,0,0), true);
   t.plotsByInst[p.inst] = undefined; p.inst = null;
 }
@@ -611,8 +1162,7 @@ function hideBuilding(p){
 // so a far view of the whole city stays readable; own plots and the selected plot always win.
 const LBL = { on:true, max:140, px:26 };
 const lblLayer = document.createElement('div'); lblLayer.id = 'labels'; document.body.insertBefore(lblLayer, document.getElementById('top'));
-const TOP = { house:5.8, villa:9.2, flat:18.3, shop:6.4, cafe:6.8, office:27, tower:56 };
-const labelY = p => 0.42 + (p.tpl ? TOP[TPL[p.tpl].kind] : 0) + 2.5;
+const labelY = p => 0.42 + (p.tpl && T[p.vkey] ? T[p.vkey].height : 0) + 2.5;
 const TG_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2AABEE"/><path d="M5.5 11.8l11-4.3c.5-.2 1 .1.8.9l-1.9 8.8c-.1.6-.5.8-1 .5l-2.8-2.1-1.4 1.3c-.2.2-.3.3-.6.3l.2-2.9 5.3-4.8c.2-.2 0-.3-.3-.1l-6.6 4.1-2.8-.9c-.6-.2-.6-.6.1-.8z" fill="#fff"/></svg>';
 function setLabel(p){
   const text = p.owner ? (p.ownerTg ? '@' + p.ownerTg : p.owner) : null;
@@ -693,7 +1243,7 @@ function landPrice(p){
   const occR = dist.filter(q=>q.state!=='empty').length / dist.length;
   return Math.round(ZONES[p.zone].base * p.loc * (1 + 0.5*occR) / 100) * 100;
 }
-function salePrice(p){ if (API.on) return p.price ?? 0; return Math.round((landPrice(p)*1.25 + TPL[p.tpl].cost*0.9)/100)*100; }
+function salePrice(p){ if (API.on) return p.price ?? 0; return Math.round((landPrice(p)*1.25 + (p.tpl ? specCost(p) : 0)*0.9)/100)*100; }
 const myPlots = () => plots.filter(p=>p.state==='mine');
 
 // ---------- UI helpers ----------
@@ -741,25 +1291,25 @@ function showPlot(p){
     $('#buyBtn').onclick = ()=>buy(p, price);
   } else if (p.state==='sale'){
     const price = salePrice(p), mine = myPlots().length, can = S.coins>=price && mine<S.limit;
-    openSheet(`<h3>${TPL[p.tpl].name}</h3><div class="sub">${sub} · sotuvchi: ${ownerHtml(p)}</div>${kv([...base,['Narx',fmt(price)+' tanga'],['Kunlik daromad',fmt(TPL[p.tpl].income)+' tanga']])}
+    openSheet(`<h3>${esc(buildingName(p))}</h3><div class="sub">${sub} · sotuvchi: ${ownerHtml(p)}</div>${kv([...base,['Narx',fmt(price)+' tanga'],['Kunlik daromad',fmt(specIncome(p))+' tanga']])}
       <div class="row"><button class="btn gold" id="buyBtn" ${can?'':'disabled'}>Sotib olish · ${fmt(price)}</button></div>
       ${S.coins<price?`<div class="note warn">Tanga yetmaydi: yana ${fmt(price-S.coins)} kerak.</div>`:mine>=S.limit?`<div class="note warn">Uchastkalar limiti: ${S.limit} ta.</div>`:'<div class="note">Bino bilan birga o‘tadi va darhol daromad beradi.</div>'}${orbitRow()}`, 'plot'); bindOrbit();
     $('#buyBtn').onclick = ()=>buy(p, price);
   } else if (p.state==='owned'){
-    openSheet(`<h3>${TPL[p.tpl].name}</h3><div class="sub">${sub} · egasi: ${ownerHtml(p)}</div>${kv([...base,['Yoqdi',`<span id="lk">${p.likes}</span> ♥`],['Bino turi',TPL[p.tpl].name]])}
+    openSheet(`<h3>${esc(buildingName(p))}</h3><div class="sub">${sub} · egasi: ${ownerHtml(p)}</div>${kv([...base,['Yoqdi',`<span id="lk">${p.likes}</span> ♥`],['Bino',esc(buildingSub(p))]])}
       <div class="row"><button class="btn primary" id="likeBtn" ${p.liked?'disabled':''}>${p.liked?'Yoqdi ♥':'Yoqdi ♡'}</button><button class="btn" id="visitBtn">Tashrif</button><button class="btn" id="repBtn">Shikoyat</button></div>${orbitRow()}`, 'plot'); bindOrbit();
     $('#likeBtn').onclick = async ()=>{
       $('#likeBtn').disabled=true;
       if (API.on){ try { const r = await api('POST',`/api/plots/${p.id}/like`); p.likes = r.likes; } catch(e){ toast(e.message); $('#likeBtn').disabled=false; return; } }
       else p.likes++;
       p.liked=true; $('#lk').textContent=p.likes; $('#likeBtn').textContent='Yoqdi ♥'; };
-    $('#visitBtn').onclick = ()=>{ flyTo(p.x,p.z, TPL[p.tpl].kind==='tower'?120:48, 1.25); };
+    $('#visitBtn').onclick = ()=>{ flyTo(p.x,p.z, Math.max(48, ((T[p.vkey]&&T[p.vkey].height)||10)*1.7), 1.25); };
     $('#repBtn').onclick = async ()=>{
       if (API.on){ try { await api('POST','/api/reports',{ targetType:'plot', targetId:p.id, reason:'Nomaqbul bino yoki nik' }); } catch(e){ toast(e.message); return; } }
       toast('Shikoyat moderatorga yuborildi. Rahmat!'); };
   } else if (p.state==='mine'){
     if (!p.tpl){ openBuild(p); return; }
-    openSheet(`<h3>${TPL[p.tpl].name}</h3><div class="sub">${sub} · sizniki</div>${kv([...base,['Kunlik daromad',fmt(TPL[p.tpl].income)+' tanga'],['Holat',p.building?'Qurilmoqda…':'Ishlamoqda']])}
+    openSheet(`<h3>${esc(buildingName(p))}</h3><div class="sub">${sub} · sizniki</div>${kv([...base,['Kunlik daromad',fmt(specIncome(p))+' tanga'],['Holat',p.building?'Qurilmoqda…':'Ishlamoqda'],['Bino',esc(buildingSub(p))]])}
       <div class="row"><button class="btn" disabled>Yaxshilash (keyinroq)</button><button class="btn" id="streetBtn">Ko‘cha ko‘rinishi</button></div>${orbitRow()}
       ${API.on ? (p.listed
         ? `<div class="row" style="margin-top:8px"><button class="btn" id="unlistBtn">Sotuvdan olish (${fmt(p.price)})</button></div>`
@@ -797,14 +1347,15 @@ let ghost = [];
 function clearGhost(){ ghost.forEach(m=>m.dispose(false,false)); ghost=[]; }
 function makeGhost(b){
   clearGhost();
-  const t = T[b.tpl];
+  const t = getVariant(b);
   for (const pt of t.parts){
     const g = new B.Mesh('ghost', scene);
     pt.mesh.geometry.applyToMesh(g);
     const m = new B.StandardMaterial('gm', scene);
     m.alpha = 0.55; m.specularColor = new C3(.1,.1,.1);
-    m.diffuseColor = pt.colorKey==='wall' ? hex(b.color) : pt.colorKey==='accent' ? hex(b.accent) : new C3(.75,.72,.68);
-    if (pt.colorKey==='wall') m.diffuseTexture = pt.mesh.material.diffuseTexture;
+    const src = pt.mesh.material;
+    m.diffuseColor = pt.colorKey==='wall' ? hex(b.color) : pt.colorKey==='accent' ? hex(b.accent) : (src.diffuseColor ? src.diffuseColor.clone() : new C3(.75,.72,.68));
+    if (src.diffuseTexture) m.diffuseTexture = src.diffuseTexture;
     m.emissiveColor = new C3(.08,.25,.22);
     g.material = m; g.isPickable=false; g.setEnabled(true);
     g.position.set(b.p.x,0.42,b.p.z); g.rotation.y = b.rot*Math.PI/2;
@@ -818,63 +1369,95 @@ const ICON = {
   shop:'<svg viewBox="0 0 56 56"><rect x="10" y="18" width="36" height="28" fill="#efe2c9"/><path d="M8 30h40l-4 6H12z" fill="#2a9d8f"/><rect x="13" y="37" width="30" height="9" fill="#40566b"/><g fill="#40566b"><rect x="15" y="22" width="7" height="6"/><rect x="34" y="22" width="7" height="6"/></g></svg>',
   cafe:'<svg viewBox="0 0 56 56"><path d="M18 22a10 10 0 0 1 20 0z" fill="#2a9d8f"/><rect x="11" y="22" width="34" height="24" fill="#efe2c9"/><path d="M9 32h38l-3 5H12z" fill="#c0503b"/><rect x="14" y="38" width="28" height="8" fill="#40566b"/></svg>',
   office:'<svg viewBox="0 0 56 56"><rect x="15" y="8" width="26" height="42" fill="#cfd6dd"/><g fill="#40566b">'+Array.from({length:7},(_,r)=>`<rect x="18" y="${11+r*5.5}" width="20" height="3.5"/>`).join('')+'</g></svg>',
+  landmark:'<svg viewBox="0 0 56 56"><path d="M28 2l1.2 12h-2.4z" fill="#c9ced4"/><path d="M22 54l3-40h6l3 40z" fill="#8fb0c8"/><path d="M24 54l2-26h4l2 26z" fill="#b8d0e2"/></svg>',
   tower:'<svg viewBox="0 0 56 56"><rect x="27" y="2" width="1.5" height="6" fill="#999"/><rect x="18" y="8" width="20" height="44" fill="#3d5670"/><g stroke="#8aa0b3" stroke-width="1">'+Array.from({length:8},(_,r)=>`<line x1="18" x2="38" y1="${12+r*5}" y2="${12+r*5}"/>`).join('')+'<line x1="25" x2="25" y1="8" y2="52"/><line x1="31" x2="31" y1="8" y2="52"/></g></svg>'
 };
 function openBuild(p){
   select(p);
   const opts = templatesFor(p.zone);
-  const byCost = [...opts].sort((a,c)=>TPL[a].cost-TPL[c].cost);
-  const b = S.build = { p, tpl: byCost.find(k=>TPL[k].cost<=S.coins) || byCost[0], rot: 0, color: WALL_COLORS[0], accent: ACCENT_COLORS[0] };
-  if (TPL[b.tpl].kind==='tower') b.color = GLASS_COLORS[0];
+  const byCost = [...opts].sort((a,c)=>minCost(a)-minCost(c));
+  const tpl = byCost.find(k=>minCost(k)<=S.coins) || byCost[0];
+  const b = S.build = { p, tpl, style:'modern', floors: TPL[tpl].floors[0], roof: TPL[tpl].roofs[0], rot: 0, color: CAT.styles.modern.walls[0], accent: ACCENT_COLORS[0] };
   renderBuild();
-  flyTo(p.x,p.z, Math.min(camera.radius, b.tpl==='tower'?150:90), Math.min(camera.beta,1.1));
+  flyTo(p.x,p.z, Math.min(Math.max(camera.radius, 60), 140), Math.min(camera.beta,1.1));
 }
+function fitBuild(b){ // keep floors/roof/colour valid after switching type or style
+  const t = TPL[b.tpl]; if (t.landmark) return;
+  b.floors = clamp(b.floors||t.floors[0], t.floors[0], t.floors[1]);
+  if (!t.roofs.includes(b.roof)) b.roof = t.roofs[0];
+  if (!CAT.styles[b.style].walls.includes(b.color)) b.color = CAT.styles[b.style].walls[0];
+}
+let ghostTimer = 0;
 function renderBuild(){
   const b = S.build, p = b.p, opts = templatesFor(p.zone), t = TPL[b.tpl];
-  const palette = t.kind==='tower' ? GLASS_COLORS : WALL_COLORS;
-  const hasAccent = T[b.tpl].parts.some(x=>x.colorKey==='accent');
+  fitBuild(b);
+  const cost = specCost(b), income = specIncome(b), secs = specBuildS(b);
+  const lmCards = p.zone==='cen' ? LM_KEYS.map(k=>{ const L = TPL[k], taken = landmarkTaken(k);
+      return `<button class="tpl ${k===b.tpl?'sel':''}" data-k="${k}" ${taken?'disabled':''}><div class="ic">${ICON.landmark}</div><b>${esc(L.name)}</b><small>${esc(L.city)} · ${L.realHeight} m</small><small>${taken?'Qurilgan — band':fmt(L.cost)+' tanga · +'+fmt(L.income)+'/kun'}</small></button>`; }).join('') : '';
+  const fl = t.landmark ? '' : `
+    <div class="lbl2" style="margin-bottom:6px">Uslub</div>
+    <div class="seg" id="styleSeg">${STYLE_KEYS.map(k=>`<button data-st="${k}" class="${b.style===k?'on':''}">${CAT.styles[k].name}</button>`).join('')}</div>
+    <div class="lbl2" style="margin-bottom:2px">Qavatlar: <b id="flN" style="color:var(--ink)">${b.floors}</b> <span style="text-transform:none;letter-spacing:0">(${t.floors[0]}–${t.floors[1]})</span></div>
+    ${t.floors[0]===t.floors[1] ? '' : `<input type="range" id="flR" min="${t.floors[0]}" max="${t.floors[1]}" step="1" value="${b.floors}">`}
+    <div class="lbl2" style="margin:4px 0 6px">Tom</div>
+    <div class="chips">${t.roofs.map(k=>`<button class="chipb ${b.roof===k?'on':''}" data-rf="${k}">${CAT.roofs[k]}</button>`).join('')}</div>
+    <div class="swatches"><span class="lbl2">Rang</span>${CAT.styles[b.style].walls.map(c=>`<button class="sw ${c===b.color?'sel':''}" data-c="${c}" style="background:${c}"></button>`).join('')}</div>
+    <div class="swatches"><span class="lbl2">Bezak</span>${ACCENT_COLORS.map(c=>`<button class="sw ${c===b.accent?'sel':''}" data-a="${c}" style="background:${c}"></button>`).join('')}</div>`;
   openSheet(`<h3>Nima quramiz?</h3><div class="sub">${ZONES[p.zone].name} zonasi · ${DISTRICTS[p.district]}</div>
-    <div class="tpls">${opts.map(k=>`<button class="tpl ${k===b.tpl?'sel':''}" data-k="${k}"><div class="ic">${ICON[TPL[k].kind]}</div><b>${TPL[k].name}</b><small>${fmt(TPL[k].cost)} tanga · +${fmt(TPL[k].income)}/kun</small></button>`).join('')}</div>
-    <div class="swatches"><span class="lbl2">Rang</span>${palette.map(c=>`<button class="sw ${c===b.color?'sel':''}" data-c="${c}" style="background:${c}"></button>`).join('')}</div>
-    ${hasAccent?`<div class="swatches"><span class="lbl2">Bezak</span>${ACCENT_COLORS.map(c=>`<button class="sw ${c===b.accent?'sel':''}" data-a="${c}" style="background:${c}"></button>`).join('')}</div>`:''}
-    <div class="row"><button class="btn" id="rotB">↻ Aylantirish</button><button class="btn primary" id="doBuild" ${S.coins>=t.cost?'':'disabled'}>Qurish · ${fmt(t.cost)}</button></div>
-    ${S.coins<t.cost?`<div class="note warn">Tanga yetmaydi: yana ${fmt(t.cost-S.coins)} kerak. Arzonroq shablon tanlang.</div>`:'<div class="note">Yarim shaffof ko‘rinish — natija qanday bo‘lishini oldindan ko‘rasiz.</div>'}`, 'build');
-  body.querySelectorAll('.tpl').forEach(el=>el.onclick=()=>{ b.tpl=el.dataset.k; if(TPL[b.tpl].kind==='tower' && !GLASS_COLORS.includes(b.color)) b.color=GLASS_COLORS[0]; if(TPL[b.tpl].kind!=='tower' && !WALL_COLORS.includes(b.color)) b.color=WALL_COLORS[0]; renderBuild(); });
+    <div class="tpls">${opts.map(k=>`<button class="tpl ${k===b.tpl?'sel':''}" data-k="${k}"><div class="ic">${ICON[k]||ICON.office}</div><b>${TPL[k].name}</b><small>${fmt(minCost(k))}+ tanga</small><small>${TPL[k].floors[0]}–${TPL[k].floors[1]} qavat</small></button>`).join('')}</div>
+    ${lmCards ? `<div class="lbl2" style="margin:2px 0 6px">Dunyoning eng baland 10 binosi — har biridan bittadan</div><div class="tpls">${lmCards}</div>` : ''}
+    ${t.landmark ? `<div class="note" style="margin:-4px 0 12px">${esc(buildingSub(b))}. Asl loyiha shakli soddalashtirilgan holda.</div>` : ''}
+    ${fl}
+    <div class="kv"><div><small>Narx</small><b id="bCost">${fmt(cost)} tanga</b></div><div><small>Kunlik daromad</small><b id="bInc">+${fmt(income)}</b></div><div><small>Qurilish</small><b id="bSec">${secs} soniya</b></div><div><small>Balansingiz</small><b>${fmt(S.coins)}</b></div></div>
+    <div class="row"><button class="btn" id="rotB">↻ Aylantirish</button><button class="btn primary" id="doBuild" ${S.coins>=cost?'':'disabled'}>Qurish · <span id="bCost2">${fmt(cost)}</span></button></div>
+    <div class="note ${S.coins<cost?'warn':''}" id="bNote">${S.coins<cost?`Tanga yetmaydi: yana ${fmt(cost-S.coins)} kerak.`:'Yarim shaffof ko‘rinish — natija qanday bo‘lishini oldindan ko‘rasiz.'}</div>`, 'build');
+  body.querySelectorAll('.tpl').forEach(el=>el.onclick=()=>{ if (el.disabled) return; b.tpl = el.dataset.k; const tt = TPL[b.tpl]; if (!tt.landmark){ b.floors = tt.floors[0]; b.roof = tt.roofs[0]; } renderBuild(); });
+  body.querySelectorAll('[data-st]').forEach(el=>el.onclick=()=>{ b.style = el.dataset.st; renderBuild(); });
+  body.querySelectorAll('[data-rf]').forEach(el=>el.onclick=()=>{ b.roof = el.dataset.rf; renderBuild(); });
   body.querySelectorAll('[data-c]').forEach(el=>el.onclick=()=>{ b.color=el.dataset.c; renderBuild(); });
   body.querySelectorAll('[data-a]').forEach(el=>el.onclick=()=>{ b.accent=el.dataset.a; renderBuild(); });
+  const flR = $('#flR');
+  if (flR) flR.oninput = ()=>{ // live price; the 3D preview follows after a short pause
+    b.floors = +flR.value; $('#flN').textContent = b.floors;
+    const c = specCost(b); $('#bCost').textContent = fmt(c)+' tanga'; $('#bCost2').textContent = fmt(c); $('#bInc').textContent = '+'+fmt(specIncome(b)); $('#bSec').textContent = specBuildS(b)+' soniya';
+    $('#doBuild').disabled = S.coins < c; const n = $('#bNote'); n.className = 'note' + (S.coins<c?' warn':''); n.textContent = S.coins<c ? `Tanga yetmaydi: yana ${fmt(c-S.coins)} kerak.` : 'Yarim shaffof ko‘rinish — natija qanday bo‘lishini oldindan ko‘rasiz.';
+    clearTimeout(ghostTimer); ghostTimer = setTimeout(()=>makeGhost(b), 120);
+  };
   $('#rotB').onclick = ()=>{ b.rot=(b.rot+1)%4; makeGhost(b); };
   $('#doBuild').onclick = ()=>doBuild();
   makeGhost(b);
+  const gh = getVariant(b).height; if (gh > 40) flyTo(p.x, p.z, Math.max(camera.radius, gh*1.8), Math.min(camera.beta, 1.05));
 }
 const rising = [];
 async function doBuild(){
-  const b = S.build, p = b.p, t = TPL[b.tpl];
-  if (S.coins < t.cost) return;
+  const b = S.build, p = b.p, t = TPL[b.tpl], cost = specCost(b);
+  if (S.coins < cost) return;
   if (API.on){
     $('#doBuild').disabled = true;
     try {
-      const r = await api('POST', `/api/plots/${p.id}/build`, { template:b.tpl, rotation:b.rot, color:b.color, accent:b.accent }, 'build-'+p.id+'-'+Date.now().toString(36));
+      const body = t.landmark ? { template:b.tpl, rotation:b.rot } : { template:b.tpl, style:b.style, floors:b.floors, roof:b.roof, rotation:b.rot, color:b.color, accent:b.accent };
+      const r = await api('POST', `/api/plots/${p.id}/build`, body, 'build-'+p.id+'-'+Date.now().toString(36));
       closeSheet(); select(p);
       applyDTO(p, r.plot, true); await refreshMe();
-      toast(`${t.name} qurilmoqda…`); if (S.tut===2) tut(3);
+      toast(`${buildingName(p)} qurilmoqda…`); if (S.tut===2) tut(3);
     } catch(e){ toast(e.message); const d=$('#doBuild'); if (d) d.disabled=false; }
     return;
   }
-  S.coins -= t.cost; updateCoins();
-  p.tpl = b.tpl; p.rot = b.rot; p.color = b.color; p.accent = b.accent; p.building = true;
+  S.coins -= cost; updateCoins();
+  Object.assign(p, { tpl:b.tpl, style:b.style, floors:b.floors, roof:b.roof, rot:b.rot, color:b.color, accent:b.accent, building:true });
   closeSheet(); select(p);
   addBuilding(p, true);
-  rising.push({ p, t:0, dur: 3.2 });
-  toast(`${t.name} qurilmoqda…`);
+  rising.push({ p, t:0, dur: t.landmark ? 6 : 3.2 });
+  toast(`${buildingName(p)} qurilmoqda…`);
   if (S.tut===2) tut(3);
 }
 
 // ---------- my property ----------
 function openMine(){
   const mine = myPlots();
-  const items = mine.length ? mine.map(p=>`<div class="item"><div><b>${p.tpl?TPL[p.tpl].name:'Bo‘sh yer'}</b><small>#${p.id+1} · ${ZONES[p.zone].name} · ${p.tpl?'+'+fmt(TPL[p.tpl].income)+' tanga/kun':'qurilmagan'}</small></div><button data-id="${p.id}">${p.tpl?'Ko‘rsatish':'Qurish'}</button></div>`).join('')
+  const items = mine.length ? mine.map(p=>`<div class="item"><div><b>${p.tpl?esc(buildingName(p)):'Bo‘sh yer'}</b><small>#${p.id+1} · ${ZONES[p.zone].name} · ${p.tpl?'+'+fmt(specIncome(p))+' tanga/kun':'qurilmagan'}</small></div><button data-id="${p.id}">${p.tpl?'Ko‘rsatish':'Qurish'}</button></div>`).join('')
     : '<div class="note">Sizda hali yer yo‘q. “Yer top” tugmasini bosing.</div>';
-  const daily = mine.reduce((s,p)=>s+(p.tpl&&!p.building?TPL[p.tpl].income:0),0);
+  const daily = mine.reduce((s,p)=>s+(p.tpl&&!p.building?specIncome(p):0),0);
   openSheet(`<h3>Mening mulkim</h3><div class="sub">${mine.length} / ${S.limit} uchastka · kunlik daromad ${fmt(daily)} tanga</div>
     ${kv([['To‘plangan daromad',`<span id="pend">${fmt(S.pending)}</span> tanga`],['Balans',fmt(S.coins)+' tanga']])}
     <div class="row" style="margin-bottom:14px"><button class="btn gold" id="collect" ${S.pending>=1?'':'disabled'}>Daromadni yig‘ish</button></div>
@@ -888,7 +1471,7 @@ function openMine(){
 // ---------- find land ----------
 function findLand(){
   const tx = camera.target.x, tz = camera.target.z;
-  const minBuild = z => Math.min(...templatesFor(z).map(k=>TPL[k].cost));
+  const minBuild = z => Math.min(...templatesFor(z).map(k=>minCost(k)));
   const cand = plots.filter(p=>p.state==='empty' && landPrice(p)+minBuild(p.zone)<=S.coins)
     .map(p=>({p, d:Math.hypot(p.x-tx,p.z-tz)})).sort((a,b)=>a.d-b.d);
   if (!cand.length){ toast(myPlots().length>=S.limit?'Uchastkalar limitiga yetdingiz.':'Mos bo‘sh yer topilmadi.'); return; }
@@ -927,7 +1510,7 @@ function openSettings(){
 let shadowGen = null, pipeline = null, glow = null;
 const casters = () => {
   const list = [trunk, crown, pole, basin, jet];
-  for (const k of TPL_KEYS) for (const pt of T[k].parts) list.push(pt.mesh);
+  for (const t of Object.values(T)) for (const pt of t.parts) list.push(pt.mesh);
   return list;
 };
 const isMobile = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
@@ -1144,7 +1727,7 @@ function handleTap(x, y){
   if (!hit || !hit.hit){ if (S.sheet!=='build'){ closeSheet(); select(null); } return; }
   let p = null;
   if (hit.pickedMesh === pad) p = plots[hit.thinInstanceIndex];
-  else for (const k of TPL_KEYS){ const t=T[k]; if (t.parts.some(pt=>pt.mesh===hit.pickedMesh)){ const pid=t.plotsByInst[hit.thinInstanceIndex]; if(pid!=null) p=plots[pid]; break; } }
+  else for (const t of Object.values(T)){ if (t.parts.some(pt=>pt.mesh===hit.pickedMesh)){ const pid=t.plotsByInst[hit.thinInstanceIndex]; if(pid!=null) p=plots[pid]; break; } }
   if (!p) return;
   if (S.sheet==='build' && S.build && S.build.p===p) return;
   clearGhost();
@@ -1170,15 +1753,15 @@ scene.onBeforeRenderObservable.add(()=>{
   updateSky();
   // income
   if (API.on){ S.pending += (S.daily||0) * dt / (API.daySeconds||86400); }
-  else { const mine = myPlots(); let daily = 0; for (const p of mine) if (p.tpl && !p.building) daily += TPL[p.tpl].income; S.pending += daily * dh/24; }
+  else { const mine = myPlots(); let daily = 0; for (const p of mine) if (p.tpl && !p.building) daily += specIncome(p); S.pending += daily * dh/24; }
   if (S.sheet==='mine'){ const el=$('#pend'); if (el) el.textContent = fmt(S.pending); const c=$('#collect'); if(c) c.disabled = S.pending<1; }
   // rising buildings
   for (let i=rising.length-1;i>=0;i--){
     const r = rising[i]; r.t += dt; const k = clamp(r.t/r.dur,0,1); const e = 1-Math.pow(1-k,3);
     if (!r.p.tpl || r.p.inst==null){ rising.splice(i,1); continue; }
     const m = plotMatrix(r.p, Math.max(0.02,e));
-    for (const pt of T[r.p.tpl].parts) pt.mesh.thinInstanceSetMatrixAt(r.p.inst, m, true);
-    if (k>=1){ rising.splice(i,1); r.p.building=false; if (r.p.state==='mine'){ toast(`${TPL[r.p.tpl].name} tayyor! Kuniga +${fmt(TPL[r.p.tpl].income)} tanga.`); if (API.on) refreshMe(); if (S.tut===3) setTimeout(()=>tut(0),4000); } }
+    for (const pt of T[r.p.vkey].parts) pt.mesh.thinInstanceSetMatrixAt(r.p.inst, m, true);
+    if (k>=1){ rising.splice(i,1); r.p.building=false; if (r.p.state==='mine'){ toast(`${buildingName(r.p)} tayyor! Kuniga +${fmt(specIncome(r.p))} tanga.`); if (API.on) refreshMe(); if (S.tut===3) setTimeout(()=>tut(0),4000); } }
   }
   // camera fly
   if (fly){
@@ -1220,7 +1803,6 @@ scene.onBeforeRenderObservable.add(()=>{
 
 // thin-instance meshes: bounding box would otherwise sit at the origin and get culled
 [sideBox,dash,pad,trunk,crown,pole,bulb].forEach(m=>m.alwaysSelectAsActiveMesh=true);
-for (const k of TPL_KEYS) for (const pt of T[k].parts) pt.mesh.alwaysSelectAsActiveMesh = true;
 
 // ---------- server connection (when served by the Mahalla server; the artifact runs as an offline demo) ----------
 function applyDTO(p, d, animate){
@@ -1233,9 +1815,10 @@ function applyDTO(p, d, animate){
   p.price = d.price; p.likes = d.likes;
   p.ownerTg = d.owner ? (d.owner.telegram || null) : null;
   const b = d.building;
-  if (b && (!p.tpl || p.tpl !== b.template || p.inst == null)){
+  const newKey = b ? vkey({ tpl:b.template, style:b.style, floors:b.floors, roof:b.roof }) : null;
+  if (b && TPL[b.template] && (!p.tpl || p.vkey !== newKey || p.inst == null)){
     if (p.tpl) hideBuilding(p);
-    p.tpl = b.template; p.rot = b.rotation; p.color = b.color; p.accent = b.accent;
+    Object.assign(p, { tpl:b.template, style:b.style, floors:b.floors, roof:b.roof, rot:b.rotation, color:b.color, accent:b.accent });
     const left = (Date.parse(b.readyAt) - Date.now())/1000;
     p.building = left > 0;
     addBuilding(p, animate);
@@ -1377,7 +1960,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { scene, engine, plots, S, applyQuality, camera, T, vel, setLabel };
+window.__mahalla = { scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>

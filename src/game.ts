@@ -4,7 +4,7 @@ import type { Db, Tx } from './db.js';
 import { tx } from './db.js';
 import { config } from './config.js';
 import { E } from './errors.js';
-import { ECONOMY_DEFAULTS, Economy, TEMPLATES, COLORS, ZoneCode, landPrice, estimate, accrued } from './economy.js';
+import { ECONOMY_DEFAULTS, Economy, ZoneCode, landPrice, estimate, accrued, normalizeSpec, zonesOf, costOf, incomeOf, buildSecondsOf, isLandmark, } from './economy.js';
 import type { SessionUser } from './auth.js';
 
 // ---------- economy config (DB overrides, cached briefly) ----------
@@ -29,14 +29,14 @@ export interface PlotDTO {
   state: 'empty' | 'owned' | 'sale'; price: number | null;
   /** telegram = @username without @, only when the owner allows it */
   owner: { id: number; nickname: string | null; telegram: string | null } | null;
-  building: { template: string; rotation: number; color: string; accent: string; level: number; readyAt: string } | null;
+  building: { template: string; style: string; floors: number; roof: string; rotation: number; color: string; accent: string; level: number; readyAt: string } | null;
   likes: number;
 }
 
 const PLOT_SQL = `
   select p.id, p.x, p.z, p.zone, p.district_id, p.location_factor, p.status, p.owner_id, u.nickname as owner_nick,
          case when u.show_telegram then u.telegram_username end as owner_tg,
-         b.template, b.rotation, b.color, b.accent, b.level, b.ready_at, b.status as bstatus,
+         b.template, b.style, b.floors, b.roof, b.rotation, b.color, b.accent, b.level, b.ready_at, b.status as bstatus,
          l.price as listing_price, coalesce(k.n, 0)::int as likes
   from plots p
   left join users u on u.id = p.owner_id
@@ -51,7 +51,7 @@ function toDTO(r: any, occ: Map<number, number>, eco: Economy): PlotDTO {
     price: state === 'empty' ? landPrice(r.zone, r.location_factor, occ.get(r.district_id) || 0, eco) : state === 'sale' ? r.listing_price : null,
     owner: r.owner_id ? { id: r.owner_id, nickname: r.owner_nick, telegram: r.owner_tg || null } : null,
     building: r.template && r.bstatus === 'active'
-      ? { template: r.template, rotation: r.rotation, color: r.color, accent: r.accent, level: r.level, readyAt: r.ready_at.toISOString() }
+      ? { template: r.template, style: r.style, floors: r.floors, roof: r.roof, rotation: r.rotation, color: r.color, accent: r.accent, level: r.level, readyAt: r.ready_at.toISOString() }
       : null,
     likes: r.likes,
   };
@@ -120,10 +120,10 @@ export async function buyPlot(db: Db, user: SessionUser | null, plotId: number, 
       await move(c, u.id, -price, 'plot_buy', 'plot', plotId, key);
       if (listing && seller) {
         // the seller keeps income earned up to the moment of sale
-        const b = (await c.query('select b.*, t.income_per_day from buildings b join building_templates t on t.code = b.template where plot_id = $1 for update', [plotId])).rows[0];
+        const b = (await c.query('select * from buildings where plot_id = $1 for update', [plotId])).rows[0];
         if (b) {
           const now = new Date();
-          const inc = accrued(b.income_per_day, b.ready_at, b.last_collected_at, now, config.daySeconds, eco.income_cap_days);
+          const inc = accrued(incomeOf(b.template, b.floors), b.ready_at, b.last_collected_at, now, config.daySeconds, eco.income_cap_days);
           if (inc > 0) await move(c, seller, inc, 'income', 'plot', plotId);
           await c.query('update buildings set last_collected_at = greatest(ready_at, $2) where id = $1', [b.id, now]);
         }
@@ -143,12 +143,10 @@ export async function buyPlot(db: Db, user: SessionUser | null, plotId: number, 
 
 // ---------- build ----------
 export async function buildOnPlot(db: Db, user: SessionUser | null, plotId: number,
-  body: { template: string; rotation: number; color: string; accent: string }, key: string | null) {
+  body: { template: string; rotation?: number; color?: string; accent?: string; style?: string; floors?: number; roof?: string }, key: string | null) {
   const u = requirePlayer(user);
-  const t = TEMPLATES[body.template];
-  if (!t) throw E.bad('bad_template', 'Bunday bino shabloni yo‘q.');
-  const palette = body.template === 'tower' ? COLORS.glass : COLORS.wall;
-  if (!palette.includes(body.color) || !COLORS.accent.includes(body.accent)) throw E.bad('bad_color', 'Bu rang ro‘yxatda yo‘q.');
+  const spec = normalizeSpec(body);
+  if ('error' in spec) throw E.bad(spec.code, spec.error);
   try {
     return await tx(db, async (c) => {
       const p = (await c.query('select * from plots where id = $1 for update', [plotId])).rows[0];
@@ -157,21 +155,27 @@ export async function buildOnPlot(db: Db, user: SessionUser | null, plotId: numb
       if (!p) throw E.notFound('Uchastka topilmadi');
       if (p.owner_id !== u.id) throw E.forbidden();
       if ((await c.query('select 1 from buildings where plot_id = $1', [plotId])).rows.length) throw E.conflict('already_built', 'Bu uchastkada bino bor.');
-      const tpl = (await c.query('select * from building_templates where code = $1 and active', [body.template])).rows[0];
-      if (!tpl) throw E.bad('bad_template', 'Bu shablon hozir mavjud emas.');
-      if (!tpl.zones.includes(p.zone)) throw E.bad('wrong_zone', `${tpl.name} bu zonada qurilmaydi.`);
+      const tpl = (await c.query('select * from building_templates where code = $1 and active', [spec.template])).rows[0];
+      if (!tpl) throw E.bad('bad_template', 'Bu bino turi hozir mavjud emas.');
+      if (!zonesOf(spec.template).includes(p.zone)) throw E.bad('wrong_zone', `${tpl.name} bu zonada qurilmaydi.`);
+      if (isLandmark(spec.template) && (await c.query('select 1 from buildings where template = $1', [spec.template])).rows.length) {
+        throw E.conflict('landmark_taken', `${tpl.name} nusxasi shaharda allaqachon bor — har biridan bittadan.`);
+      }
+      const cost = costOf(spec.template, spec.floors);
       const bal = await lockWallets(c, [u.id]);
       const have = bal.get(u.id) ?? 0;
-      if (have < tpl.cost) throw E.funds(tpl.cost - have);
-      await move(c, u.id, -tpl.cost, 'build', 'plot', plotId, key);
-      const readyAt = new Date(Date.now() + tpl.build_seconds * 1000);
+      if (have < cost) throw E.funds(cost - have);
+      await move(c, u.id, -cost, 'build', 'plot', plotId, key);
+      const readyAt = new Date(Date.now() + buildSecondsOf(spec.template, spec.floors) * 1000);
       await c.query(
-        'insert into buildings(plot_id,template,rotation,color,accent,ready_at,last_collected_at) values ($1,$2,$3,$4,$5,$6,$6)',
-        [plotId, body.template, body.rotation, body.color, body.accent, readyAt]);
-      return { replayed: false, readyAt: readyAt.toISOString() };
+        `insert into buildings(plot_id,template,style,floors,roof,rotation,color,accent,ready_at,last_collected_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)`,
+        [plotId, spec.template, spec.style, spec.floors, spec.roof, spec.rotation, spec.color, spec.accent, readyAt]);
+      return { replayed: false, cost, readyAt: readyAt.toISOString() };
     });
-  } catch (e) {
+  } catch (e: any) {
     if (isUnique(e)) return { replayed: true };
+    if (e && e.code === '23505' && String(e.constraint || '').includes('landmark')) throw E.conflict('landmark_taken', 'Bu osmono‘par nusxasi allaqachon qurilgan.');
     throw e;
   }
 }
@@ -179,9 +183,10 @@ export async function buildOnPlot(db: Db, user: SessionUser | null, plotId: numb
 // ---------- income ----------
 async function pendingRows(c: Db | Tx, userId: number, lock: boolean) {
   return (await c.query(
-    `select b.id, b.ready_at, b.last_collected_at, t.income_per_day from buildings b
-     join plots p on p.id = b.plot_id join building_templates t on t.code = b.template
-     where p.owner_id = $1 and b.status = 'active' ${lock ? 'for update of b' : ''}`, [userId])).rows;
+    `select b.id, b.template, b.floors, b.ready_at, b.last_collected_at from buildings b
+     join plots p on p.id = b.plot_id
+     where p.owner_id = $1 and b.status = 'active' ${lock ? 'for update of b' : ''}`, [userId])).rows
+    .map((b) => ({ ...b, income_per_day: incomeOf(b.template, b.floors) }));
 }
 export async function pendingIncome(db: Db, userId: number) {
   const eco = await economy(db); const now = new Date();
@@ -224,9 +229,9 @@ export async function listForSale(db: Db, user: SessionUser | null, plotId: numb
     if ((await c.query("select 1 from listings where plot_id = $1 and status = 'active'", [plotId])).rows.length) {
       throw E.conflict('already_listed', 'Bu uchastka allaqachon sotuvda.');
     }
-    const b = (await c.query('select template from buildings where plot_id = $1', [plotId])).rows[0];
+    const b = (await c.query('select template, floors from buildings where plot_id = $1', [plotId])).rows[0];
     const land = landPrice(p.zone, p.location_factor, (await occupancy(c)).get(p.district_id) || 0, eco);
-    const est = estimate(land, b ? b.template : null);
+    const est = estimate(land, b ? costOf(b.template, b.floors) : 0);
     const min = Math.ceil(est * eco.sale_min_ratio), max = Math.floor(est * eco.sale_max_ratio);
     if (!Number.isInteger(price) || price < min || price > max) {
       throw E.bad('price_out_of_range', `Narx ${min} – ${max} tanga oralig‘ida bo‘lishi kerak.`, { min, max, estimate: est });

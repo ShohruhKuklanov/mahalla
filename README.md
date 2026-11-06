@@ -24,7 +24,7 @@ Windows’da: `set DAY_SECONDS=360 && npm run dev`.
 npm test
 ```
 
-16 ta uchidan-uchigacha sinov haqiqiy PostgreSQL’da ishlaydi. Ular quyidagilarni tekshiradi:
+19 ta uchidan-uchigacha sinov haqiqiy PostgreSQL’da ishlaydi. Ular quyidagilarni tekshiradi:
 
 - 20 kishi bir vaqtda bitta yerni sotib olmoqchi bo‘lsa, faqat bittasi oladi va boshqalarning tangasi yo‘qolmaydi.
 - Tugma ikki marta bosilsa ham pul bir marta yechiladi.
@@ -93,7 +93,14 @@ test/                 uchidan-uchigacha sinovlar
 
 Narxlar, limitlar va komissiyani kodni o‘zgartirmasdan `economy_config` jadvalida sozlash mumkin.
 
-## 7. Hali yo‘q (keyingi qadamlar)
+## 7. Binolar katalogi
+
+Bino turlari, uslublar (Zamonaviy / High-tech / Milliy), qavatlar oralig‘i, tomlar, ranglar, narx va daromad formulalari hamda dunyoning eng baland 10 binosi nusxalari **bitta joyda**: `web/index.html` ichidagi `<script id="catalog">` bloki. Server ham (`src/economy.ts`) aynan shu blokni o‘qiydi, shuning uchun narxni o‘zgartirish uchun faqat shu blokni tahrirlash kifoya.
+
+- Narx = asosiy narx + har qo‘shimcha qavat uchun qo‘shimcha; daromad ham xuddi shunday.
+- Osmono‘par nusxalari faqat Markaz zonasida va har biridan shaharda bittadan.
+
+## 8. Hali yo‘q (keyingi qadamlar)
 
 - Google va SMS orqali kirish (hozir Telegram + sinov kirishi).
 - Haqiqiy 3D rassom modellari (glTF). Hozir binolar kod bilan yasalgan.

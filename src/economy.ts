@@ -36,15 +36,67 @@ export function cityPlots(): PlotSeed[] {
   return out;
 }
 
-export const TEMPLATES: Record<string, { name: string; zones: ZoneCode[]; cost: number; buildSeconds: number; income: number }> = {
-  house:  { name: 'Kichik uy',       zones: ['res'],               cost: 2000,  buildSeconds: 30,  income: 150 },
-  villa:  { name: 'Ikki qavatli uy', zones: ['res'],               cost: 4000,  buildSeconds: 60,  income: 260 },
-  flat:   { name: 'Ko‘p qavatli uy', zones: ['res', 'com'],        cost: 6500,  buildSeconds: 120, income: 420 },
-  shop:   { name: 'Do‘kon',          zones: ['com', 'cen'],        cost: 3000,  buildSeconds: 45,  income: 400 },
-  cafe:   { name: 'Choyxona',        zones: ['com', 'cen', 'res'], cost: 3500,  buildSeconds: 60,  income: 480 },
-  office: { name: 'Ofis',            zones: ['com', 'cen'],        cost: 7000,  buildSeconds: 180, income: 650 },
-  tower:  { name: 'Biznes markaz',   zones: ['cen'],               cost: 15000, buildSeconds: 300, income: 1200 },
-};
+// ---------- building catalog ----------
+// Single source of truth: the <script id="catalog"> block in web/index.html (the 3D client reads the same block).
+import fs from 'node:fs';
+import { rootPath } from './db.js';
+
+export interface TypeDef { name: string; zones: ZoneCode[]; floors: [number, number]; w: number; d: number; cost: [number, number]; income: [number, number]; build: [number, number]; roofs: string[] }
+export interface LandmarkDef { name: string; city: string; realHeight: number; cost: number; income: number; build: number }
+export interface Catalog {
+  floorHeight: number;
+  styles: Record<string, { name: string; walls: string[] }>;
+  accents: string[];
+  roofs: Record<string, string>;
+  types: Record<string, TypeDef>;
+  landmarkScale: number;
+  landmarks: Record<string, LandmarkDef>;
+}
+function loadCatalog(): Catalog {
+  const html = fs.readFileSync(rootPath('web') + '/index.html', 'utf8');
+  const m = html.match(/<script id="catalog" type="application\/json">([\s\S]*?)<\/script>/);
+  if (!m) throw new Error('web/index.html: catalog block not found');
+  return JSON.parse(m[1]);
+}
+export const CATALOG: Catalog = loadCatalog();
+export const isLandmark = (t: string) => Object.prototype.hasOwnProperty.call(CATALOG.landmarks, t);
+
+export interface BuildSpec { template: string; style: string; floors: number; roof: string; color: string; accent: string; rotation: number }
+
+/** Fill defaults and validate a build request; throws a message (Uzbek) on the first problem. Zone is checked by the caller. */
+export function normalizeSpec(b: Partial<BuildSpec> & { template: string }): BuildSpec | { error: string; code: string } {
+  const rotation = Number.isInteger(b.rotation) && b.rotation! >= 0 && b.rotation! <= 3 ? b.rotation! : 0;
+  if (isLandmark(b.template)) {
+    // landmark copies have a fixed design; colour fields are kept for the record
+    return { template: b.template, style: 'hitech', floors: 1, roof: 'none', color: b.color || '#cfe3ee', accent: b.accent || CATALOG.accents[0], rotation };
+  }
+  const t = CATALOG.types[b.template];
+  if (!t) return { code: 'bad_template', error: 'Bunday bino turi yo‘q.' };
+  const style = b.style ?? 'modern';
+  if (!CATALOG.styles[style]) return { code: 'bad_style', error: 'Bunday uslub yo‘q.' };
+  const floors = b.floors ?? t.floors[0];
+  if (!Number.isInteger(floors) || floors < t.floors[0] || floors > t.floors[1]) {
+    return { code: 'bad_floors', error: `${t.name}: qavatlar soni ${t.floors[0]}–${t.floors[1]} bo‘lishi kerak.` };
+  }
+  const roof = b.roof ?? t.roofs[0];
+  if (!t.roofs.includes(roof)) return { code: 'bad_roof', error: `${t.name} uchun bu tom turi mavjud emas.` };
+  const color = b.color ?? CATALOG.styles[style].walls[0], accent = b.accent ?? CATALOG.accents[0];
+  if (!CATALOG.styles[style].walls.includes(color) || !CATALOG.accents.includes(accent)) return { code: 'bad_color', error: 'Bu rang ro‘yxatda yo‘q.' };
+  return { template: b.template, style, floors, roof, color, accent, rotation };
+}
+export function zonesOf(template: string): ZoneCode[] { return isLandmark(template) ? ['cen'] : CATALOG.types[template]?.zones ?? []; }
+export function costOf(template: string, floors: number) {
+  if (isLandmark(template)) return CATALOG.landmarks[template].cost;
+  const t = CATALOG.types[template]; return t.cost[0] + t.cost[1] * (floors - t.floors[0]);
+}
+export function incomeOf(template: string, floors: number) {
+  if (isLandmark(template)) return CATALOG.landmarks[template].income;
+  const t = CATALOG.types[template]; if (!t) return 0; return t.income[0] + t.income[1] * (Math.max(floors, t.floors[0]) - t.floors[0]);
+}
+export function buildSecondsOf(template: string, floors: number) {
+  if (isLandmark(template)) return CATALOG.landmarks[template].build;
+  const t = CATALOG.types[template]; return t.build[0] + t.build[1] * (floors - t.floors[0]);
+}
 
 /** Defaults; overridable at runtime through the economy_config table (admin), no deploy needed. */
 export const ECONOMY_DEFAULTS = {
@@ -60,11 +112,6 @@ export const ECONOMY_DEFAULTS = {
 };
 export type Economy = typeof ECONOMY_DEFAULTS;
 
-export const COLORS = {
-  wall: ['#f2e6d0', '#e8d4ae', '#f6f3ec', '#e3b49c', '#cfe0ea', '#d6e6d4', '#efd9c8'],
-  glass: ['#dfe9f2', '#cfe3e6', '#e9e4da', '#d5dcef'],
-  accent: ['#2a9d8f', '#3a6ea5', '#c0503b', '#e08a2c', '#3f9a5a', '#7b5ea7'],
-};
 
 const round100 = (n: number) => Math.round(n / 100) * 100;
 
@@ -74,8 +121,8 @@ export function landPrice(zone: ZoneCode, loc: number, districtOccupancy: number
 }
 
 /** System estimate of a plot with its building; resale price must stay within a corridor around it. */
-export function estimate(land: number, template: string | null) {
-  return round100(land * 1.25 + (template ? TEMPLATES[template].cost * 0.9 : 0));
+export function estimate(land: number, buildingCost: number) {
+  return round100(land * 1.25 + buildingCost * 0.9);
 }
 
 /** Income accrued since `from`, capped, for a building that became ready at `readyAt`. */

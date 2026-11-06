@@ -119,18 +119,18 @@ test('build: zone rules, colours, cost, one building per plot', async () => {
   const a = await player('builder');
   const p = await emptyPlot('res', 30);
   await a.call('POST', `/api/plots/${p.id}/buy`);
-  const bad = await a.call('POST', `/api/plots/${p.id}/build`, { template: 'tower', rotation: 0, color: '#dfe9f2', accent: '#2a9d8f' });
+  const bad = await a.call('POST', `/api/plots/${p.id}/build`, { template: 'tower', style: 'hitech', floors: 12, roof: 'antenna', rotation: 0, color: '#cfe3ee', accent: '#2a9d8f' });
   assert.equal(bad.json().error, 'wrong_zone');
   const badColor = await a.call('POST', `/api/plots/${p.id}/build`, { template: 'house', rotation: 0, color: '#ff00ff', accent: '#2a9d8f' });
   assert.equal(badColor.json().error, 'bad_color');
-  const ok = await a.call('POST', `/api/plots/${p.id}/build`, { template: 'house', rotation: 2, color: '#f2e6d0', accent: '#2a9d8f' });
+  const ok = await a.call('POST', `/api/plots/${p.id}/build`, { template: 'house', rotation: 2, style: 'milliy', color: '#f2e6d0', accent: '#2a9d8f' });
   assert.equal(ok.statusCode, 200, ok.body);
   assert.equal(ok.json().plot.building.template, 'house');
   assert.equal((await a.me()).balance, 10000 - p.price - 2000);
-  const again = await a.call('POST', `/api/plots/${p.id}/build`, { template: 'house', rotation: 0, color: '#f2e6d0', accent: '#2a9d8f' });
+  const again = await a.call('POST', `/api/plots/${p.id}/build`, { template: 'house', rotation: 0, style: 'milliy', color: '#f2e6d0', accent: '#2a9d8f' });
   assert.equal(again.json().error, 'already_built');
   const other = await player('intruder');
-  const steal = await other.call('POST', `/api/plots/${p.id}/build`, { template: 'house', rotation: 0, color: '#f2e6d0', accent: '#2a9d8f' });
+  const steal = await other.call('POST', `/api/plots/${p.id}/build`, { template: 'house', rotation: 0, style: 'milliy', color: '#f2e6d0', accent: '#2a9d8f' });
   assert.equal(steal.statusCode, 403);
 });
 
@@ -138,7 +138,7 @@ test('income: accrues per day, capped at 1 day, collected once', async () => {
   const a = await player('earner');
   const p = await emptyPlot('res', 40);
   await a.call('POST', `/api/plots/${p.id}/buy`);
-  await a.call('POST', `/api/plots/${p.id}/build`, { template: 'house', rotation: 0, color: '#f2e6d0', accent: '#2a9d8f' });
+  await a.call('POST', `/api/plots/${p.id}/build`, { template: 'house', rotation: 0, style: 'milliy', color: '#f2e6d0', accent: '#2a9d8f' });
   // pretend the house was finished 3 days ago and never collected
   await db.query("update buildings set ready_at = now() - interval '3 days', last_collected_at = now() - interval '3 days' where plot_id = $1", [p.id]);
   const before = (await a.me()).balance;
@@ -154,7 +154,7 @@ test('market: price corridor, new-account rule, sale moves coins and building', 
   const seller = await player('seller');
   const p = await emptyPlot('res', 50);
   await seller.call('POST', `/api/plots/${p.id}/buy`);
-  await seller.call('POST', `/api/plots/${p.id}/build`, { template: 'house', rotation: 0, color: '#f2e6d0', accent: '#2a9d8f' });
+  await seller.call('POST', `/api/plots/${p.id}/build`, { template: 'house', rotation: 0, style: 'milliy', color: '#f2e6d0', accent: '#2a9d8f' });
   const tooNew = await seller.call('POST', `/api/plots/${p.id}/list`, { price: 9000 });
   assert.equal(tooNew.json().error, 'account_too_new');
   await db.query("update users set created_at = now() - interval '10 days' where nickname = 'seller'");
@@ -239,6 +239,55 @@ test('Telegram login: signature checked, @username shown over the owner’s plot
   assert.equal((await app.inject({ method: 'GET', url: `/api/plots/${p.id}` })).json().owner.telegram, null, 'hidden when the owner turns it off');
   assert.equal((await app.inject({ method: 'GET', url: `/api/plots/${p.id}` })).json().owner.nickname, 'TgShohrux');
   (config as any).telegramBotToken = '';
+});
+
+test('demo city keeps exactly one showcase building per mahalla', async () => {
+  const r = await db.query("select p.district_id, b.style from buildings b join plots p on p.id = b.plot_id join users u on u.id = p.owner_id where u.role = 'bot' order by p.district_id");
+  assert.deepEqual(r.rows.map((x) => x.district_id), [0, 1, 2]);
+  assert.deepEqual(r.rows.map((x) => x.style).sort(), ['hitech', 'milliy', 'modern']);
+});
+
+test('styles, floors and roofs: validated, priced by floors', async () => {
+  const a = await player('stylist');
+  await db.query("update wallets set balance = balance + 50000 where user_id = (select id from users where nickname='stylist')");
+  await db.query("insert into transactions(user_id,amount,type,balance_after) select id, 50000, 'admin_adjust', 60000 from users where nickname='stylist'");
+  const p = (await city()).plots.filter((x: any) => x.state === 'empty' && x.zone === 'com')[0];
+  await a.call('POST', `/api/plots/${p.id}/buy`);
+  const tryBuild = (b: any) => a.call('POST', `/api/plots/${p.id}/build`, { template: 'office', accent: '#2a9d8f', ...b });
+  assert.equal((await tryBuild({ style: 'hitech', floors: 40, roof: 'antenna', color: '#cfe3ee' })).json().error, 'bad_floors');
+  assert.equal((await tryBuild({ style: 'hitech', floors: 10, roof: 'gable', color: '#cfe3ee' })).json().error, 'bad_roof');
+  assert.equal((await tryBuild({ style: 'gothic', floors: 10, roof: 'antenna', color: '#cfe3ee' })).json().error, 'bad_style');
+  assert.equal((await tryBuild({ style: 'milliy', floors: 10, roof: 'antenna', color: '#cfe3ee' })).json().error, 'bad_color', 'colour must match the style palette');
+  const before = (await a.me()).balance;
+  const ok = await tryBuild({ style: 'hitech', floors: 10, roof: 'helipad', color: '#cfe3ee' });
+  assert.equal(ok.statusCode, 200, ok.body);
+  assert.equal(ok.json().cost, 6000 + 500 * (10 - 3));
+  assert.equal((await a.me()).balance, before - 9500);
+  const b = ok.json().plot.building;
+  assert.deepEqual([b.template, b.style, b.floors, b.roof], ['office', 'hitech', 10, 'helipad']);
+  assert.deepEqual(await ledgerMismatches(db), []);
+});
+
+test('landmark copies: centre zone only, one of each per city', async () => {
+  const richify = async (nick: string) => {
+    await db.query("update wallets set balance = balance + 300000 where user_id = (select id from users where nickname=$1)", [nick]);
+    await db.query("insert into transactions(user_id,amount,type,balance_after) select u.id, 300000, 'admin_adjust', w.balance from users u join wallets w on w.user_id = u.id where u.nickname=$1", [nick]);
+  };
+  const a = await player('tycoon'); await richify('tycoon');
+  const res = await emptyPlot('res', 70);
+  await a.call('POST', `/api/plots/${res.id}/buy`);
+  assert.equal((await a.call('POST', `/api/plots/${res.id}/build`, { template: 'lm_burj' })).json().error, 'wrong_zone');
+  const cen = (await city()).plots.filter((x: any) => x.state === 'empty' && x.zone === 'cen');
+  await a.call('POST', `/api/plots/${cen[0].id}/buy`);
+  const ok = await a.call('POST', `/api/plots/${cen[0].id}/build`, { template: 'lm_burj', rotation: 1 });
+  assert.equal(ok.statusCode, 200, ok.body);
+  assert.equal(ok.json().cost, 120000);
+  const b = await player('tycoon2'); await richify('tycoon2');
+  await b.call('POST', `/api/plots/${cen[1].id}/buy`);
+  const dup = await b.call('POST', `/api/plots/${cen[1].id}/build`, { template: 'lm_burj' });
+  assert.equal(dup.statusCode, 409); assert.equal(dup.json().error, 'landmark_taken');
+  assert.equal((await b.call('POST', `/api/plots/${cen[1].id}/build`, { template: 'lm_lotte' })).statusCode, 200, 'another landmark is fine');
+  assert.deepEqual(await ledgerMismatches(db), []);
 });
 
 test('guest login is off unless GUEST_LOGIN=1', async () => {
