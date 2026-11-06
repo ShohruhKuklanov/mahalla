@@ -1,6 +1,6 @@
 import type { Db } from './db.js';
 import { tx } from './db.js';
-import { cityPlots, DISTRICTS, ZONES, ECONOMY_DEFAULTS, CATALOG, ZoneCode } from './economy.js';
+import { cityPlots, DISTRICTS, ZONES, ECONOMY_DEFAULTS, CATALOG, ZoneCode, costOf } from './economy.js';
 
 /** Idempotent: safe to run on every start. */
 export async function seed(db: Db, opts: { demo: boolean; log?: (m: string) => void }) {
@@ -40,6 +40,7 @@ export async function seed(db: Db, opts: { demo: boolean; log?: (m: string) => v
     }
   });
   if (opts.demo) await seedDemo(db, log);
+  await seedLandmarks(db, log);
 }
 
 const NICKS = ['sardor_77', 'Malika', 'jasur.dev', 'Dilnoza', 'bekzod_uz', 'Aziza.k', 'Otabek', 'Shahzoda', 'timur99', 'nodira', 'Ulug‘bek', 'Sevara', 'Javohir', 'Kamola', 'rustam_b', 'Laylo', 'Akmal', 'Madina', 'Sherzod', 'Zarina', 'Bobur', 'Gulnoza', 'Islom', 'Feruza'];
@@ -80,5 +81,39 @@ async function seedDemo(db: Db, log: (m: string) => void) {
       n++;
     }
     log(`demo city: ${botIds.length} neighbours, ${n} buildings`);
+  });
+}
+
+/**
+ * The 10 landmark copies stand around the central park from day one, owned by the city and for sale.
+ * Idempotent: a landmark that already exists anywhere (city-owned or bought by a player) is skipped.
+ * Placement: empty centre-zone plots nearest the park, at least 40 m apart (the 3D client uses the same rule offline).
+ */
+export async function seedLandmarks(db: Db, log: (m: string) => void = () => {}) {
+  await tx(db, async (c) => {
+    const have = new Set((await c.query("select template from buildings where template like 'lm\\_%'")).rows.map((r) => r.template));
+    const missing = Object.keys(CATALOG.landmarks).filter((k) => !have.has(k));
+    if (!missing.length) return;
+    let city = (await c.query("select id from users where nickname_lower = 'shahar hokimligi'")).rows[0]?.id;
+    if (!city) {
+      city = (await c.query("insert into users(nickname,nickname_lower,role,birth_confirmed_16,created_at) values ('Shahar hokimligi','shahar hokimligi','bot',true, now() - interval '60 days') returning id")).rows[0].id;
+      await c.query("insert into auth_identities(user_id,provider,subject) values ($1,'bot','city')", [city]);
+      await c.query('insert into wallets(user_id,balance) values ($1,0)', [city]);
+    }
+    const free = (await c.query("select id, x, z from plots where zone = 'cen' and status = 'empty' order by (x*x + z*z), id")).rows as { id: number; x: number; z: number }[];
+    const taken = (await c.query("select p.x, p.z from buildings b join plots p on p.id = b.plot_id where b.template like 'lm\\_%'")).rows as { x: number; z: number }[];
+    let n = 0;
+    for (const key of missing) {
+      const spot = free.find((p) => taken.every((t) => Math.hypot(t.x - p.x, t.z - p.z) >= 40));
+      if (!spot) break;
+      taken.push(spot); free.splice(free.indexOf(spot), 1);
+      await c.query("update plots set owner_id = $1, status = 'owned', purchased_at = now() where id = $2", [city, spot.id]);
+      await c.query(
+        `insert into buildings(plot_id,template,style,floors,roof,rotation,color,accent,ready_at,last_collected_at)
+         values ($1,$2,'hitech',1,'none',0,'#cfe3ee','#2a9d8f', now() - interval '1 day', now())`, [spot.id, key]);
+      await c.query('insert into listings(plot_id,seller_id,price) values ($1,$2,$3)', [spot.id, city, Math.round(costOf(key, 1) * 1.25 / 1000) * 1000]);
+      n++;
+    }
+    if (n) log(`landmarks placed: ${n}`);
   });
 }

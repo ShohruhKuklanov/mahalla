@@ -116,7 +116,7 @@
   /* owner labels over buildings */
   #labels{position:fixed;inset:0;z-index:3;pointer-events:none;overflow:hidden}
   .olbl{position:absolute;left:0;top:0;display:flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:11px;background:rgba(14,18,26,.80);
-        border:1.5px solid rgba(255,255,255,.22);color:#fff;font:700 12px/1 Manrope,system-ui,sans-serif;white-space:nowrap;max-width:170px;will-change:transform}
+        border:1.5px solid rgba(255,255,255,.22);color:#fff;font:700 12px/1 Manrope,system-ui,sans-serif;white-space:nowrap;max-width:230px;will-change:transform}
   .olbl span{overflow:hidden;text-overflow:ellipsis}
   .olbl.tg{border-color:rgba(42,171,238,.85)}
   .olbl.mine{background:rgba(14,64,58,.92);border-color:#2fb5a3}
@@ -702,7 +702,7 @@ function stdMat(name, opts){
 const nightMats = []; // materials whose emissive follows the night
 
 // ---------- light + camera ----------
-const camera = new B.ArcRotateCamera('cam', -Math.PI/2.6, 0.92, 320, new V3(0,0,0), scene);
+const camera = new B.ArcRotateCamera('cam', -Math.PI/2.6, 1.08, 300, new V3(0,0,0), scene);
 camera.lowerRadiusLimit = 22; camera.upperRadiusLimit = 620;
 camera.lowerBetaLimit = 0.18; camera.upperBetaLimit = 1.42;
 camera.minZ = 1; camera.maxZ = 4000;
@@ -1142,6 +1142,14 @@ function populateDemo(){
     Object.assign(p, { state:'owned', owner:sh.owner, tpl:sh.tpl, style:sh.style, floors:sh.floors, roof:sh.roof, color:sh.color, accent:sh.accent, rot: Math.floor(rnd()*4), likes: 12 });
     addBuilding(p, false);
   }
+  // the 10 landmark copies around the park, owned by the city and for sale (same rule as the server's seed)
+  const spots = [], free = plots.filter(q => q.zone==='cen' && q.state==='empty').sort((a,b) => (a.x*a.x+a.z*a.z) - (b.x*b.x+b.z*b.z) || a.id - b.id);
+  for (const k of LM_KEYS){
+    const p = free.find(q => !spots.includes(q) && spots.every(t => Math.hypot(t.x-q.x, t.z-q.z) >= 40)); if (!p) break;
+    spots.push(p);
+    Object.assign(p, { state:'sale', owner:'Shahar hokimligi', tpl:k, style:'hitech', floors:1, roof:'none', color:'#cfe3ee', accent:'#2a9d8f', rot:0, likes: 40 });
+    addBuilding(p, false);
+  }
   for (const p of plots) paintPad(p, false);
 }
 function flushBuffers(){
@@ -1165,7 +1173,11 @@ const lblLayer = document.createElement('div'); lblLayer.id = 'labels'; document
 const labelY = p => 0.42 + (p.tpl && T[p.vkey] ? T[p.vkey].height : 0) + 2.5;
 const TG_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2AABEE"/><path d="M5.5 11.8l11-4.3c.5-.2 1 .1.8.9l-1.9 8.8c-.1.6-.5.8-1 .5l-2.8-2.1-1.4 1.3c-.2.2-.3.3-.6.3l.2-2.9 5.3-4.8c.2-.2 0-.3-.3-.1l-6.6 4.1-2.8-.9c-.6-.2-.6-.6.1-.8z" fill="#fff"/></svg>';
 function setLabel(p){
-  const text = p.owner ? (p.ownerTg ? '@' + p.ownerTg : p.owner) : null;
+  let text = p.owner ? (p.ownerTg ? '@' + p.ownerTg : p.owner) : null;
+  if (text && p.tpl && TPL[p.tpl] && TPL[p.tpl].landmark){ // landmarks: the building's name first
+    const nm = TPL[p.tpl].name.replace(/ \(.*\)$/, '');
+    text = p.owner === 'Shahar hokimligi' ? nm : `${nm} · ${text}`;
+  }
   if (!text){ p.lbl = null; return; }
   const kind = p.state==='mine' ? 'mine' : p.ownerTg ? 'tg' : 'nick';
   p.lbl = { text, kind, pos: new V3(p.x, labelY(p), p.z), key: kind + '|' + text };
@@ -1197,7 +1209,7 @@ function updateLabels(dt){
         if (lblShown.length >= LBL.max) break;
         const s = projectLbl(p);
         if (s.z < 0 || s.z > 1 || s.x < -60 || s.y < -30 || s.x > W+60 || s.y > H+30) continue;
-        const hw = Math.min(170, p.lbl.text.length*7.4 + (p.lbl.kind==='tg'?40:22))/2 + 3, hh = LBL.px/2 + 2, cy = s.y - LBL.px/2;
+        const hw = Math.min(230, p.lbl.text.length*7.4 + (p.lbl.kind==='tg'?40:22))/2 + 3, hh = LBL.px/2 + 2, cy = s.y - LBL.px/2;
         if (prio(p) === 0 && taken.some(r => Math.abs(r.x-s.x) < r.hw+hw && Math.abs(r.y-cy) < r.hh+hh)) continue;
         taken.push({ x:s.x, y:cy, hw, hh }); lblShown.push(p);
       }
@@ -1243,7 +1255,7 @@ function landPrice(p){
   const occR = dist.filter(q=>q.state!=='empty').length / dist.length;
   return Math.round(ZONES[p.zone].base * p.loc * (1 + 0.5*occR) / 100) * 100;
 }
-function salePrice(p){ if (API.on) return p.price ?? 0; return Math.round((landPrice(p)*1.25 + (p.tpl ? specCost(p) : 0)*0.9)/100)*100; }
+function salePrice(p){ if (API.on) return p.price ?? 0; if (p.tpl && TPL[p.tpl].landmark) return Math.round(specCost(p)*1.25/1000)*1000; return Math.round((landPrice(p)*1.25 + (p.tpl ? specCost(p) : 0)*0.9)/100)*100; }
 const myPlots = () => plots.filter(p=>p.state==='mine');
 
 // ---------- UI helpers ----------

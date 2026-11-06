@@ -242,7 +242,7 @@ test('Telegram login: signature checked, @username shown over the owner’s plot
 });
 
 test('demo city keeps exactly one showcase building per mahalla', async () => {
-  const r = await db.query("select p.district_id, b.style from buildings b join plots p on p.id = b.plot_id join users u on u.id = p.owner_id where u.role = 'bot' order by p.district_id");
+  const r = await db.query("select p.district_id, b.style from buildings b join plots p on p.id = b.plot_id join users u on u.id = p.owner_id where u.role = 'bot' and b.template not like 'lm\\_%' order by p.district_id");
   assert.deepEqual(r.rows.map((x) => x.district_id), [0, 1, 2]);
   assert.deepEqual(r.rows.map((x) => x.style).sort(), ['hitech', 'milliy', 'modern']);
 });
@@ -268,7 +268,10 @@ test('styles, floors and roofs: validated, priced by floors', async () => {
   assert.deepEqual(await ledgerMismatches(db), []);
 });
 
-test('landmark copies: centre zone only, one of each per city', async () => {
+test('landmark copies: all 10 stand in the centre from the start, for sale, one of each', async () => {
+  const lm = (await city()).plots.filter((x: any) => x.building && x.building.template.startsWith('lm_'));
+  assert.equal(lm.length, 10);
+  assert.ok(lm.every((x: any) => x.zone === 'cen' && x.state === 'sale' && x.owner.nickname === 'Shahar hokimligi'));
   const richify = async (nick: string) => {
     await db.query("update wallets set balance = balance + 300000 where user_id = (select id from users where nickname=$1)", [nick]);
     await db.query("insert into transactions(user_id,amount,type,balance_after) select u.id, 300000, 'admin_adjust', w.balance from users u join wallets w on w.user_id = u.id where u.nickname=$1", [nick]);
@@ -279,14 +282,15 @@ test('landmark copies: centre zone only, one of each per city', async () => {
   assert.equal((await a.call('POST', `/api/plots/${res.id}/build`, { template: 'lm_burj' })).json().error, 'wrong_zone');
   const cen = (await city()).plots.filter((x: any) => x.state === 'empty' && x.zone === 'cen');
   await a.call('POST', `/api/plots/${cen[0].id}/buy`);
-  const ok = await a.call('POST', `/api/plots/${cen[0].id}/build`, { template: 'lm_burj', rotation: 1 });
-  assert.equal(ok.statusCode, 200, ok.body);
-  assert.equal(ok.json().cost, 120000);
-  const b = await player('tycoon2'); await richify('tycoon2');
-  await b.call('POST', `/api/plots/${cen[1].id}/buy`);
-  const dup = await b.call('POST', `/api/plots/${cen[1].id}/build`, { template: 'lm_burj' });
-  assert.equal(dup.statusCode, 409); assert.equal(dup.json().error, 'landmark_taken');
-  assert.equal((await b.call('POST', `/api/plots/${cen[1].id}/build`, { template: 'lm_lotte' })).statusCode, 200, 'another landmark is fine');
+  const dup = await a.call('POST', `/api/plots/${cen[0].id}/build`, { template: 'lm_burj' });
+  assert.equal(dup.statusCode, 409); assert.equal(dup.json().error, 'landmark_taken', 'a second Burj Khalifa is refused');
+  const lotte = lm.find((x: any) => x.building.template === 'lm_lotte');
+  const before = (await a.me()).balance;
+  const r = await a.call('POST', `/api/plots/${lotte.id}/buy`);
+  assert.equal(r.statusCode, 200, r.body);
+  assert.equal(r.json().plot.owner.nickname, 'tycoon');
+  assert.equal(r.json().plot.building.template, 'lm_lotte');
+  assert.equal((await a.me()).balance, before - lotte.price);
   assert.deepEqual(await ledgerMismatches(db), []);
 });
 
