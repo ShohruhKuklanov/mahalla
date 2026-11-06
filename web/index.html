@@ -965,10 +965,95 @@ ground.position.set((LAND.x0+LAND.x1)/2, -0.02, (LAND.z0+LAND.z1)/2);
 grassTex.uScale = (LAND.x1-LAND.x0)/16; grassTex.vScale = (LAND.z1-LAND.z0)/16;
 mats.grass = stdMat('grass',{dt:grassTex}); mats.grass.zOffset = 4; ground.material = mats.grass;  // polygon offset: the plain never shows through roads far away
  ground.isPickable=false; ground.receiveShadows = true;
-const lakeTex = noiseTex('lake','#7f8c95',0.35,256,2); lakeTex.uScale = lakeTex.vScale = 180;
+// ---------- water: Gerstner swell on a camera-following sea grid + world-space ripples on every water surface ----------
+// One material plugin for the standard material (keeps fog, shadows, lights): WATER_VTX moves the vertices (sea grid
+// only), every water surface gets small ripples in the fragment shader, fading out with distance so nothing shimmers.
+const SWELL = [ // direction (unit), wavelength m, amplitude m, steepness  — a moderate sea (≈1–1.5 m waves)
+  [ 0.82, 0.57, 118, 0.48, 0.55], [ 0.31, 0.95, 71, 0.34, 0.6], [-0.55, 0.83, 43, 0.24, 0.65], [ 0.97,-0.24, 31, 0.17, 0.7], [ 0.60,-0.80, 24, 0.11, 0.7] ];
+const SEA_HALF = 900, SEA_FADE0 = 0.6, SEA_DIV = 300;               // 6 m cells: the shortest swell spans 4 cells
+const waterClock = () => (performance.now()/1000) % 3600;
+function swellAt(x, z, t){                                    // same maths as the vertex shader: height and slope
+  let h = 0, dx = 0, dz = 0;
+  for (const [ddx, ddz, L, A] of SWELL){ const k = 6.2831853/L, w = Math.sqrt(9.81*k), f = k*(ddx*x + ddz*z) - w*t, c = Math.cos(f);
+    h += A*Math.sin(f); dx += A*k*ddx*c; dz += A*k*ddz*c; }
+  return { h, dx, dz };
+}
+const SWELL_GLSL = SWELL.map(([dx, dz, L, A, Q]) => `wave(vec2(${dx.toFixed(3)},${dz.toFixed(3)}), ${L.toFixed(1)}, ${A.toFixed(3)}, ${Q.toFixed(3)});`).join('\n');
+class WaterPlugin extends B.MaterialPluginBase {
+  constructor(material, opts){ super(material, 'Water', 200, { WATER_VTX: false, WATER_RIP: false }); this.opts = opts; this.origin = [0, 0]; this._enable(true); }
+  prepareDefines(defines){ defines.WATER_VTX = !!this.opts.vtx; defines.WATER_RIP = true; }
+  getClassName(){ return 'WaterPlugin'; }
+  getUniforms(){
+    return { ubo: [{ name:'wTime', size:1, type:'float' }, { name:'wOrigin', size:2, type:'vec2' }, { name:'wRip', size:2, type:'vec2' }, { name:'wHalf', size:1, type:'float' }],
+      vertex: 'uniform float wTime; uniform vec2 wOrigin; uniform vec2 wRip; uniform float wHalf;',
+      fragment: 'uniform float wTime; uniform vec2 wOrigin; uniform vec2 wRip; uniform float wHalf;' };
+  }
+  bindForSubMesh(ubo){ ubo.updateFloat('wTime', waterClock()); ubo.updateFloat2('wOrigin', this.origin[0], this.origin[1]); ubo.updateFloat2('wRip', this.opts.ripScale, this.opts.ripStrength); ubo.updateFloat('wHalf', SEA_HALF); }
+  getCustomCode(shaderType){
+    if (shaderType === 'vertex') return {
+      CUSTOM_VERTEX_DEFINITIONS: `#ifdef WATER_VTX
+varying float vWaveH;
+#endif`,
+      CUSTOM_VERTEX_UPDATE_POSITION: `#ifdef WATER_VTX
+vec2 wpos = positionUpdated.xz + wOrigin;
+float wfade = 1.0 - smoothstep(${SEA_FADE0.toFixed(2)}, 1.0, length(positionUpdated.xz)/wHalf);
+float wh = 0.0, wdx = 0.0, wdz = 0.0; vec2 wshift = vec2(0.0);
+#define wave(D, L, A, Q) { float k = 6.2831853/(L); float f = k*dot(D, wpos) - sqrt(9.81*k)*wTime; float c = cos(f); wh += (A)*sin(f); wdx += (A)*k*(D).x*c; wdz += (A)*k*(D).y*c; wshift += (Q)*(A)*(D)*c; }
+${SWELL_GLSL}
+positionUpdated.y += wh*wfade; positionUpdated.xz += wshift*wfade; vWaveH = wh*wfade;
+#endif`,
+      CUSTOM_VERTEX_UPDATE_NORMAL: `#ifdef WATER_VTX
+normalUpdated = normalize(vec3(-wdx*wfade, 1.0, -wdz*wfade));
+#endif`,
+    };
+    return {
+      CUSTOM_FRAGMENT_DEFINITIONS: `#ifdef WATER_VTX
+varying float vWaveH;
+#endif
+vec2 ripGrad(vec2 p, float t){
+  vec2 g = vec2(0.0);
+  const vec2 d1 = vec2(0.96, 0.28), d2 = vec2(-0.42, 0.91), d3 = vec2(0.71, -0.70), d4 = vec2(-0.88, -0.47), d5 = vec2(0.17, 0.98), d6 = vec2(-0.99, 0.12);
+  float k;
+  k = 6.2831853/9.1; g += 0.10*k*d1*cos(k*dot(d1,p) - 2.9*t);
+  k = 6.2831853/5.3; g += 0.07*k*d2*cos(k*dot(d2,p) - 3.6*t);
+  k = 6.2831853/3.7; g += 0.05*k*d3*cos(k*dot(d3,p) - 4.4*t);
+  k = 6.2831853/2.3; g += 0.035*k*d4*cos(k*dot(d4,p) - 5.5*t);
+  k = 6.2831853/1.6; g += 0.025*k*d5*cos(k*dot(d5,p) - 6.6*t);
+  k = 6.2831853/1.1; g += 0.016*k*d6*cos(k*dot(d6,p) - 8.0*t);
+  return g;
+}`,
+      CUSTOM_FRAGMENT_UPDATE_DIFFUSE: `#ifdef WATER_VTX
+diffuseColor *= 0.85 + 0.35*clamp(vWaveH*0.6 + 0.5, 0.0, 1.0);      // crests a little lighter, troughs deeper
+#endif`,
+      CUSTOM_FRAGMENT_BEFORE_LIGHTS: `{
+  float wdist = length(vPositionW - vEyePosition.xyz);
+  vec2 rg = ripGrad(vPositionW.xz*wRip.x, wTime) * wRip.y * (1.0 - smoothstep(80.0, 700.0, wdist));
+  normalW = normalize(normalW + vec3(-rg.x, 0.0, -rg.y));
+}`,
+    };
+  }
+}
+function waterLook(m, emissiveK){
+  m.specularColor = new C3(.85, .85, .8); m.specularPower = 260;
+  m.emissiveFresnelParameters = new B.FresnelParameters({ leftColor: new C3(1, 1, 1), rightColor: new C3(0.05, 0.05, 0.05), bias: 0.02, power: 4.5 });
+  m.waterEmissiveK = emissiveK;
+  return m;
+}
+const lakeTex = noiseTex('lake','#7f8c95',0.25,256,2); lakeTex.uScale = lakeTex.vScale = 180;
 const lake = B.MeshBuilder.CreateGround('lake',{width:34000,height:34000},scene);
-lake.position.y = -1.2; lake.isPickable = false;
-mats.lake = stdMat('lakeM',{dt:lakeTex, diffuse:hex('#1d4660'), spec:new C3(1,1,1), power:180}); lake.material = mats.lake; mats.lake.zOffset = 6;
+lake.position.y = -2.6; lake.isPickable = false;                 // the far sea; near the camera the swell grid lies on top
+mats.lake = waterLook(stdMat('lakeM',{diffuse:hex('#0b3047')}), 0.3); lake.material = mats.lake; mats.lake.zOffset = 6;
+new WaterPlugin(mats.lake, { vtx:false, ripScale:1, ripStrength:0.9 });
+const SEA_Y = -1.8;
+const seaGrid = B.MeshBuilder.CreateGround('seaGrid',{ width:SEA_HALF*2, height:SEA_HALF*2, subdivisions:SEA_DIV },scene);
+seaGrid.position.y = SEA_Y; seaGrid.isPickable = false; seaGrid.receiveShadows = true; seaGrid.alwaysSelectAsActiveMesh = true;
+mats.sea = waterLook(stdMat('seaM',{diffuse:hex('#0b3047')}), 0.3); seaGrid.material = mats.sea;
+const seaPlugin = new WaterPlugin(mats.sea, { vtx:true, ripScale:1, ripStrength:0.9 });
+const SEA_CELL = SEA_HALF*2/SEA_DIV;
+function updateSea(){                                           // follow the camera in whole cells, so the waves never slide
+  const x = Math.round(camera.target.x/SEA_CELL)*SEA_CELL, z = Math.round(camera.target.z/SEA_CELL)*SEA_CELL;
+  seaGrid.position.x = x; seaGrid.position.z = z; seaPlugin.origin = [x, z];
+}
 // sea wall along the coast
 const seawall = B.MeshBuilder.CreateBox('seawall',{width:LAND.x1-LAND.x0, height:3.2, depth:3},scene);
 seawall.position.set(ground.position.x, -1.4, COAST_Z+1.5); seawall.isPickable=false;
@@ -1679,24 +1764,36 @@ function shipMesh(kind){
   }
   return root;
 }
-const WATER_Y = lake.position.y;
+const WATER_Y = SEA_Y;
 const ships = [];
-function addShip(kind, path){ const n = shipMesh(kind); n.position.y = WATER_Y; ships.push({ n, path, t: rnd()*1000 }); return n; }
+const SHIP_LEN = { cargo:230, cruise:260, ferry:110, yacht:32 }, docked = [];
+function addShip(kind, path){ const n = shipMesh(kind); n.position.y = WATER_Y; ships.push({ n, path, t: rnd()*1000, len: SHIP_LEN[kind] }); return n; }
 // docked
-for (const x of [PORT.x0+180, PORT.x0+430]){ const s = shipMesh('cargo'); s.position.set(x, WATER_Y, COAST_Z+19); }
-{ const s = shipMesh('cruise'); s.position.set(CRUISE_X+33, WATER_Y, COAST_Z+150); s.rotation.y = -Math.PI/2; }
+for (const x of [PORT.x0+180, PORT.x0+430]){ const s = shipMesh('cargo'); s.position.set(x, WATER_Y, COAST_Z+19); docked.push({ n:s, len:230 }); }
+{ const s = shipMesh('cruise'); s.position.set(CRUISE_X+33, WATER_Y, COAST_Z+150); s.rotation.y = -Math.PI/2; docked.push({ n:s, len:260 }); }
 // sailing (circular routes out at sea; speed in m/s)
 addShip('cargo',  { cx:-300, cz:COAST_Z+1500, r:950,  v:7 });
 addShip('cargo',  { cx:1400, cz:COAST_Z+2600, r:1500, v:-8 });
 addShip('cruise', { cx:900,  cz:COAST_Z+1700, r:1100, v:6 });
 addShip('ferry',  { cx:200,  cz:COAST_Z+900,  r:500,  v:-9 });
 for (let i = 0; i < 4; i++) addShip('yacht', { cx:850+i*40, cz:COAST_Z+330+i*60, r:140+i*30, v:(i%2?-1:1)*(5+i) });
+// a ship sits on the swell under it: heave from the mean height, pitch and roll from the slope along / across the hull
+function shipOnSwell(n, x, z, yaw, len){
+  const t = waterClock(), fade = 1 - Math.min(1, Math.max(0, (Math.hypot(x - seaGrid.position.x, z - seaGrid.position.z)/SEA_HALF - SEA_FADE0)/(1 - SEA_FADE0)));
+  const fx = Math.cos(yaw), fz = -Math.sin(yaw), half = len*0.3;
+  const a = swellAt(x + fx*half, z + fz*half, t), b = swellAt(x - fx*half, z - fz*half, t), m = swellAt(x, z, t);
+  n.position.y = WATER_Y + (a.h + b.h + m.h)/3*fade*0.8;
+  n.rotation.z = Math.atan2((a.h - b.h)*fade, 2*half)*0.8;                       // pitch
+  n.rotation.x = -(m.dx*fz*-1 + m.dz*fx)*fade*0.25;                               // gentle roll
+}
 function updateShips(dt){
+  for (const d of docked) shipOnSwell(d.n, d.n.position.x, d.n.position.z, d.n.rotation.y, d.len*0.4);
   for (const s of ships){
     const P = s.path; s.t += dt; const ph = s.t*P.v/P.r;
     const x = P.cx + Math.cos(ph)*P.r, z = P.cz + Math.sin(ph)*P.r, vx = -Math.sin(ph)*P.v, vz = Math.cos(ph)*P.v;
-    s.n.position.x = x; s.n.position.z = z; s.n.position.y = WATER_Y + Math.sin(s.t*0.9)*0.15;
-    s.n.rotation.y = Math.atan2(-vz, vx); s.n.rotation.z = Math.sin(s.t*0.7)*0.012;
+    s.n.position.x = x; s.n.position.z = z;
+    const yaw = Math.atan2(-vz, vx); s.n.rotation.y = yaw;
+    shipOnSwell(s.n, x, z, yaw, s.len || 100);
   }
 }
 
@@ -1815,7 +1912,8 @@ function updateFlights(dt){
 
 // =================== RIVER, BRIDGES, FOREST & GARDENS ===================
 const riverTex = noiseTex('river','#8fa3ad',0.35,256,2); riverTex.uScale = 6; riverTex.vScale = 60;
-const riverM = stdMat('riverM',{dt:riverTex, diffuse:hex('#2a6a86'), spec:new C3(.22,.22,.22), power:60}); riverM.zOffset = -4;
+const riverM = waterLook(stdMat('riverM',{dt:riverTex, diffuse:hex('#245f78')}), 0.4); riverM.zOffset = -4;
+new WaterPlugin(riverM, { vtx:false, ripScale:1.4, ripStrength:0.7 });
 const bankM = stdMat('bankM',{dt:noiseTex('bank','#b8a77f',0.25,128,2)}); bankM.zOffset = -2;
 // outside the city: a ribbon that widens upstream, with sandy banks
 (function riverRibbon(){
@@ -2658,6 +2756,8 @@ function applyQuality(q){
   scene.fogDensity = q==='low' ? 0.00034 : 0.00028;
   carsVisible = q==='low' ? 140 : q==='medium' ? 280 : CAR_N;
   LOD.k = q==='low' ? 0.7 : q==='medium' ? 1 : 1.35; lodT = 0;
+  // weakest phones: no moving swell grid, the flat sea (still rippled, with glints) comes up to the waterline
+  seaGrid.setEnabled(q !== 'low'); lake.position.y = q === 'low' ? SEA_Y : -2.6;
 }
 
 // ---------- day / night ----------
@@ -2697,7 +2797,7 @@ function updateSky(){
   skyMat.setFloat('glow', 0.4 + dk*1.6); skyMat.setFloat('stars', night);
   scene.clearColor = new C4(hor.r, hor.g, hor.b, 1);
   scene.fogColor = C3.Lerp(hor, sky, 0.35);
-  mats.lake.emissiveColor = C3.Lerp(top, hor, 0.6).scale(0.35);
+  { const sk = C3.Lerp(top, hor, 0.6); for (const m of [mats.lake, mats.sea, riverM]) m.emissiveColor = sk.scale(m.waterEmissiveK); }
   mats.dot.emissiveColor = hex('#ffcf73').scale(0.15 + night*1.3);
   if (mats.snow) mats.snow.diffuseColor = C3.Lerp(hex('#3a4160'), hex('#f4f1f6'), Math.max(day, dk*0.8)).add(hex('#3a1e10').scale(dk*0.5));
   // windows & lamps
@@ -2922,7 +3022,7 @@ scene.onBeforeRenderObservable.add(()=>{
   if (selector.isEnabled()){ const s = 1 + Math.sin(now/220)*0.03; selector.scaling.set(s,1,s); mats.sel.emissiveColor = hex('#2fb5a3').scale(0.6+0.4*Math.sin(now/220)); }
   // water shimmer + traffic
   jet.scaling.y = 1 + Math.sin(now/160)*0.06;
-  lakeTex.uOffset += dt*0.004; lakeTex.vOffset += dt*0.002;
+  lakeTex.uOffset += dt*0.004; lakeTex.vOffset += dt*0.002; updateSea();
   updateSignals(dt); updateCars(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
   // fps + auto quality
   fpsAcc += engine.getFps(); fpsN++; fpsT += dt;
