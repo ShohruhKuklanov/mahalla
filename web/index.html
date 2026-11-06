@@ -934,11 +934,12 @@ const LAND = { x0:-6000, x1:6000, z0:-6500, z1:COAST_Z };
 const ground = B.MeshBuilder.CreateGround('ground',{width:LAND.x1-LAND.x0, height:LAND.z1-LAND.z0},scene);
 ground.position.set((LAND.x0+LAND.x1)/2, -0.02, (LAND.z0+LAND.z1)/2);
 grassTex.uScale = (LAND.x1-LAND.x0)/16; grassTex.vScale = (LAND.z1-LAND.z0)/16;
-mats.grass = stdMat('grass',{dt:grassTex}); ground.material = mats.grass; ground.isPickable=false; ground.receiveShadows = true;
+mats.grass = stdMat('grass',{dt:grassTex}); mats.grass.zOffset = 4; ground.material = mats.grass;  // polygon offset: the plain never shows through roads far away
+ ground.isPickable=false; ground.receiveShadows = true;
 const lakeTex = noiseTex('lake','#7f8c95',0.35,256,2); lakeTex.uScale = lakeTex.vScale = 180;
 const lake = B.MeshBuilder.CreateGround('lake',{width:20000,height:20000},scene);
 lake.position.y = -1.2; lake.isPickable = false;
-mats.lake = stdMat('lakeM',{dt:lakeTex, diffuse:hex('#1d4660'), spec:new C3(1,1,1), power:180}); lake.material = mats.lake;
+mats.lake = stdMat('lakeM',{dt:lakeTex, diffuse:hex('#1d4660'), spec:new C3(1,1,1), power:180}); lake.material = mats.lake; mats.lake.zOffset = 6;
 // sea wall along the coast
 const seawall = B.MeshBuilder.CreateBox('seawall',{width:LAND.x1-LAND.x0, height:3.2, depth:3},scene);
 seawall.position.set(ground.position.x, -1.4, COAST_Z+1.5); seawall.isPickable=false;
@@ -946,6 +947,50 @@ seawall.position.set(ground.position.x, -1.4, COAST_Z+1.5); seawall.isPickable=f
 const asphaltTex = noiseTex('asphalt','#3a3d42',0.16,256,2); asphaltTex.uScale = W/12; asphaltTex.vScale = D/12;
 const road = B.MeshBuilder.CreateGround('road',{width:W+2*RD, height:D+2*RD},scene);
 road.position.y = 0.05; mats.asphalt = stdMat('asphalt',{dt:asphaltTex, spec:new C3(.12,.12,.12)}); road.material = mats.asphalt; road.receiveShadows=true; road.isPickable=false;
+
+// ---------- chunked instancing ----------
+// Big instanced sets (plot tiles, markers, trees, lamps) are split into 8×8-block chunks, so the camera only draws
+// (and the shadow pass only renders) the chunks it can see; small details also switch off with distance (LOD).
+const CHUNK = 8*PITCH, CHUNKS = [];
+const chunkKey = (x,z) => Math.floor((x+20000)/CHUNK)*4096 + Math.floor((z+20000)/CHUNK);
+function chunkSet(base, lod, attrs=[]){
+  base.setEnabled(false);
+  const map = new Map();
+  return {
+    base, lod, attrs, map,
+    get(x,z){
+      const k = chunkKey(x,z); let c = map.get(k);
+      if (!c){
+        const m = base.clone(base.name+'#'+k); m.makeGeometryUnique(); m.setEnabled(true);
+        m.isPickable = false; m.receiveShadows = base.receiveShadows;
+        for (const a of attrs) m.thinInstanceRegisterAttribute(a, 4);
+        c = { mesh:m, lod, cx:0, cz:0, r:0 }; map.set(k, c); CHUNKS.push(c);
+      }
+      return c;
+    },
+    add(matrix, x, z){ const c = this.get(x,z); return { c, i: c.mesh.thinInstanceAdd(matrix, false) }; },
+    flush(){
+      for (const c of map.values()){
+        const m = c.mesh; if (!m.thinInstanceCount) continue;
+        m.thinInstanceBufferUpdated('matrix'); for (const a of attrs) m.thinInstanceBufferUpdated(a);
+        m.thinInstanceRefreshBoundingInfo(false);
+        const bb = m.getBoundingInfo().boundingBox; c.cx = bb.centerWorld.x; c.cz = bb.centerWorld.z; c.r = bb.extendSizeWorld.length();
+      }
+    },
+    meshes(){ return [...map.values()].map(c=>c.mesh); }
+  };
+}
+const LOD = { k: 1 };
+let lodT = 0;
+function updateLOD(dt){
+  lodT -= dt; if (lodT > 0) return; lodT = 0.2;
+  const cp = camera.position;
+  for (const c of CHUNKS){
+    if (!c.lod) continue;
+    const d = Math.max(0, Math.hypot(cp.x-c.cx, cp.y, cp.z-c.cz) - c.r*0.7);
+    const on = d < c.lod*LOD.k; if (on !== c.mesh.isEnabled()) c.mesh.setEnabled(on);
+  }
+}
 
 // sidewalks (one thin instance per block)
 const pave = noiseTex('pave','#b9b4aa',0.18,128,2); pave.uScale=pave.vScale=6;
@@ -983,18 +1028,19 @@ for (const sp of smallParks) sqPark.thinInstanceAdd(B.Matrix.Translation(sp.cx,0
 sqPark.thinInstanceBufferUpdated('matrix'); sqPark.alwaysSelectAsActiveMesh = true;
 
 // lane dashes
-const dash = B.MeshBuilder.CreateGround('dash',{width:3,height:0.3},scene);
-dash.material = stdMat('dashM',{diffuse:hex('#e9e6dc')}); dash.isPickable=false;
+const dashBase = B.MeshBuilder.CreateGround('dash',{width:3,height:0.3},scene);
+dashBase.material = stdMat('dashM',{diffuse:hex('#e9e6dc')}); dashBase.isPickable=false;
+const dashes = chunkSet(dashBase, 1000);
 const inPark = (x,z)=> x>parkMin.x-1 && x<parkMax.x+1 && z>parkMin.z-1 && z<parkMax.z+1;
 for (let i=0;i<=NBZ;i++){ // roads along x
   const z = Z0 - RD/2 + i*PITCH;
-  for (let x=X0-RD; x<X0+W+RD; x+=8) if(!inPark(x,z)) dash.thinInstanceAdd(B.Matrix.Translation(x,0.08,z), false);
+  for (let x=X0-RD; x<X0+W+RD; x+=8) if(!inPark(x,z)) dashes.add(B.Matrix.Translation(x,0.08,z), x, z);
 }
 for (let i=0;i<=NBX;i++){ // roads along z
   const x = X0 - RD/2 + i*PITCH;
-  for (let z=Z0-RD; z<Z0+D+RD; z+=8) if(!inPark(x,z)) dash.thinInstanceAdd(B.Matrix.RotationY(Math.PI/2).multiply(B.Matrix.Translation(x,0.08,z)), false);
+  for (let z=Z0-RD; z<Z0+D+RD; z+=8) if(!inPark(x,z)) dashes.add(B.Matrix.RotationY(Math.PI/2).multiply(B.Matrix.Translation(x,0.08,z)), x, z);
 }
-dash.thinInstanceBufferUpdated('matrix');
+dashes.flush();
 
 // ---------- plots ----------
 const plots = [];
@@ -1007,15 +1053,27 @@ for (const bl of blocks){
   }
 }
 // pads
-const pad = B.MeshBuilder.CreateGround('pad',{width:P-0.6,height:P-0.6},scene); pad.position.y = 0.06; pad.bakeCurrentTransformIntoVertices();
+const padBase = B.MeshBuilder.CreateGround('pad',{width:P-0.6,height:P-0.6},scene); padBase.position.y = 0.06; padBase.bakeCurrentTransformIntoVertices();
 const padMat = stdMat('padM',{dt:noiseTex('padT','#ffffff',0.12,64,2)});
-pad.material = padMat; pad.receiveShadows = true;
-pad.thinInstanceRegisterAttribute('color',4);
-for (const p of plots) pad.thinInstanceAdd(B.Matrix.Translation(p.x,0.36,p.z), false);
-pad.thinInstanceBufferUpdated('matrix');
-pad.thinInstanceEnablePicking = true;
+padBase.material = padMat; padBase.receiveShadows = true;
+const pads = chunkSet(padBase, 0, ['color']);
+for (const p of plots){ const r = pads.add(B.Matrix.Translation(p.x,0.36,p.z), p.x, p.z); p.padC = r.c; p.padI = r.i; }
+pads.flush();
+// plot under a ground point (grid maths instead of ray-picking 13 000 tiles)
+const PLOT_AT = new Int32Array(GX*GZ*PB*PB).fill(-1);
+for (const p of plots){ const gx = Math.floor((p.x-X0)/PITCH), gz = Math.floor((p.z-Z0)/PITCH), i = Math.floor((p.x-blockX(gx)-SW)/P), j = Math.floor((p.z-blockZ(gz)-SW)/P); PLOT_AT[((gx*GZ+gz)*PB+i)*PB+j] = p.id; }
+function plotAtPoint(x, z){
+  const gx = Math.floor((x-X0)/PITCH), gz = Math.floor((z-Z0)/PITCH); if (gx<0||gz<0||gx>=GX||gz>=GZ) return null;
+  const lx = x-blockX(gx)-SW, lz = z-blockZ(gz)-SW; if (lx<0||lz<0||lx>=PB*P||lz>=PB*P) return null;
+  const id = PLOT_AT[((gx*GZ+gz)*PB+Math.floor(lx/P))*PB+Math.floor(lz/P)]; return id >= 0 ? plots[id] : null;
+}
 const PAD_COL = { empty:[.43,.68,.30,1], owned:[.86,.83,.78,1], sale:[1,.80,.30,1], mine:[.42,.64,1,1] };
-function paintPad(p, refresh=true){ pad.thinInstanceSetAttributeAt('color', p.id, PAD_COL[p.state], refresh); dot.thinInstanceSetMatrixAt(p.id, p.state==='empty' ? B.Matrix.Translation(p.x, 0.47, p.z) : ZERO_M, refresh); setLabel(p); }
+function paintPad(p, refresh=true){
+  occCache = null; mineCache = null;
+  p.padC.mesh.thinInstanceSetAttributeAt('color', p.padI, PAD_COL[p.state], refresh);
+  p.dotC.mesh.thinInstanceSetMatrixAt(p.dotI, p.state==='empty' ? B.Matrix.Translation(p.x, 0.47, p.z) : B.Matrix.Compose(V3.Zero(), B.Quaternion.Identity(), new V3(p.x, 0.47, p.z)), refresh);
+  setLabel(p);
+}
 
 // ---------- building parts ----------
 function box(w,h,d,x,y,z){ const m=B.MeshBuilder.CreateBox('b',{width:w,height:h,depth:d,wrap:true},scene); m.position.set(x,y,z); return m; }
@@ -1318,16 +1376,18 @@ function getVariant(s){
 }
 
 // ---------- trees & lamps ----------
-const trunk = B.MeshBuilder.CreateCylinder('trunk',{diameterTop:0.25,diameterBottom:0.4,height:2.4,tessellation:5,cap:B.Mesh.NO_CAP},scene); trunk.position.y=1.2; trunk.bakeCurrentTransformIntoVertices();
-trunk.material = stdMat('trunkM',{diffuse:hex('#5b4330')});
-const crown = B.MeshBuilder.CreateIcoSphere('crown',{radius:2,subdivisions:2,flat:false},scene); crown.position.y=3.6; crown.bakeCurrentTransformIntoVertices();
-crown.material = stdMat('crownM',{diffuse:new C3(1,1,1)}); crown.thinInstanceRegisterAttribute('color',4);
-[trunk,crown].forEach(m=>{ m.isPickable=false; m.receiveShadows=true; });
+const trunkBase = B.MeshBuilder.CreateCylinder('trunk',{diameterTop:0.25,diameterBottom:0.4,height:2.4,tessellation:5,cap:B.Mesh.NO_CAP},scene); trunkBase.position.y=1.2; trunkBase.bakeCurrentTransformIntoVertices();
+trunkBase.material = stdMat('trunkM',{diffuse:hex('#5b4330')});
+const crownBase = B.MeshBuilder.CreateIcoSphere('crown',{radius:2,subdivisions:2,flat:false},scene); crownBase.position.y=3.6; crownBase.bakeCurrentTransformIntoVertices();
+crownBase.material = stdMat('crownM',{diffuse:new C3(1,1,1)});
+[trunkBase,crownBase].forEach(m=>{ m.isPickable=false; m.receiveShadows=true; });
+const trunks = chunkSet(trunkBase, 900), crowns = chunkSet(crownBase, 1700, ['color']);
 function addTree(x,z,s){
   const m = B.Matrix.Compose(new V3(s,s*(0.9+rnd()*0.3),s), B.Quaternion.RotationAxis(V3.Up(), rnd()*6.28), new V3(x,0.3,z));
-  trunk.thinInstanceAdd(m,false); const i = crown.thinInstanceAdd(m,false);
-  const g = 0.75+rnd()*0.35; crown.thinInstanceSetAttributeAt('color', i, [0.32*g,0.56*g,0.26*g,1], false);
+  trunks.add(m, x, z); const r = crowns.add(m, x, z);
+  const g = 0.75+rnd()*0.35; r.c.mesh.thinInstanceSetAttributeAt('color', r.i, [0.32*g,0.56*g,0.26*g,1], false);
 }
+const flushTrees = () => { trunks.flush(); crowns.flush(); };
 // park trees
 for (let i=0;i<190;i++){
   const x = lerp(parkMin.x+3, parkMax.x-3, rnd()), z = lerp(parkMin.z+3, parkMax.z-3, rnd());
@@ -1351,20 +1411,21 @@ for (let i=0;i<1400;i++){
   if (Math.abs(x) > 2600 && rnd() < 0.6) continue;
   addTree(x, z, 1.1+rnd()*1.2);
 }
-trunk.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('color');
+flushTrees();
 
 // lamps at block corners
-const pole = B.MeshBuilder.CreateCylinder('pole',{diameter:0.18,height:6,tessellation:4,cap:B.Mesh.NO_CAP},scene); pole.position.y=3; pole.bakeCurrentTransformIntoVertices();
-pole.material = stdMat('poleM',{diffuse:hex('#2b2f36')}); pole.isPickable=false;
-const bulb = B.MeshBuilder.CreateBox('bulb',{width:0.6,height:0.5,depth:0.6},scene); bulb.position.y=6.1; bulb.bakeCurrentTransformIntoVertices();
-mats.bulb = stdMat('bulbM',{diffuse:hex('#fff2cc'), emissive:new C3(0,0,0)}); bulb.material = mats.bulb; bulb.isPickable=false;
+const poleBase = B.MeshBuilder.CreateCylinder('pole',{diameter:0.18,height:6,tessellation:4,cap:B.Mesh.NO_CAP},scene); poleBase.position.y=3; poleBase.bakeCurrentTransformIntoVertices();
+poleBase.material = stdMat('poleM',{diffuse:hex('#2b2f36')}); poleBase.isPickable=false;
+const bulbBase = B.MeshBuilder.CreateBox('bulb',{width:0.6,height:0.5,depth:0.6},scene); bulbBase.position.y=6.1; bulbBase.bakeCurrentTransformIntoVertices();
+mats.bulb = stdMat('bulbM',{diffuse:hex('#fff2cc'), emissive:new C3(0,0,0)}); bulbBase.material = mats.bulb; bulbBase.isPickable=false;
+const poles = chunkSet(poleBase, 750), bulbs = chunkSet(bulbBase, 1100);
 for (const bl of blocks){
   const x0 = blockX(bl.bx), z0 = blockZ(bl.bz);
   for (const [dx,dz] of [[0.8,0.8],[BLK-0.8,0.8],[0.8,BLK-0.8],[BLK-0.8,BLK-0.8]]){
-    const m = B.Matrix.Translation(x0+dx,0.3,z0+dz); pole.thinInstanceAdd(m,false); bulb.thinInstanceAdd(m,false);
+    const m = B.Matrix.Translation(x0+dx,0.3,z0+dz); poles.add(m, x0+dx, z0+dz); bulbs.add(m, x0+dx, z0+dz);
   }
 }
-pole.thinInstanceBufferUpdated('matrix'); bulb.thinInstanceBufferUpdated('matrix');
+poles.flush(); bulbs.flush();
 
 // low-poly mountains with snow caps, in two rings across the lake
 (function mountains(){
@@ -1395,7 +1456,7 @@ const PORT = { x0: X0-60, x1: 160, zq: COAST_Z };            // container termin
 flatBox('portYard', PORT.x0, PORT.x1, CITY_S+1, COAST_Z, 0, 0.3, portConcrete);
 flatBox('promenade', PORT.x1, X0+W+60, COAST_Z-26, COAST_Z, 0, 0.32, stdMat('promM',{dt:pave}));
 for (let x = PORT.x1+8; x < X0+W+50; x += 14) addTree(x, COAST_Z-6, 0.9+rnd()*0.3);
-trunk.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('color');
+flushTrees();
 // container stacks
 const CONT_COLORS = ['#c0392b','#1f5fa8','#2e8b57','#e67e22','#7f8c8d','#f1c40f','#16a085','#8e44ad','#d35400','#2c3e50','#b03a2e','#eaeaea'];
 const cont = B.MeshBuilder.CreateBox('cont',{width:12.2, height:2.6, depth:2.44},scene);
@@ -1611,11 +1672,12 @@ skyDome.material = skyMat; skyDome.infiniteDistance = true; skyDome.isPickable =
 camera.maxZ = 20000;
 
 // a glowing marker on every free plot (lights up at dusk: "1 Telegram = 1 hovli")
-const dot = B.MeshBuilder.CreateDisc('dot',{radius:0.55, tessellation:6},scene); dot.rotation.x = Math.PI/2; dot.bakeCurrentTransformIntoVertices();
-mats.dot = stdMat('dotM',{diffuse:hex('#a9d18a'), emissive:new C3(0,0,0)}); dot.material = mats.dot; dot.isPickable = false;
+const dotBase = B.MeshBuilder.CreateDisc('dot',{radius:0.55, tessellation:6},scene); dotBase.rotation.x = Math.PI/2; dotBase.bakeCurrentTransformIntoVertices();
+mats.dot = stdMat('dotM',{diffuse:hex('#a9d18a'), emissive:new C3(0,0,0)}); dotBase.material = mats.dot; dotBase.isPickable = false;
+const dots = chunkSet(dotBase, 650);
 const ZERO_M = B.Matrix.Scaling(0,0,0);
-for (const p of plots) dot.thinInstanceAdd(B.Matrix.Translation(p.x, 0.47, p.z), false);
-dot.thinInstanceBufferUpdated('matrix'); dot.alwaysSelectAsActiveMesh = true;
+for (const p of plots){ const r = dots.add(B.Matrix.Translation(p.x, 0.47, p.z), p.x, p.z); p.dotC = r.c; p.dotI = r.i; }
+dots.flush();
 
 // traffic: cars with head- and tail-lights on every road
 const CAR_COLORS = ['#e9e6dc','#2b2f36','#c0503b','#1f6fb2','#9aa3ad','#d4a72c','#f4f1ea','#3f9a5a'];
@@ -1704,10 +1766,8 @@ function populateDemo(){
   for (const p of plots) paintPad(p, false);
 }
 function flushBuffers(){
-  pad.thinInstanceBufferUpdated('color'); dot.thinInstanceBufferUpdated('matrix');
-  trunk.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('matrix'); crown.thinInstanceBufferUpdated('color');
+  pads.flush(); dots.flush(); flushTrees();
   for (const t of Object.values(T)) for (const pt of t.parts){ if (pt.mesh.hasThinInstances){ pt.mesh.thinInstanceBufferUpdated('matrix'); if(pt.colorKey) pt.mesh.thinInstanceBufferUpdated('color'); pt.mesh.thinInstanceRefreshBoundingInfo(false); } }
-  pad.thinInstanceRefreshBoundingInfo(false);
 }
 function hideBuilding(p){
   const t = T[p.vkey]; if (!t || p.inst==null) return;
@@ -1800,14 +1860,19 @@ const S = {
 const API = { on:false, me:null, daySeconds:86400 };
 const SPEEDS = {0:0, 1:24/360, 10:24/36}; // game-hours per real second (1x: 1 day = 6 min)
 const zoneOf = p => ZONES[p.zone];
+// per-mahalla occupancy and "my plots", cached; any plot repaint (state change) invalidates them
+let occCache = null, mineCache = null;
+function occOf(d){
+  if (!occCache){ const n = {}, t = {}; for (const q of plots){ t[q.district] = (t[q.district]||0) + 1; if (q.state!=='empty') n[q.district] = (n[q.district]||0) + 1; } occCache = {}; for (const k in t) occCache[k] = (n[k]||0) / t[k]; }
+  return occCache[d] || 0;
+}
 function landPrice(p){
   if (API.on) return p.price ?? 0;
-  const dist = plots.filter(q=>q.district===p.district);
-  const occR = dist.filter(q=>q.state!=='empty').length / dist.length;
+  const occR = occOf(p.district);
   return Math.round(ZONES[p.zone].base * p.loc * (1 + 0.5*occR) / 100) * 100;
 }
 function salePrice(p){ if (API.on) return p.price ?? 0; if (p.tpl && TPL[p.tpl].landmark) return Math.round(specCost(p)*1.25/1000)*1000; return Math.round((landPrice(p)*1.25 + (p.tpl ? specCost(p) : 0)*0.9)/100)*100; }
-const myPlots = () => plots.filter(p=>p.state==='mine');
+const myPlots = () => mineCache || (mineCache = plots.filter(p=>p.state==='mine'));
 
 // ---------- UI helpers ----------
 const sheet = $('#sheet'), body = $('#sheetBody');
@@ -2073,7 +2138,7 @@ function openSettings(){
 // ---------- quality ----------
 let shadowGen = null, pipeline = null, glow = null;
 const casters = () => {
-  const list = [trunk, crown, pole, basin, jet];
+  const list = [...trunks.meshes(), ...crowns.meshes(), ...poles.meshes(), basin, jet];
   for (const t of Object.values(T)) for (const pt of t.parts) list.push(pt.mesh);
   return list;
 };
@@ -2120,11 +2185,12 @@ function applyQuality(q){
       pipeline.imageProcessing.vignetteEnabled = true; pipeline.imageProcessing.vignetteWeight = 1.4;
       glow = new B.GlowLayer('glow', scene, { blurKernelSize: 32, mainTextureRatio: 0.5 });
       glow.intensity = 0.6;
-      glow.addIncludedOnlyMesh(bulb); glow.addIncludedOnlyMesh(head); glow.addIncludedOnlyMesh(tail); glow.addIncludedOnlyMesh(dot);
+      for (const m of [...bulbs.meshes(), ...dots.meshes(), head, tail]) glow.addIncludedOnlyMesh(m);
     }
   }
   scene.fogDensity = q==='low' ? 0.00034 : 0.00028;
   carsVisible = q==='low' ? 140 : q==='medium' ? 280 : CAR_N;
+  LOD.k = q==='low' ? 0.7 : q==='medium' ? 1 : 1.35; lodT = 0;
 }
 
 // ---------- day / night ----------
@@ -2302,10 +2368,12 @@ function keyboard(dt){
 }
 
 function handleTap(x, y){
-  const hit = scene.pick(x, y, m => m===pad || (m.hasThinInstances && m.isEnabled() && m.name!=='ghost' && Object.values(T).some(t=>t.parts.some(pt=>pt.mesh===m))));
-  if (!hit || !hit.hit){ if (S.sheet!=='build'){ closeSheet(); select(null); } return; }
+  const hit = scene.pick(x, y, m => m.hasThinInstances && m.isEnabled() && m.name!=='ghost' && Object.values(T).some(t=>t.parts.some(pt=>pt.mesh===m)));
   let p = null;
-  if (hit.pickedMesh === pad) p = plots[hit.thinInstanceIndex];
+  if (!hit || !hit.hit){
+    const g = groundAt(x, y); p = g ? plotAtPoint(g.x, g.z) : null;
+    if (!p){ if (S.sheet!=='build'){ closeSheet(); select(null); } return; }
+  }
   else for (const t of Object.values(T)){ if (t.parts.some(pt=>pt.mesh===hit.pickedMesh)){ const pid=t.plotsByInst[hit.thinInstanceIndex]; if(pid!=null) p=plots[pid]; break; } }
   if (!p) return;
   if (S.sheet==='build' && S.build && S.build.p===p) return;
@@ -2333,7 +2401,7 @@ $('#tilt').onclick = ()=>{ tiltMode=(tiltMode+1)%3; const cfg=[[0.92,null,'3D'],
 $('#home').onclick = ()=>{ const m = myPlots()[0]; if (m){ flyTo(m.x,m.z,70,1.05); showPlot(m); } else toast('Sizda hali yer yo‘q — “Yer top” ni bosing.'); };
 
 // ---------- render loop ----------
-let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0, autoT = 0, autoChecks = 0;
+let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0, autoT = 0, autoChecks = 0, autoLow = 0, autoDown = false;
 const fpsHist = [];
 scene.onBeforeRenderObservable.add(()=>{
   const now = performance.now(), dt = Math.min(0.1,(now-last)/1000); last = now;
@@ -2380,13 +2448,14 @@ scene.onBeforeRenderObservable.add(()=>{
   if (S.autoOrbit) orbitBy(dt*0.35);
   keyboard(dt);
   camera.target.y = 0;
+  camera.minZ = clamp(camera.radius*0.015, 0.5, 30);   // depth precision: no flicker of road marks far away
   updateLabels(dt);
   // selector pulse
   if (selector.isEnabled()){ const s = 1 + Math.sin(now/220)*0.03; selector.scaling.set(s,1,s); mats.sel.emissiveColor = hex('#2fb5a3').scale(0.6+0.4*Math.sin(now/220)); }
   // water shimmer + traffic
   jet.scaling.y = 1 + Math.sin(now/160)*0.06;
   lakeTex.uOffset += dt*0.004; lakeTex.vOffset += dt*0.002;
-  updateCars(dt); updateShips(dt); updateFlights(dt);
+  updateCars(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
   // fps + auto quality
   fpsAcc += engine.getFps(); fpsN++; fpsT += dt;
   if (fpsT > 0.5){
@@ -2399,15 +2468,16 @@ scene.onBeforeRenderObservable.add(()=>{
     if (autoT > 4 && fpsHist.length>=6){
       const avg = fpsHist.reduce((a,b)=>a+b,0)/fpsHist.length;
       const order = ['low','medium','high'], i = order.indexOf(S.qActive);
-      if (avg < 27 && i>0){ applyQuality(order[i-1]); toast(`Grafika: ${QNAMES[order[i-1]]} (tezlik uchun)`); fpsHist.length=0; }
-      else if (avg > 56 && i<2 && autoChecks<2 && (!isMobile || order[i+1]==='medium')){ applyQuality(order[i+1]); fpsHist.length=0; autoChecks++; }
+      // switching rebuilds shaders (a visible hitch), so: step down only on a sustained drop, and never climb back after one
+      if (avg < 27 && i>0){ if (++autoLow >= 2){ applyQuality(order[i-1]); toast(`Grafika: ${QNAMES[order[i-1]]} (tezlik uchun)`); fpsHist.length=0; autoDown = true; autoLow = 0; } }
+      else { autoLow = 0; if (avg > 57 && i<2 && !autoDown && !isMobile && autoChecks<1){ applyQuality(order[i+1]); fpsHist.length=0; autoChecks++; } }
       autoT = 0;
     }
   }
 });
 
 // thin-instance meshes: bounding box would otherwise sit at the origin and get culled
-[sideBox,dash,pad,trunk,crown,pole,bulb].forEach(m=>m.alwaysSelectAsActiveMesh=true);
+sideBox.alwaysSelectAsActiveMesh = true;
 
 // ---------- server connection (when served by the Mahalla server; the artifact runs as an offline demo) ----------
 function applyDTO(p, d, animate){
@@ -2650,7 +2720,7 @@ async function boot(){
   closeAuth();
   // re-mark my plots now that we know who "me" is
   applyCity(await api('GET','/api/city'));
-  pad.thinInstanceBufferUpdated('color');
+  pads.flush();
   if (!me.plots.length) setTimeout(()=>tut(1), 400); else tut(0);
 }
 
@@ -2662,7 +2732,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
