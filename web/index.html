@@ -2485,47 +2485,100 @@ function placeMyCar(){
     { d: p.z - z0,         x: p.x, z: z0 - RD/2 + K,       ry: Math.PI/2,  e: 0, a: p.x - x0 },
     { d: z0 + BLK - p.z,   x: p.x, z: z0 + BLK + RD/2 - K, ry: -Math.PI/2, e: 2, a: x0 + BLK - p.x },
   ].sort((a, b) => a.d - b.d);
-  const s = sides.find(s => !onRiverRoad(s.x, s.z) && !inPark(s.x, s.z)) || sides[0];
-  myCarPark = { x0, z0, e: s.e, a: s.a, dPark: RD/2 - K };
+  const gj = e => [[gx, gz, gx+1, gz], [gx+1, gz, gx+1, gz+1], [gx+1, gz+1, gx, gz+1], [gx, gz+1, gx, gz]][e];
+  const s = sides.find(s => !onRiverRoad(s.x, s.z) && !inPark(s.x, s.z) && buildDrive({ A: gj(s.e).slice(0, 2), B: gj(s.e).slice(2), x: s.x, z: s.z })) || sides.find(s => !onRiverRoad(s.x, s.z) && !inPark(s.x, s.z)) || sides[0];
+  { const gxs = [[gx, gz, gx+1, gz], [gx+1, gz, gx+1, gz+1], [gx+1, gz+1, gx, gz+1], [gx, gz+1, gx, gz]][s.e];
+    myCarPark = { A: [gxs[0], gxs[1]], B: [gxs[2], gxs[3]], x: s.x, z: s.z, ry: s.ry }; }
   if (myDrive) return { p, x: s.x, z: s.z };                           // out for a drive: it parks there when it comes back
   myCar.position.set(s.x, 0.02, s.z); myCar.rotation.y = s.ry;
   return { p, x: s.x, z: s.z };
 }
-// ---- tap the car: it pulls out, drives a lap round its block in the traffic lane and parks again ----
+// ---- tap the car: it pulls out, drives a loop through the streets in the traffic lane and parks again ----
+// The loop is found on the street grid (junction to junction), skipping the river's reaches and the park,
+// so it works wherever the house is.
 let myCarPark = null, myDrive = null;
-const LAP_D = RD/2 - 2.6, LAP_R = LAP_D;                                 // the lane, out from the block edge
-function lapPoint(pk, s, d){
-  // the block's edges in driving order: north (+x), east (+z), south (−x), west (−z); left turns at each corner
-  const C = [[pk.x0, pk.z0], [pk.x0 + BLK, pk.z0], [pk.x0 + BLK, pk.z0 + BLK], [pk.x0, pk.z0 + BLK]];
-  const DIR = [[1,0],[0,1],[-1,0],[0,-1]], OUT = [[0,-1],[1,0],[0,1],[-1,0]], arc = LAP_R*Math.PI/2, seg = BLK + arc, tot = 4*seg;
-  let u = ((s + pk.e*seg + pk.a) % tot + tot) % tot, i = Math.floor(u/seg); u -= i*seg;
-  if (u < BLK){ const [cx, cz] = C[i]; return [cx + DIR[i][0]*u + OUT[i][0]*d, cz + DIR[i][1]*u + OUT[i][1]*d]; }
-  const j = (i + 1) % 4, f = (u - BLK)/arc*Math.PI/2, [cx, cz] = C[j];
-  return [cx + (OUT[i][0]*Math.cos(f) + OUT[j][0]*Math.sin(f))*d, cz + (OUT[i][1]*Math.cos(f) + OUT[j][1]*Math.sin(f))*d];
+const JX = ix => X0 - RD/2 + ix*PITCH, JZ = iz => Z0 - RD/2 + iz*PITCH, LANE = 2.6;
+function streetOK(a, b){
+  if (b[0] < 0 || b[1] < 0 || b[0] > NBX || b[1] > NBZ) return false;
+  if (b[0] === RIVER_K && b[1] === RIVER_ROW) return false;                      // the river's bend: open water, no bridge
+  for (const t of [0.25, 0.5, 0.75]){ const x = lerp(JX(a[0]), JX(b[0]), t), z = lerp(JZ(a[1]), JZ(b[1]), t); if (onRiverRoad(x, z) || inPark(x, z)) return false; }
+  return true;
+}
+function loopRoute(pk){
+  // breadth-first from B back to A without using the street A–B: the shortest round trip
+  const key = j => j[0]*1000 + j[1], A = pk.A, B = pk.B, prev = new Map([[key(B), null]]), q = [B];
+  while (q.length){
+    const j = q.shift(); if (key(j) === key(A)) break;
+    for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const n = [j[0] + dx, j[1] + dz];
+      if (prev.has(key(n)) || (key(j) === key(B) && key(n) === key(A)) || !streetOK(j, n)) continue;
+      prev.set(key(n), j); q.push(n);
+    }
+  }
+  if (!prev.has(key(A))) return null;
+  const path = []; for (let j = A; j; j = prev.get(key(j))) path.unshift(j);      // B … A
+  return [A, ...path];                                                          // A → B … → A
+}
+function buildDrive(pk){
+  const J = loopRoute(pk); if (!J) return null;
+  const P = j => [JX(j[0]), JZ(j[1])], dirOf = (a, b) => { const [ax, az] = P(a), [bx_, bz] = P(b), L = Math.hypot(bx_ - ax, bz - az); return [(bx_ - ax)/L, (bz - az)/L]; };
+  const off = ([dx, dz]) => dx ? [0, dx*LANE] : [-dz*LANE, 0];                  // the city's lane side for that heading
+  const raw = [];
+  // pull out from the kerb into the lane
+  const d0 = dirOf(J[0], J[1]), o0 = off(d0), kerb = [pk.x, pk.z];
+  raw.push(kerb);
+  { const [bx_, bz] = P(J[1]), along = (bx_ - kerb[0])*d0[0] + (bz - kerb[1])*d0[1], pull = Math.min(6, along - 9);
+    const base = [bx_ - d0[0]*along, bz - d0[1]*along];                          // the road's centre line beside the kerb spot
+    raw.push([base[0] + d0[0]*pull + o0[0], base[1] + d0[1]*pull + o0[1]]); }
+  // junction to junction, rounding each turn
+  const JJ = [...J, J[1]];                                                      // …the last turn at A back into the first street
+  for (let i = 1; i < JJ.length - 1; i++){
+    const din = dirOf(JJ[i-1], JJ[i]), dout = dirOf(JJ[i], JJ[i+1]), [cx, cz] = P(JJ[i]), oi = off(din), oo = off(dout);
+    if (din[0] === dout[0] && din[1] === dout[1]){ raw.push([cx + oi[0], cz + oi[1]]); continue; }
+    const X = [cx + oi[0] + oo[0], cz + oi[1] + oo[1]], r = 4.5, a0 = [X[0] - din[0]*r, X[1] - din[1]*r], a1 = [X[0] + dout[0]*r, X[1] + dout[1]*r];
+    for (let k = 0; k <= 8; k++){ const t = k/8, u = 1 - t; raw.push([u*u*a0[0] + 2*u*t*X[0] + t*t*a1[0], u*u*a0[1] + 2*u*t*X[1] + t*t*a1[1]]); }
+  }
+  // back along the first street and into the kerb
+  { const [ax, az] = P(J[0]), dA = (kerb[0] - ax)*d0[0] + (kerb[1] - az)*d0[1], t = Math.max(7.6, dA - 5);
+    raw.push([ax + d0[0]*t + o0[0], az + d0[1]*t + o0[1]]); raw.push(kerb); }
+  // resample every 0.5 m, then a speed profile: easy round the corners, gentle start and stop
+  const pts = [[...raw[0]]];
+  for (let i = 1; i < raw.length; i++){
+    const [ax, az] = raw[i-1], [bx_, bz] = raw[i], L = Math.hypot(bx_ - ax, bz - az), n = Math.max(1, Math.round(L/0.5));
+    for (let k = 1; k <= n; k++) pts.push([ax + (bx_ - ax)*k/n, az + (bz - az)*k/n]);
+  }
+  for (let it = 0; it < 6; it++) for (let i = 1; i < pts.length - 1; i++) pts[i] = [(pts[i-1][0] + 2*pts[i][0] + pts[i+1][0])/4, (pts[i-1][1] + 2*pts[i][1] + pts[i+1][1])/4];
+  const S = [0]; for (let i = 1; i < pts.length; i++) S.push(S[i-1] + Math.hypot(pts[i][0] - pts[i-1][0], pts[i][1] - pts[i-1][1]));
+  const head = i => { const a = pts[Math.max(0, i-1)], b = pts[Math.min(pts.length-1, i+1)]; return Math.atan2(b[0] - a[0], b[1] - a[1]); };
+  const H = pts.map((_, i) => head(i)), V = pts.map((_, i) => {
+    let dh = H[Math.min(pts.length-1, i+2)] - H[Math.max(0, i-2)]; while (dh > Math.PI) dh -= 2*Math.PI; while (dh < -Math.PI) dh += 2*Math.PI;
+    const ds = S[Math.min(pts.length-1, i+2)] - S[Math.max(0, i-2)] || 1, k = Math.abs(dh)/ds; return Math.min(12, Math.sqrt(2.6/Math.max(k, 1e-4)));
+  });
+  V[V.length-1] = 0; for (let i = V.length - 2; i >= 0; i--) V[i] = Math.min(V[i], Math.sqrt(V[i+1]*V[i+1] + 2*2.2*(S[i+1] - S[i])));
+  V[0] = 1.2; for (let i = 1; i < V.length; i++) V[i] = Math.min(V[i], Math.sqrt(V[i-1]*V[i-1] + 2*2.4*(S[i] - S[i-1])) );
+  for (let i = 0; i < V.length - 1; i++) V[i] = Math.max(V[i], 0.8);
+  return { pts, S, H, V, tot: S[S.length-1] };
 }
 function startMyDrive(){
-  if (!myCar || !myCarPark){ return; }
+  if (!myCar || !myCarPark) return;
   if (myDrive){ toast('Mashina hozir aylanyapti'); return; }
-  const tot = 4*(BLK + LAP_R*Math.PI/2);
-  for (let s = 0; s < tot; s += 4){ const [x, z] = lapPoint(myCarPark, s, LAP_D); if (onRiverRoad(x, z) || inPark(x, z)){ toast('Bu kvartal atrofida yo‘l yo‘q: daryo yoki bog‘ to‘sib turibdi'); return; } }
-  myDrive = { s: 0, v: 0, tot, follow: Math.hypot(camera.target.x - myCar.position.x, camera.target.z - myCar.position.z) < 120, roll: 0 };
+  const r = buildDrive(myCarPark);
+  if (!r){ toast('Bu yerdan aylanib chiqadigan ko‘cha topilmadi'); return; }
+  myDrive = Object.assign(r, { s: 0, i: 0, roll: 0, follow: Math.hypot(camera.target.x - myCar.position.x, camera.target.z - myCar.position.z) < 160 });
   toast(MY_CAR.owner + ' ning Tracker’i mahallani aylanib keladi');
 }
 function updateMyCar(dt){
   if (!myDrive || !myCar) return;
-  const D = myDrive, pk = myCarPark, ease = t => { t = clamp(t, 0, 1); return t*t*(3 - 2*t); };
-  const dAt = s => lerp(pk.dPark, LAP_D, ease(s/9) * (1 - ease((s - (D.tot - 11))/9)));
-  // slow down for the corners and for parking at the end
-  const seg = BLK + LAP_R*Math.PI/2, u = ((D.s + pk.e*seg + pk.a) % (4*seg) + 4*seg) % (4*seg), toCorner = (BLK - (u % seg) + 4*seg) % seg;
-  let vt = toCorner < 9 || u % seg > BLK ? 4.5 : 11;
-  vt = Math.min(vt, Math.sqrt(2*2.2*Math.max(0, D.tot - D.s)) + 0.2, 2 + D.s*1.2);
-  D.v += clamp(vt - D.v, -4*dt, 2.8*dt);
-  const step = D.v*dt; D.s = Math.min(D.tot, D.s + step);
-  const at = s => lapPoint(pk, s, dAt(s)), [x, z] = at(D.s), [x2, z2] = at(D.s + 0.6), [x3, z3] = at(D.s + 1.2);
-  const head = Math.atan2(x2 - x, z2 - z);
-  let dh = Math.atan2(x3 - x2, z3 - z2) - head; while (dh > Math.PI) dh -= 2*Math.PI; while (dh < -Math.PI) dh += 2*Math.PI;
-  const steer = clamp(Math.atan(2.57*dh/0.6), -0.6, 0.6);
-  myCar.position.set(x, 0.02, z); myCar.rotation.y = head;
+  const D = myDrive;
+  while (D.i < D.S.length - 2 && D.S[D.i+1] <= D.s) D.i++;
+  const t = clamp((D.s - D.S[D.i])/((D.S[D.i+1] - D.S[D.i]) || 1), 0, 1), i = D.i, j = Math.min(D.S.length - 1, i + 1);
+  const v = lerp(D.V[i], D.V[j], t), step = v*dt;
+  D.s = Math.min(D.tot, D.s + step);
+  const x = lerp(D.pts[i][0], D.pts[j][0], t), z = lerp(D.pts[i][1], D.pts[j][1], t);
+  let h = D.H[i], dh = D.H[j] - h; while (dh > Math.PI) dh -= 2*Math.PI; while (dh < -Math.PI) dh += 2*Math.PI; h += dh*t;
+  const k2 = Math.min(D.S.length - 1, i + 3); let dk = D.H[k2] - D.H[i]; while (dk > Math.PI) dk -= 2*Math.PI; while (dk < -Math.PI) dk += 2*Math.PI;
+  const steer = clamp(Math.atan(2.57*dk/((D.S[k2] - D.S[i]) || 1)), -0.6, 0.6);
+  myCar.position.set(x, 0.02, z); myCar.rotation.y = h;
   D.roll += step/0.333;
   for (const wh of myCar.metadata.wheels){ wh.w.rotation.z = wh.sd*D.roll; wh.w.rotation.y = wh.sd*Math.PI/2 + (wh.front ? steer : 0); }
   if (D.follow){ const k = Math.min(1, dt*3); camera.target.x += (x - camera.target.x)*k; camera.target.z += (z - camera.target.z)*k; }
@@ -3927,7 +3980,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { placeMyCar, startMyDrive, updateMyCarStep: updateMyCar, getDrive: () => myDrive, getMyCar: () => myCar, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { buildDrive, placeMyCar, startMyDrive, updateMyCarStep: updateMyCar, getDrive: () => myDrive, getMyCar: () => myCar, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
