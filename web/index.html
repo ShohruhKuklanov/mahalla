@@ -1067,7 +1067,7 @@ road.position.y = 0.05; mats.asphalt = stdMat('asphalt',{dt:asphaltTex, spec:new
 // (and the shadow pass only renders) the chunks it can see; small details also switch off with distance (LOD).
 const CHUNK = 8*PITCH, CHUNKS = [];
 const chunkKey = (x,z) => Math.floor((x+20000)/CHUNK)*4096 + Math.floor((z+20000)/CHUNK);
-function chunkSet(base, lod, attrs=[]){
+function chunkSet(base, lod, attrs=[], minLod=0, byCenter=false){
   base.setEnabled(false);
   const map = new Map();
   return {
@@ -1078,7 +1078,7 @@ function chunkSet(base, lod, attrs=[]){
         const m = base.clone(base.name+'#'+k); m.makeGeometryUnique(); m.setEnabled(true);
         m.isPickable = false; m.receiveShadows = base.receiveShadows;
         for (const a of attrs) m.thinInstanceRegisterAttribute(a, 4);
-        c = { mesh:m, lod, cx:0, cz:0, r:0 }; map.set(k, c); CHUNKS.push(c);
+        c = { mesh:m, lod, minLod, byCenter, cx:0, cz:0, r:0 }; map.set(k, c); CHUNKS.push(c);
       }
       return c;
     },
@@ -1101,8 +1101,9 @@ function updateLOD(dt){
   const cp = camera.position;
   for (const c of CHUNKS){
     if (!c.lod) continue;
-    const d = Math.max(0, Math.hypot(cp.x-c.cx, cp.y, cp.z-c.cz) - c.r*0.7);
-    const on = d < c.lod*LOD.k; if (on !== c.mesh.isEnabled()) c.mesh.setEnabled(on);
+    const dc = Math.hypot(cp.x-c.cx, cp.y, cp.z-c.cz), d = Math.max(0, dc - c.r*0.7);
+    // near/far model pairs switch on the chunk centre distance, so a tree is never drawn twice
+    const on = c.minLod ? (dc >= c.minLod*LOD.k && d < c.lod*LOD.k) : c.byCenter ? dc < c.lod*LOD.k : d < c.lod*LOD.k; if (on !== c.mesh.isEnabled()) c.mesh.setEnabled(on);
   }
 }
 
@@ -1494,18 +1495,74 @@ function getVariant(s){
 }
 
 // ---------- trees & lamps ----------
-const trunkBase = B.MeshBuilder.CreateCylinder('trunk',{diameterTop:0.25,diameterBottom:0.4,height:2.4,tessellation:5,cap:B.Mesh.NO_CAP},scene); trunkBase.position.y=1.2; trunkBase.bakeCurrentTransformIntoVertices();
-trunkBase.material = stdMat('trunkM',{diffuse:hex('#5b4330')});
-const crownBase = B.MeshBuilder.CreateIcoSphere('crown',{radius:2,subdivisions:2,flat:false},scene); crownBase.position.y=3.6; crownBase.bakeCurrentTransformIntoVertices();
-crownBase.material = stdMat('crownM',{diffuse:new C3(1,1,1)});
-[trunkBase,crownBase].forEach(m=>{ m.isPickable=false; m.receiveShadows=true; });
-const trunks = chunkSet(trunkBase, 900), crowns = chunkSet(crownBase, 1700, ['color']);
-function addTree(x,z,s){
-  const m = B.Matrix.Compose(new V3(s,s*(0.9+rnd()*0.3),s), B.Quaternion.RotationAxis(V3.Up(), rnd()*6.28), new V3(x,0.3,z));
-  trunks.add(m, x, z); const r = crowns.add(m, x, z);
-  const g = 0.75+rnd()*0.35; r.c.mesh.thinInstanceSetAttributeAt('color', r.i, [0.32*g,0.56*g,0.26*g,1], false);
+// ---------- trees: four real kinds, each with a detailed near model and a light far model (distance LOD) ----------
+// chinor (plane tree, broad lumpy crown), terak (poplar, tall and narrow), archa (fir, tiered cones), fruit tree (blossom).
+// Colours are baked as vertex colours (bark brown, leaves darker inside / lighter on top); the per-tree instance colour
+// only varies the shade (or gives a fruit tree its blossom colour).
+function vcol(mesh, fn){
+  const p = mesh.getVerticesData(B.VertexBuffer.PositionKind), c = [];
+  let y0 = 1e9, y1 = -1e9; for (let i = 1; i < p.length; i += 3){ y0 = Math.min(y0, p[i]); y1 = Math.max(y1, p[i]); }
+  for (let i = 0; i < p.length; i += 3){ const k = (p[i+1]-y0)/((y1-y0) || 1), col = fn(k, p[i], p[i+1], p[i+2]); c.push(col[0], col[1], col[2], 1); }
+  mesh.setVerticesData(B.VertexBuffer.ColorKind, c); return mesh;
 }
-const flushTrees = () => { trunks.flush(); crowns.flush(); };
+function lumpy(m, amt){ // jitter a blob so a crown is not a perfect ball
+  const p = m.getVerticesData(B.VertexBuffer.PositionKind);
+  for (let i = 0; i < p.length; i += 3){ const s = 1 + (Math.sin(p[i]*7.1 + p[i+2]*3.7) * 0.5 + Math.sin(p[i+1]*5.3 + p[i]*2.1) * 0.5)*amt; p[i] *= s; p[i+1] *= s; p[i+2] *= s; }
+  m.updateVerticesData(B.VertexBuffer.PositionKind, p); m.createNormals(true); return m;
+}
+const BARK = [0.33, 0.24, 0.17];
+function treeModel(kind, near){
+  const parts = [];
+  const trunk = (h, r0, r1, tess) => { const t = B.MeshBuilder.CreateCylinder('tr', { diameterTop: r1*2, diameterBottom: r0*2, height: h, tessellation: tess, cap: B.Mesh.NO_CAP }, scene); t.position.y = h/2; t.bakeCurrentTransformIntoVertices(); parts.push(vcol(t, () => BARK)); };
+  const blob = (x, y, z, r, sx, sy, sz, sub, green, amt) => {
+    const b = B.MeshBuilder.CreateIcoSphere('bl', { radius: r, subdivisions: sub, flat: false, updatable: true }, scene);
+    lumpy(b, amt); b.scaling.set(sx, sy, sz); b.position.set(x, y, z); b.bakeCurrentTransformIntoVertices();
+    parts.push(vcol(b, (k) => { const f = 0.62 + 0.5*k; return [green[0]*f, green[1]*f, green[2]*f]; }));
+  };
+  const branch = (len, ang, rot, y) => { const b = B.MeshBuilder.CreateCylinder('br', { diameterTop: 0.08, diameterBottom: 0.16, height: len, tessellation: 4, cap: B.Mesh.NO_CAP }, scene);
+    b.position.y = len/2; b.bakeCurrentTransformIntoVertices(); b.rotation.set(0, rot, ang); b.position.y = y; b.bakeCurrentTransformIntoVertices(); parts.push(vcol(b, () => BARK)); };
+  if (kind === 'broad'){                                   // chinor: short thick trunk, forked branches, broad lumpy dome
+    const G = [0.27, 0.47, 0.2];
+    if (near){
+      trunk(3.0, 0.24, 0.17, 7); branch(1.9, 0.6, 0.3, 2.4); branch(1.8, 0.7, 2.4, 2.5); branch(1.6, 0.55, 4.3, 2.6);
+      blob(0, 4.6, 0, 1.9, 1.15, 0.85, 1.1, 1, G, 0.12); blob(1.3, 4.0, 0.5, 1.45, 1, 0.85, 1, 1, G, 0.14); blob(-1.2, 4.1, -0.6, 1.5, 1, 0.85, 1, 1, G, 0.14);
+      blob(0.3, 3.9, -1.3, 1.3, 1, 0.85, 1, 1, G, 0.14); blob(-0.5, 5.5, 0.4, 1.3, 1, 0.9, 1, 1, G, 0.14); blob(0.6, 4.2, 1.4, 1.2, 1, 0.85, 1, 1, G, 0.14);
+    } else { trunk(3.0, 0.24, 0.17, 4); blob(0, 4.5, 0, 2.4, 1.15, 0.85, 1.15, 1, G, 0.1); }
+  } else if (kind === 'poplar'){                           // terak: slim columnar crown along Uzbek roads
+    const G = [0.3, 0.5, 0.22];
+    if (near){ trunk(2.2, 0.17, 0.12, 6); blob(0, 3.4, 0, 1.15, 1, 1.5, 1, 1, G, 0.16); blob(0.1, 5.4, -0.05, 1.0, 1, 1.7, 1, 1, G, 0.16); blob(-0.05, 7.4, 0.05, 0.75, 1, 1.6, 1, 1, G, 0.16); }
+    else { trunk(2.2, 0.17, 0.12, 4); blob(0, 5.2, 0, 1.1, 1, 3.2, 1, 1, G, 0.08); }
+  } else if (kind === 'pine'){                             // archa: tiers of drooping cones
+    const G = [0.13, 0.32, 0.17];
+    trunk(near ? 2.4 : 2.0, 0.22, 0.12, near ? 6 : 4);
+    const tiers = near ? [[2.6, 3.0, 1.3], [2.1, 2.8, 3.0], [1.6, 2.5, 4.6], [1.05, 2.2, 6.0], [0.55, 1.8, 7.3]] : [[2.4, 4.6, 1.3], [1.5, 4.2, 4.4]];
+    for (const [r, h, y] of tiers){ const c = B.MeshBuilder.CreateCylinder('pc', { diameterTop: 0, diameterBottom: r*2, height: h, tessellation: near ? 8 : 6 }, scene); c.position.y = y + h/2; c.bakeCurrentTransformIntoVertices();
+      parts.push(vcol(c, (k, x, yy, z) => { const f = 0.55 + 0.6*k + (Math.hypot(x, z) > r*0.6 ? 0.08 : 0); return [G[0]*f, G[1]*f, G[2]*f]; })); }
+  } else {                                                 // fruit tree: low, round crown — white so the blossom colour shows
+    const W = [0.95, 0.93, 0.92];
+    trunk(1.6, 0.13, 0.1, near ? 6 : 4);
+    if (near){ blob(0, 2.6, 0, 1.25, 1.1, 0.85, 1.1, 1, W, 0.14); blob(0.7, 2.3, 0.3, 0.9, 1, 0.85, 1, 1, W, 0.16); blob(-0.6, 2.4, -0.4, 0.95, 1, 0.85, 1, 1, W, 0.16); }
+    else blob(0, 2.5, 0, 1.5, 1.15, 0.85, 1.15, 1, W, 0.1);
+  }
+  const m = B.Mesh.MergeMeshes(parts, true, true); m.name = 'tree_' + kind + (near ? '_n' : '_f');
+  m.material = treeMat; m.isPickable = false; m.receiveShadows = true;
+  return m;
+}
+const treeMat = stdMat('treeM', { diffuse: new C3(1,1,1), spec: new C3(0.04, 0.04, 0.04) });
+const TREE_NEAR = 560;
+const TREES = {};
+for (const [kind, far] of [['broad', 1700], ['poplar', 1700], ['pine', 1900], ['fruit', 1200]]){
+  TREES[kind] = { near: chunkSet(treeModel(kind, true), TREE_NEAR, ['color'], 0, true), far: chunkSet(treeModel(kind, false), far, ['color'], TREE_NEAR) };
+}
+// x, z, size, kind ('broad' | 'poplar' | 'pine' | 'fruit'), optional instance colour (a fruit tree's blossom)
+function addTree(x, z, s, kind = 'broad', color = null){
+  const m = B.Matrix.Compose(new V3(s, s*(0.88 + rnd()*0.3), s), B.Quaternion.RotationAxis(V3.Up(), rnd()*6.28), new V3(x, 0.3, z));
+  const g = 0.86 + rnd()*0.28, col = color ? [...color, 1] : [g*(0.96 + rnd()*0.08), g, g*(0.92 + rnd()*0.1), 1];
+  for (const set of [TREES[kind].near, TREES[kind].far]){ const r = set.add(m, x, z); r.c.mesh.thinInstanceSetAttributeAt('color', r.i, col, false); }
+}
+const flushTrees = () => { for (const k in TREES){ TREES[k].near.flush(); TREES[k].far.flush(); } };
+const treeCasters = () => Object.values(TREES).flatMap(t => t.near.meshes());
+
 // park trees
 for (let i=0;i<190;i++){
   const x = lerp(parkMin.x+3, parkMax.x-3, rnd()), z = lerp(parkMin.z+3, parkMax.z-3, rnd());
@@ -1516,8 +1573,8 @@ for (let i=0;i<190;i++){
 for (const bl of blocks){
   const x0 = blockX(bl.bx), z0 = blockZ(bl.bz), pr = inCore(bl.bx,bl.bz) ? 0.55 : 0.3;
   for (let t=6; t<BLK-4; t+=9){
-    if (rnd()<pr) addTree(x0+t, z0+1.1, 0.6+rnd()*0.25);
-    if (rnd()<pr) addTree(x0+t, z0+BLK-1.1, 0.6+rnd()*0.25);
+    if (rnd()<pr) addTree(x0+t, z0+1.1, 0.6+rnd()*0.25, rnd() < 0.3 ? 'poplar' : 'broad');
+    if (rnd()<pr) addTree(x0+t, z0+BLK-1.1, 0.6+rnd()*0.25, rnd() < 0.3 ? 'poplar' : 'broad');
   }
 }
 // small parks
@@ -1528,7 +1585,7 @@ for (let i=0;i<1400;i++){
   if (x > X0-30 && x < X0+W+30 && z > AIR.z-330 && z < COAST_Z) continue;   // city, port, airport strip
   if (Math.abs(x) > 2600 && rnd() < 0.6) continue;
   if (distToRiver(x, z) < 45) continue;
-  addTree(x, z, 1.1+rnd()*1.2);
+  addTree(x, z, 0.9+rnd()*0.9, rnd() < 0.25 ? 'poplar' : rnd() < 0.2 ? 'pine' : 'broad');
 }
 flushTrees();
 
@@ -2087,9 +2144,6 @@ const GARDEN = { x0:-330, x1:330, z0:-7190, z1:-6810 };
   const ft = noiseTex('ff','#3f6a32',0.25,256,3); ft.uScale = (FOREST.x1-FOREST.x0)/16; ft.vScale = (FOREST.z1-FOREST.z0)/16;
   floor.material = stdMat('ffM',{dt:ft}); floor.material.zOffset = 2; floor.isPickable = false; floor.receiveShadows = true;
   // pines: tall cones
-  const pineBase = B.MeshBuilder.CreateCylinder('pine',{diameterTop:0, diameterBottom:5.2, height:11, tessellation:7},scene); pineBase.position.y = 7.2; pineBase.bakeCurrentTransformIntoVertices();
-  pineBase.material = stdMat('pineM',{diffuse:new C3(1,1,1)}); pineBase.receiveShadows = true;
-  const pines = chunkSet(pineBase, 1800, ['color']);
   const inGarden = (x, z, m=40) => x > GARDEN.x0-m && x < GARDEN.x1+m && z > GARDEN.z0-m && z < GARDEN.z1+m;
   // groves: dense clusters (mostly pines, some broadleaf), thinning out towards the edges
   for (let g = 0; g < 380; g++){
@@ -2101,12 +2155,10 @@ const GARDEN = { x0:-330, x1:330, z0:-7190, z1:-6810 };
     for (let i = 0; i < n; i++){
       const a = rnd()*6.283, d = Math.sqrt(rnd())*gr, x = gx + Math.cos(a)*d, z = gz + Math.sin(a)*d;
       if (inGarden(x, z, 70) || distToRiver(x, z) < 40 || Math.hypot(x - 700, z + 8200) < 240) continue;
-      if (rnd() < 0.7){ const s = 1.1 + rnd()*0.9, m = B.Matrix.Compose(new V3(s, s*(0.9+rnd()*0.5), s), B.Quaternion.RotationAxis(V3.Up(), rnd()*6.28), new V3(x, 0, z));
-        trunks.add(m, x, z); const r = pines.add(m, x, z), k = 0.8 + rnd()*0.35; r.c.mesh.thinInstanceSetAttributeAt('color', r.i, [0.2*k, 0.46*k, 0.25*k, 1], false); }
-      else addTree(x, z, 1.4 + rnd()*1.2);
+      if (rnd() < 0.7) addTree(x, z, 1.2 + rnd()*1.0, 'pine');
+      else addTree(x, z, 1.2 + rnd()*0.9, rnd() < 0.3 ? 'poplar' : 'broad');
     }
   }
-  pines.flush();
   // gardens: lawn, paths, orchard rows in blossom, tulip beds, an ayvon (pavilion) with a pool
   flatBox('gardenLawn', GARDEN.x0, GARDEN.x1, GARDEN.z0, GARDEN.z1, 0, 0.08, stdMat('lawnM',{dt:(()=>{ const t = noiseTex('lawn','#5fa148',0.15,128,2); t.uScale = 60; t.vScale = 30; return t; })()}));
   const pathM = stdMat('gpathM',{dt:pave});
@@ -2119,8 +2171,7 @@ const GARDEN = { x0:-330, x1:330, z0:-7190, z1:-6810 };
     const orchard = (qx*qz) > 0;
     if (orchard){
       for (let x = x0; x < x1; x += 10) for (let z = z0; z < z1; z += 10){
-        const s = 0.8 + rnd()*0.2, m = B.Matrix.Compose(new V3(s, s, s), B.Quaternion.RotationAxis(V3.Up(), rnd()*6.28), new V3(x, 0.1, z));
-        trunks.add(m, x, z); const r = crowns.add(m, x, z), c = blossom[Math.floor(rnd()*blossom.length)]; r.c.mesh.thinInstanceSetAttributeAt('color', r.i, [...c, 1], false);
+        addTree(x, z, 1.0 + rnd()*0.25, 'fruit', blossom[Math.floor(rnd()*blossom.length)]);
       }
     } else {
       const bed = B.MeshBuilder.CreateBox('bed',{width:1, height:0.5, depth:1},scene); bed.material = stdMat('bedM'+qx+qz,{diffuse:new C3(1,1,1)}); bed.isPickable = false; bed.receiveShadows = true;
@@ -2296,7 +2347,7 @@ const lanes = new Map();
   }
 })();
 let carsVisible = CAR_N;
-const STOP_BACK = RD/2 + 1.6;
+const STOP_BACK = RD/2 + 3.6;                        // stop line before the zebra crossing
 // distance from the car's nose to the stop line of the next crossing ahead, and that crossing's signal
 function nextSignal(c, t){
   const origin = c.alongX ? X0 - RD/2 : Z0 - RD/2, u = (c.start + c.pos - origin)/PITCH, m = (c.half + STOP_BACK)/PITCH, n = c.alongX ? NBX : NBZ;
@@ -2336,6 +2387,200 @@ function updateCars(dt){
     buf[o+12]=x; buf[o+13]=0.05; buf[o+14]=z; buf[o+15]=1;
   }
   for (const ck of CAR_KINDS) for (const m of ck.k.parts) m.thinInstanceBufferUpdated('matrix');
+}
+
+// =================== PEOPLE ===================
+// Pedestrians on the sidewalks with a purpose: to work (offices, shops, skyscrapers), home, shopping, the park; at the
+// airport travellers with suitcases walk between the road and the terminal; strollers on the promenade and in the garden.
+// They cross streets only on the zebra crossings, and only while the cars of that street have red.
+// The crowd lives around the camera (people appear and finish their trips near where you look), sized by time of day.
+// zebra crossings: four per signalled crossing, set back from the junction; cars stop before them
+const zebraBase = B.MeshBuilder.CreateGround('zebra', { width: 0.55, height: 3 }, scene);
+zebraBase.material = stdMat('zebraM', { diffuse: hex('#eeece4') }); zebraBase.material.zOffset = -1; zebraBase.isPickable = false;
+const zebras = chunkSet(zebraBase, 520);
+const ZB = RD/2 + 1.6;                                                    // crosswalk centre: 1.6 m beyond the junction square
+for (let ix = 0; ix <= GX; ix++) for (let iz = 0; iz <= GZ; iz++){
+  const cx = X0 - RD/2 + ix*PITCH, cz = Z0 - RD/2 + iz*PITCH;
+  if (inPark(cx, cz) || onRiverRoad(cx, cz)) continue;
+  for (const sd of [-1, 1]){
+    const zc = cz + sd*ZB, xc = cx + sd*ZB;
+    if (!onRiverRoad(cx, zc)) for (let k = 0; k < 9; k++){ const x = cx - RD/2 + 0.9 + k*1.15; zebras.add(B.Matrix.Translation(x, 0.07, zc), x, zc); }
+    if (!onRiverRoad(xc, cz)) for (let k = 0; k < 9; k++){ const z = cz - RD/2 + 0.9 + k*1.15; zebras.add(B.Matrix.RotationY(Math.PI/2).multiply(B.Matrix.Translation(xc, 0.07, z)), xc, z); }
+  }
+}
+zebras.flush();
+
+// body parts, modelled facing +z; legs and arms hang from their pivot (hip / shoulder) so they can swing
+const PEOPLE_MAX = 520;
+const pMat = stdMat('personM', { diffuse: new C3(1,1,1), spec: new C3(.05,.05,.05) });
+function partMesh(name, w, h, d, yOff, round){
+  const m = round ? B.MeshBuilder.CreateIcoSphere(name, { radius: w/2, subdivisions: 2 }, scene) : B.MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene);
+  if (round) m.scaling.set(1, h/w, d/w);
+  m.position.y = yOff; m.bakeCurrentTransformIntoVertices(); m.material = pMat; m.isPickable = false; m.receiveShadows = true;
+  m.thinInstanceRegisterAttribute('color', 4); m.alwaysSelectAsActiveMesh = true; return m;
+}
+const PP = {
+  torso: partMesh('pTorso', 0.42, 0.62, 0.24, 0, false),
+  head:  partMesh('pHead', 0.21, 0.25, 0.23, 0, true),
+  hair:  partMesh('pHair', 0.23, 0.12, 0.25, 0, true),
+  leg:   partMesh('pLeg', 0.17, 0.86, 0.19, -0.43, false),
+  arm:   partMesh('pArm', 0.11, 0.6, 0.12, -0.3, false),
+  bag:   partMesh('pBag', 0.38, 0.55, 0.24, 0.27, false),
+};
+const PART_COUNT = { torso: 1, head: 1, hair: 1, leg: 2, arm: 2, bag: 1 };
+for (const [k, m] of Object.entries(PP)){ m.pbuf = new Float32Array(PEOPLE_MAX*PART_COUNT[k]*16); m.thinInstanceSetBuffer('matrix', m.pbuf, 16, false); m.cbuf = new Float32Array(PEOPLE_MAX*PART_COUNT[k]*4); m.thinInstanceSetBuffer('color', m.cbuf, 4, false); }
+const SHIRTS = ['#c0392b','#1f6fb2','#f1f1ee','#2e8b57','#e3c22a','#7a4fa3','#e67e22','#2b2f36','#9aa3ad','#d35d8b','#3fa7b5'];
+const PANTS = ['#2b3346','#1f2430','#4a5468','#6b5a46','#20283a','#8a8f99','#2f3b2a'];
+const SKIN = ['#f1d2b6','#e3b896','#c99a74','#a87652','#7d5639'];
+const HAIR = ['#1c1714','#3b2a1e','#6a4a2c','#b48a5a','#2a2a2a','#e8e2d8','#4a2f6b','#1f6fb2'];   // incl. headscarves
+const BAGS = ['#22262e','#2f4a6b','#7a1f2b','#555b66'];
+const people = [];
+for (let i = 0; i < PEOPLE_MAX; i++) people.push({ i, on: false, route: null, k: 0, x: 0, z: 0, y: 0.3, yaw: 0, v: 1.3, ph: rnd()*6, wait: 0, bag: false });
+const colAt = (m, idx, c) => { m.cbuf[idx*4] = c.r; m.cbuf[idx*4+1] = c.g; m.cbuf[idx*4+2] = c.b; m.cbuf[idx*4+3] = 1; };
+function dressPerson(p){
+  const pick = a => hex(a[Math.floor(rnd()*a.length)]), shirt = pick(SHIRTS), pants = pick(PANTS), skin = pick(SKIN), hair = pick(HAIR), bag = pick(BAGS);
+  colAt(PP.torso, p.i, shirt); colAt(PP.arm, p.i*2, shirt); colAt(PP.arm, p.i*2+1, shirt);
+  colAt(PP.leg, p.i*2, pants); colAt(PP.leg, p.i*2+1, pants); colAt(PP.head, p.i, skin); colAt(PP.hair, p.i, hair); colAt(PP.bag, p.i, bag);
+  p.v = 1.15 + rnd()*0.45; p.scale = 0.92 + rnd()*0.14;
+}
+
+// ---- routes on the sidewalk network ----
+const SWC = 1.25;                                                         // sidewalk centre line, inside the block edge
+const cornerXY = (gx, gz, cx, cz) => [blockX(gx) + (cx > 0 ? BLK - SWC : SWC), blockZ(gz) + (cz > 0 ? BLK - SWC : SWC)];
+// waypoints: {x, z, y, cross?: {ix, iz, axisX}}; crossing a street = walking on the road (y 0.07) while its cars have red
+function cityRoute(fromPlot, toPlot){
+  const bOf = p => ({ gx: Math.floor((p.x - X0)/PITCH), gz: Math.floor((p.z - Z0)/PITCH) });
+  const a = bOf(fromPlot), b = bOf(toPlot), R = [];
+  let gx = a.gx, gz = a.gz, cx = toPlot.x >= fromPlot.x ? 1 : -1, cz = toPlot.z >= fromPlot.z ? 1 : -1;
+  const put = (x, z, y = 0.3, cross = null) => R.push({ x, z, y, cross });
+  // leave the plot to the nearest sidewalk point, then to the corner facing the destination
+  const [sx, sz] = cornerXY(gx, gz, cx, cz);
+  put(fromPlot.x, fromPlot.z, 0.42); put(Math.abs(fromPlot.x - sx) < Math.abs(fromPlot.z - sz) ? sx : fromPlot.x, Math.abs(fromPlot.x - sx) < Math.abs(fromPlot.z - sz) ? fromPlot.z : sz); put(sx, sz);
+  let guard = 0;
+  while ((gx !== b.gx || gz !== b.gz) && guard++ < 80){
+    if (gx !== b.gx){
+      const d0 = b.gx > gx ? 1 : -1;
+      if ((d0 > 0 ? gx + 1 : gx) === RIVER_K && (cz > 0 ? gz + 1 : gz) === RIVER_ROW){ put(...cornerXY(gx, gz, d0, cz)); cz = -cz; }   // the river's bend has no bridge: go round the block to the next one
+      const d = d0, [x1, z1] = cornerXY(gx, gz, d, cz), [x2, z2] = cornerXY(gx + d, gz, -d, cz);
+      put(x1, z1);
+      const ix = d > 0 ? gx + 1 : gx, iz = cz > 0 ? gz + 1 : gz, roadX = X0 - RD/2 + ix*PITCH, zc = Z0 - RD/2 + iz*PITCH;
+      if (onRiverRoad(roadX, z1)){ put(x1, zc + (cz > 0 ? -1 : 1)*(RD/2 - 1)); put(x2, zc + (cz > 0 ? -1 : 1)*(RD/2 - 1), 0.07); }   // over the bridge
+      else { const zz = zc + (cz > 0 ? -1 : 1)*ZB; put(x1, zz); put(roadX - d*(RD/2), zz, 0.07, SIG_AT.has(ix*1000+iz) ? { ix, iz, axisX: false } : null); put(x2, zz, 0.07); }
+      put(x2, z2); gx += d; cx = -d;
+    } else {
+      const d0 = b.gz > gz ? 1 : -1;
+      if ((cx > 0 ? gx + 1 : gx) === RIVER_K && (d0 > 0 ? gz + 1 : gz) === RIVER_ROW){ put(...cornerXY(gx, gz, cx, d0)); cx = -cx; }
+      const d = d0, [x1, z1] = cornerXY(gx, gz, cx, d), [x2, z2] = cornerXY(gx, gz + d, cx, -d);
+      put(x1, z1);
+      const iz = d > 0 ? gz + 1 : gz, ix = cx > 0 ? gx + 1 : gx, roadZ = Z0 - RD/2 + iz*PITCH, xc = X0 - RD/2 + ix*PITCH;
+      if (onRiverRoad(x1, roadZ)){ put(xc + (cx > 0 ? -1 : 1)*(RD/2 - 1), z1); put(xc + (cx > 0 ? -1 : 1)*(RD/2 - 1), z2, 0.07); }
+      else { const xx = xc + (cx > 0 ? -1 : 1)*ZB; put(xx, z1); put(xx, roadZ - d*(RD/2), 0.07, SIG_AT.has(ix*1000+iz) ? { ix, iz, axisX: true } : null); put(xx, z2, 0.07); }
+      put(x2, z2); gz += d; cz = -d;
+    }
+  }
+  // along the destination block's sidewalk to the plot, then in
+  const [ex, ez] = cornerXY(b.gx, b.gz, cx, cz);
+  if (Math.abs(toPlot.x - ex) < Math.abs(toPlot.z - ez)) put(ex, toPlot.z); else put(toPlot.x, ez);
+  put(toPlot.x, toPlot.z, 0.42);
+  return R;
+}
+const pathRoute = (pts, y = 0.32) => pts.map(([x, z]) => ({ x, z, y, cross: null }));
+
+// ---- where the camera looks decides who is around ----
+const TERMINAL = { x0: -280, x1: 280, z: APRON.z1 + 46, road: APRON.z1 + 74 };
+function plotsNear(x, z, r, pred){ const out = []; for (const p of plots) if (Math.abs(p.x - x) < r && Math.abs(p.z - z) < r && pred(p)) out.push(p); return out; }
+const WORK = new Set(['office','tower','shop','cafe']);
+function newTrip(p){
+  const tx = camera.target.x, tz = camera.target.z, R = Math.min(520, 220 + camera.radius*0.6);
+  p.bag = false;
+  // airport: travellers between the road (taxi / bus stop) and the terminal doors
+  if (Math.hypot(tx - 0, tz - TERMINAL.z) < 700){
+    const x = lerp(TERMINAL.x0, TERMINAL.x1, rnd()), x2 = x + (rnd() - 0.5)*60;
+    p.route = rnd() < 0.5 ? pathRoute([[x2, TERMINAL.road], [x2, TERMINAL.road - 12], [x, TERMINAL.z + 2], [x, TERMINAL.z - 3]]) : pathRoute([[x, TERMINAL.z - 3], [x, TERMINAL.z + 2], [x2, TERMINAL.road - 12], [x2, TERMINAL.road]]);
+    p.bag = rnd() < 0.8; return true;
+  }
+  // promenade along the sea
+  if (tz > CITY_S - 100 && tz < COAST_Z + 600 && tx > PORT.x1 - 200){
+    const z = COAST_Z - 10 - rnd()*10, a = lerp(PORT.x1 + 10, X0 + W + 40, rnd()), b = clamp(a + (rnd() < 0.5 ? -1 : 1)*(120 + rnd()*300), PORT.x1 + 10, X0 + W + 40);
+    p.route = pathRoute([[a, z], [b, z + (rnd() - 0.5)*6]]); return true;
+  }
+  // gardens beyond the mountains
+  const gcx = (GARDEN.x0 + GARDEN.x1)/2, gcz = (GARDEN.z0 + GARDEN.z1)/2;
+  if (Math.hypot(tx - gcx, tz - gcz) < 900){
+    const ends = [[GARDEN.x0, gcz], [GARDEN.x1, gcz], [gcx, GARDEN.z0], [gcx, GARDEN.z1]], a = ends[Math.floor(rnd()*4)], b = ends[Math.floor(rnd()*4)];
+    p.route = pathRoute([a, [gcx + (rnd() - 0.5)*5, gcz + 14], b], 0.14); return true;
+  }
+  // the city: trips from a plot to a destination with a purpose
+  if (tx < X0 - 60 || tx > X0 + W + 60 || tz < Z0 - 60 || tz > Z0 + D + 60) return false;
+  const near = plotsNear(tx, tz, R, () => true); if (near.length < 2) return false;
+  const from = near[Math.floor(rnd()*near.length)];
+  const r = rnd(); let pool;
+  if (r < 0.42) pool = plotsNear(tx, tz, R*1.3, q => (q.tpl && (WORK.has(q.tpl) || isLm(q))) || (!q.tpl && q.zone !== 'res'));   // to work
+  else if (r < 0.62) pool = plotsNear(tx, tz, R*1.3, q => q.tpl === 'shop' || q.tpl === 'cafe' || q.zone === 'com');                 // shopping
+  else if (r < 0.8) pool = null;                                                                                                       // park (below) or anywhere
+  else pool = plotsNear(tx, tz, R*1.3, q => q.zone === 'res');                                                                            // home
+  if (r >= 0.62 && r < 0.8 && Math.hypot(tx - parkC.x, tz - parkC.z) < 800){                                                              // a walk in the park
+    const ent = [[parkMin.x - 1, parkC.z], [parkMax.x + 1, parkC.z], [parkC.x, parkMin.z - 1], [parkC.x, parkMax.z + 1]], a = ent[Math.floor(rnd()*4)], b = ent[Math.floor(rnd()*4)];
+    p.route = pathRoute([a, [parkC.x + (rnd() - 0.5)*30, parkC.z + (rnd() < 0.5 ? -18 : 18)], b], 0.4); return true;
+  }
+  if (!pool || !pool.length) pool = near;
+  let to = pool[Math.floor(rnd()*pool.length)]; if (to === from) to = near[(near.indexOf(from) + 1) % near.length];
+  p.route = cityRoute(from, isLm(to) ? (landmarkOfBlock(to) || to) : to);
+  return true;
+}
+// how many people are out: a daily rhythm (rush hours in the morning and the evening, few at night)
+function crowdTarget(){
+  const h = S.hours ?? 12, q = S.qActive || 'medium', base = q === 'low' ? 140 : q === 'medium' ? 300 : PEOPLE_MAX;
+  const f = h < 5.5 ? 0.08 : h < 7 ? 0.35 : h < 9.5 ? 1 : h < 17 ? 0.7 : h < 20 ? 1 : h < 23 ? 0.45 : 0.15;
+  return Math.round(base*f);
+}
+let crowdT = 0;
+const _m1 = new B.Matrix(), _m2 = new B.Matrix(), _m3 = new B.Matrix(), _w = new B.Matrix(), _q = new B.Quaternion(), _s = new V3(), _t = new V3();
+const ZERO16 = new Float32Array(16);
+function hidePerson(p){ for (const [k, m] of Object.entries(PP)) for (let j = 0; j < PART_COUNT[k]; j++) m.pbuf.set(ZERO16, (p.i*PART_COUNT[k] + j)*16); }
+function updatePeople(dt){
+  dt = Math.min(dt, 0.1);
+  crowdT -= dt;
+  if (crowdT <= 0){                                                       // top up / retire a few people at a time
+    crowdT = 0.25;
+    const want = crowdTarget(); let active = 0; for (const p of people) if (p.on) active++;
+    for (let n = 0; n < 6 && active < want; n++){ const p = people.find(q => !q.on); if (!p) break; if (!newTrip(p)) break; dressPerson(p); p.on = true; p.k = 0; p.x = p.route[0].x; p.z = p.route[0].z; p.y = p.route[0].y; p.wait = 0; active++; }
+    for (const m of Object.values(PP)) m.thinInstanceBufferUpdated('color');
+  }
+  const t = sigClock(), cx = camera.target.x, cz = camera.target.z, far = Math.max(700, camera.radius*1.4);
+  for (const p of people){
+    if (!p.on){ continue; }
+    // walk the route; at a zebra wait for the cars' red (and enough red left to get across)
+    const nxt = p.route[p.k + 1];
+    let moving = false;
+    if (!nxt){ p.on = false; hidePerson(p); continue; }
+    const dx = nxt.x - p.x, dz = nxt.z - p.z, dist = Math.hypot(dx, dz);
+    let go = true;
+    if (nxt.cross && p.route[p.k].y > 0.2){
+      const u = (t + sigOffset(nxt.cross.ix, nxt.cross.iz)) % SIG.cycle, red = nxt.cross.axisX ? (u >= 10 ? 20 - u : 0) : (u < 10 ? 10 - u : 0);
+      if (red < RD/p.v + 1) go = false;
+    }
+    if (go && dist > 0.01){
+      const step = Math.min(dist, p.v*dt); p.x += dx/dist*step; p.z += dz/dist*step; moving = true;
+      let dy = Math.atan2(dx, dz) - p.yaw; while (dy > Math.PI) dy -= 2*Math.PI; while (dy < -Math.PI) dy += 2*Math.PI; p.yaw += dy*Math.min(1, dt*8);
+      p.y += (nxt.y - p.y)*Math.min(1, dt*6);
+    }
+    if (dist <= 0.05) p.k++;
+    if (Math.hypot(p.x - cx, p.z - cz) > far + 300){ p.on = false; hidePerson(p); continue; }   // left the view: the trip ends
+    // pose: walking cycle (legs and arms swing opposite), a slight bob
+    if (moving) p.ph += dt*p.v*4.2;
+    const sw = moving ? Math.sin(p.ph)*0.5 : 0, bob = moving ? Math.abs(Math.cos(p.ph))*0.04 : 0, sc = p.scale;
+    _s.set(sc, sc, sc); B.Quaternion.RotationYawPitchRollToRef(p.yaw, 0, 0, _q); _t.set(p.x, p.y + bob, p.z);
+    B.Matrix.ComposeToRef(_s, _q, _t, _w);
+    const put = (m, idx, lx, ly, lz, rx) => { B.Matrix.RotationXToRef(rx, _m1); B.Matrix.TranslationToRef(lx, ly, lz, _m2); _m1.multiplyToRef(_m2, _m3); _m3.multiplyToRef(_w, _m1); _m1.copyToArray(m.pbuf, idx*16); };
+    put(PP.torso, p.i, 0, 1.17, 0, 0);
+    put(PP.head, p.i, 0, 1.62, 0, 0);
+    put(PP.hair, p.i, 0, 1.7, -0.015, 0);
+    put(PP.leg, p.i*2, -0.1, 0.88, 0, sw); put(PP.leg, p.i*2+1, 0.1, 0.88, 0, -sw);
+    put(PP.arm, p.i*2, -0.28, 1.44, 0, -sw*0.8); put(PP.arm, p.i*2+1, 0.28, 1.44, 0, p.bag ? 0.25 : sw*0.8);
+    if (p.bag) put(PP.bag, p.i, 0.42, 0.04, -0.42, 0); else PP.bag.pbuf.set(ZERO16, p.i*16);
+  }
+  for (const m of Object.values(PP)) m.thinInstanceBufferUpdated('matrix');
 }
 
 // ---------- populate others ----------
@@ -2813,7 +3058,7 @@ function openSettings(){
 // ---------- quality ----------
 let shadowGen = null, pipeline = null, glow = null;
 const casters = () => {
-  const list = [...trunks.meshes(), ...crowns.meshes(), ...poles.meshes(), basin, jet];
+  const list = [...treeCasters(), ...poles.meshes(), basin, jet];
   for (const t of Object.values(T)) for (const pt of t.parts) list.push(pt.mesh);
   return list;
 };
@@ -3133,7 +3378,7 @@ scene.onBeforeRenderObservable.add(()=>{
   // water shimmer + traffic
   jet.scaling.y = 1 + Math.sin(now/160)*0.06;
   lakeTex.uOffset += dt*0.004; lakeTex.vOffset += dt*0.002; updateSea();
-  updateSignals(dt); updateCars(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
+  updateSignals(dt); updateCars(dt); updatePeople(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
   // fps + auto quality
   fpsAcc += engine.getFps(); fpsN++; fpsT += dt;
   if (fpsT > 0.5){
@@ -3410,7 +3655,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
