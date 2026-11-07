@@ -350,6 +350,7 @@
   <button class="tool" id="goPort" title="Port" aria-label="Portga borish"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v14"/><path d="M5 13a7 7 0 0 0 14 0"/><path d="M8 11h8"/></svg></button>
   <button class="tool" id="goAir" title="Aeroport" aria-label="Aeroportga borish"><svg viewBox="0 0 24 24"><path d="M10.5 3.5c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5V9l7 4v2l-7-2v5l2 1.5V21l-3.5-1-3.5 1v-1.5l2-1.5v-5l-7 2v-2l7-4z"/></svg></button>
   <button class="tool" id="goForest" title="Bog‘ va o‘rmon" aria-label="Bog‘ va o‘rmonga borish"><svg viewBox="0 0 24 24"><path d="M12 2 6 10h3l-4 6h5v6h4v-6h5l-4-6h3z"/></svg></button>
+  <button class="tool" id="goCar" title="shohruh.97 ning mashinasi" aria-label="shohruh.97 ning mashinasiga borish"><svg viewBox="0 0 24 24"><path d="M3 15v-3l2-5h14l2 5v3z"/><circle cx="7" cy="16" r="2"/><circle cx="17" cy="16" r="2"/><path d="M5 12h14"/></svg></button>
   <button class="tool" id="home" title="Mening yerim" aria-label="Mening yerim"><svg viewBox="0 0 24 24"><path d="M4 11l8-6 8 6"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/></svg></button>
 </div>
 
@@ -944,7 +945,7 @@ const nightMats = []; // materials whose emissive follows the night
 
 // ---------- light + camera ----------
 const camera = new B.ArcRotateCamera('cam', -Math.PI/2.6, 1.08, 300, new V3(0,0,0), scene);
-camera.lowerRadiusLimit = 22; camera.upperRadiusLimit = 2100;
+camera.lowerRadiusLimit = 6; camera.upperRadiusLimit = 2100;
 camera.lowerBetaLimit = 0.18; camera.upperBetaLimit = 1.42;
 camera.minZ = 1; camera.maxZ = 4000;
 camera.inputs.clear(); // own map-style controls below (pan anywhere, orbit around the selected plot)
@@ -2263,6 +2264,179 @@ function carKind(kind){
 }
 const CAR_KINDS = [ { k: carKind('sedan'), n: 300 }, { k: carKind('suv'), n: 90 }, { k: carKind('bus'), n: 30 } ];
 const carLights = CAR_KINDS.flatMap(c => [c.k.parts[3], c.k.parts[4]]);
+// ---------- shohruh.97's own car: a white Chevrolet Tracker, built from photos at real size ----------
+// 4.27 m long, 1.79 m wide, 1.63 m high, 2.57 m wheelbase, 215/55 R17 wheels. Faces +z, ground at y = 0.
+const MY_CAR = { owner: 'shohruh.97', plate: ['90', 'Y 095 AB'] };
+function trackerModel(){
+  const root = new B.TransformNode('tracker', scene);
+  const paint  = stdMat('trkPaint',  { diffuse: hex('#f2f3f1'), spec: new C3(.85,.85,.85), power: 140 });
+  const black  = stdMat('trkBlack',  { diffuse: hex('#1c1d20'), spec: new C3(.1,.1,.1), power: 20 });
+  const gloss  = stdMat('trkGloss',  { diffuse: hex('#0c0d0f'), spec: new C3(.8,.8,.8), power: 160 });
+  const glassM = stdMat('trkGlass',  { diffuse: hex('#101419'), spec: new C3(1,1,1), power: 220 });
+  const silver = stdMat('trkSilver', { diffuse: hex('#c9cdd1'), spec: new C3(.9,.9,.9), power: 90 });
+  const tyreM  = stdMat('trkTyre',   { diffuse: hex('#18191c'), spec: new C3(.04,.04,.04) });
+  const lensM  = stdMat('trkLens',   { diffuse: hex('#6f7882'), spec: new C3(1,1,1), power: 220 });
+  const drlM   = stdMat('trkDrl',    { diffuse: hex('#ffffff'), emissive: hex('#eef4ff') });
+  const tailM  = stdMat('trkTail',   { diffuse: hex('#9a1016'), emissive: hex('#4a0306'), spec: new C3(.9,.9,.9), power: 160 });
+  const add = (m, mat) => { m.material = mat; m.parent = root; m.isPickable = false; m.receiveShadows = true; return m; };
+  const bx = (w, h, d, x, y, z, mat, rx = 0, ry = 0, rz = 0) => { const m = box(w, h, d, x, y, z); m.rotation.set(rx, ry, rz); return add(m, mat); };
+
+  // smooth skin through cross-sections; each section is a rounded trapezoid (half-width wb at the bottom, wt at the top)
+  const NS = 32;
+  const secPt = (s, k, n) => {
+    const t = k/NS*Math.PI*2, c = Math.cos(t), si = Math.sin(t);
+    const u = Math.sign(c)*Math.pow(Math.abs(c), 2/n), v = Math.sign(si)*Math.pow(Math.abs(si), 2/n);
+    return [u*lerp(s.wb, s.wt, (v+1)/2), (s.y0+s.y1)/2 + v*(s.y1-s.y0)/2, s.z];
+  };
+  function sweep(secs, name, mat, n = 4, colorAt = null){
+    const pos = [], idx = [], ring = i => i*NS;
+    for (const s of secs) for (let k = 0; k < NS; k++) pos.push(...secPt(s, k, n));
+    const P = i => new V3(pos[3*i], pos[3*i+1], pos[3*i+2]);
+    const tri = (a, b, c, out) => {
+      const A = P(a), Bv = P(b), Cv = P(c), nrm = V3.Cross(Bv.subtract(A), Cv.subtract(A));
+      if (V3.Dot(nrm, out(A.add(Bv).add(Cv).scale(1/3))) < 0) idx.push(a, b, c); else idx.push(a, c, b);
+    };
+    for (let i = 0; i + 1 < secs.length; i++){
+      const yc = (secs[i].y0 + secs[i].y1 + secs[i+1].y0 + secs[i+1].y1)/4, out = m => new V3(m.x, m.y - yc, 0);
+      for (let k = 0; k < NS; k++){ const a = ring(i)+k, b = ring(i)+(k+1)%NS, c = a+NS, d = b+NS; tri(a, b, d, out); tri(a, d, c, out); }
+    }
+    for (const [i, dir] of [[0, Math.sign(secs[0].z - secs[1].z)], [secs.length-1, Math.sign(secs[secs.length-1].z - secs[secs.length-2].z)]]){
+      const base = pos.length/3, s = secs[i];
+      for (let k = 0; k < NS; k++) pos.push(...secPt(s, k, n));          // own vertices: a crisp edge round the cap
+      pos.push(0, (s.y0+s.y1)/2, s.z);
+      for (let k = 0; k < NS; k++) tri(base+NS, base+k, base+(k+1)%NS, () => new V3(0, 0, dir));
+    }
+    const m = new B.Mesh(name, scene), vd = new B.VertexData(), nr = [];
+    vd.positions = pos; vd.indices = idx; B.VertexData.ComputeNormals(pos, idx, nr); vd.normals = nr;
+    if (colorAt){ const col = []; for (let i = 0; i < pos.length; i += 3) col.push(...colorAt(pos[i], pos[i+1], pos[i+2]), 1); vd.colors = col; }
+    vd.applyToMesh(m);
+    return add(m, mat);
+  }
+  const L2 = 2.135, ZF = 1.295, ZR = -1.275, RW = 0.336, ARCH = 0.43;
+  const arch = z => { let y = 0; for (const za of [ZF, ZR]){ const d = Math.abs(z - za); if (d < ARCH) y = Math.max(y, RW + Math.sqrt(ARCH*ARCH - d*d)); } return y; };
+  const smooth = (pts, z) => { for (let i = 0; i + 1 < pts.length; i++){ const [za, a] = pts[i], [zb, b] = pts[i+1]; if (z <= za && z >= zb){ const t = (za - z)/((za - zb) || 1); return lerp(a, b, t*t*(3 - 2*t)); } } return pts[z > pts[0][0] ? 0 : pts.length-1][1]; };
+  // the side profile, front (z = +2.135) to back
+  const TOP = [[2.135,0.78],[2.11,0.85],[2.04,0.9],[1.85,0.95],[1.4,1.0],[0.95,1.05],[-0.6,1.09],[-1.6,1.13],[-2.0,1.16],[-2.1,1.13],[-2.135,1.06]];
+  const BOT = [[2.135,0.42],[2.1,0.34],[1.9,0.31],[-1.9,0.31],[-2.1,0.35],[-2.135,0.42]];
+  const WB  = [[2.135,0.74],[2.1,0.83],[1.95,0.88],[1.6,0.895],[-1.7,0.895],[-1.98,0.875],[-2.1,0.83],[-2.135,0.76]];
+  const WT  = [[2.135,0.6],[2.1,0.7],[1.95,0.78],[1.5,0.83],[0.9,0.85],[-1.5,0.85],[-1.95,0.82],[-2.1,0.76],[-2.135,0.68]];
+  const zs = []; for (let z = L2; z > -L2; z -= 0.035) zs.push(z); zs.push(-L2);
+  for (const za of [ZF, ZR]) for (const d of [-ARCH, -ARCH+0.004, ARCH-0.004, ARCH]) zs.push(za + d);
+  zs.sort((a, b) => b - a);
+  const lower = z => ({ z, y0: Math.max(smooth(BOT, z), arch(z)), y1: smooth(TOP, z), wb: smooth(WB, z), wt: smooth(WT, z) });
+  const BN = 5;
+  sweep(zs.map(lower), 'trkBody', paint, BN);
+  const sideX = (z, y) => { const l = lower(z), v = clamp((y - (l.y0+l.y1)/2)/((l.y1-l.y0)/2), -1, 1); return Math.pow(Math.max(0, 1 - Math.pow(Math.abs(v), BN)), 1/BN)*lerp(l.wb, l.wt, (v+1)/2); };
+  // black cladding: bumpers' lower parts and the sills (slightly proud of the paint)
+  const clad = (z0, z1, top, grow) => { const s = []; for (let z = z0; z >= z1 - 1e-6; z -= 0.03){ const l = lower(z); s.push({ z, y0: l.y0 - 0.005, y1: top(z), wb: l.wb + grow, wt: l.wb + grow*0.6 }); } return sweep(s, 'trkClad', black, 12); };
+  clad(2.15, 1.73, z => 0.4, 0.016);
+  clad(ZF - ARCH - 0.01, ZR + ARCH + 0.01, z => 0.46, 0.016);
+  clad(ZR - ARCH - 0.01, -2.15, z => 0.6, 0.016);
+  // wheel-arch flares
+  for (const za of [ZF, ZR]) for (const sd of [-1, 1]){
+    const paths = [[], [], [], []];
+    for (let a = -0.18; a <= Math.PI + 0.18 + 1e-6; a += Math.PI/24){
+      const c = Math.cos(a), s = Math.sin(a), xo = sd*0.925, xi = sd*0.83;
+      paths[0].push(new V3(xo, RW + s*ARCH, za + c*ARCH)); paths[1].push(new V3(xo, RW + s*(ARCH+0.075), za + c*(ARCH+0.075)));
+      paths[2].push(new V3(xi, RW + s*(ARCH+0.075), za + c*(ARCH+0.075))); paths[3].push(new V3(xi, RW + s*ARCH, za + c*ARCH));
+    }
+    add(B.MeshBuilder.CreateRibbon('trkFlare', { pathArray: paths, closePath: true, sideOrientation: B.Mesh.DOUBLESIDE }, scene), black);
+  }
+  for (const za of [ZF, ZR]) bx(1.32, 0.5, 0.86, 0, 0.56, za, black);                // inner wheel wells
+  // the glasshouse: tinted glass, then the white roof and the white C-pillar block behind it
+  const ROOF = [[0.97,1.05],[0.6,1.3],[0.18,1.52],[-0.15,1.58],[-0.9,1.59],[-1.6,1.57],[-1.9,1.55],[-1.99,1.53],[-2.05,1.42],[-2.1,1.27],[-2.125,1.15]];
+  const glassC = [0.062, 0.078, 0.098], paintC = [0.95, 0.953, 0.945];
+  const cpEdge = y => lerp(-1.74, -1.5, clamp((y - 1.1)/0.46, 0, 1));          // rear edge of the side glass, leaning forward
+  const houseM = stdMat('trkHouse', { diffuse: new C3(1,1,1), spec: new C3(.95,.95,.95), power: 180 });
+  { const s2 = []; for (let z = 0.97; z >= -2.125 - 1e-6; z -= 0.025){ const y0 = smooth(TOP, z) - 0.03; s2.push({ z, y0, y1: Math.max(y0 + 0.002, smooth(ROOF, z)), wb: smooth(WT, z) - 0.03, wt: 0.63 - Math.max(0, -1.9 - z)*0.4 }); }
+    sweep(s2, 'trkGlasshouse', houseM, 6, (x, y, z) => z < cpEdge(y) ? paintC : glassC); }
+  { const s3 = []; for (let z = -0.05; z >= -1.62; z -= 0.04){ const y = smooth(ROOF, z); s3.push({ z, y0: y - 0.03, y1: y + 0.014, wb: 0.645, wt: 0.6 }); } sweep(s3, 'trkRoof', paint, 6); }
+  bx(1.06, 0.33, 0.012, 0, 1.36, -2.083, glassM, 0.34);                               // tailgate glass
+  bx(0.012, 0.012, 0.3, 0.08, 1.31, -2.1, gloss, 0.34, 0, 0.3);                        // rear wiper
+  bx(1.18, 0.045, 0.2, 0, 1.585, -1.98, paint, -0.08);                                // roof spoiler
+  bx(0.32, 0.018, 0.012, 0, 1.575, -2.081, tailM);                                    // third brake light
+  for (const sd of [-1, 1]){                                                           // roof rails on legs
+    bx(0.04, 0.035, 1.55, sd*0.55, 1.63, -0.85, black);
+    for (const z of [-0.1, -1.6]) bx(0.05, 0.05, 0.12, sd*0.55, 1.6, z, black);
+  }
+  // front: slim headlamps, the upper slot, the big lower grille, L-shaped DRLs in the bumper corners
+  for (const sd of [-1, 1]){
+    bx(0.42, 0.07, 0.16, sd*0.6, 0.875, 2.05, lensM, 0, sd*0.42, sd*-0.06);
+    bx(0.34, 0.012, 0.02, sd*0.6, 0.845, 2.115, drlM, 0, sd*0.42, 0);
+    bx(0.03, 0.12, 0.03, sd*0.71, 0.55, 2.105, drlM, 0, sd*0.35, 0);
+    bx(0.09, 0.025, 0.03, sd*0.67, 0.495, 2.11, drlM, 0, sd*0.35, 0);
+    bx(0.07, 0.2, 0.05, sd*0.71, 0.55, 2.09, gloss, 0, sd*0.35, 0);
+  }
+  bx(0.66, 0.05, 0.03, 0, 0.865, 2.112, gloss);
+  { const g = prismZ([[-0.47,0.42],[0.47,0.42],[0.54,0.6],[0.45,0.77],[-0.45,0.77],[-0.54,0.6]], 2.1, 2.138, 'trkGrille'); add(g, gloss); }
+  for (let i = 0; i < 6; i++) bx(0.9 + (i === 2 || i === 3 ? 0.12 : 0), 0.012, 0.012, 0, 0.47 + i*0.055, 2.142, black);
+  bx(1.14, 0.03, 0.02, 0, 0.78, 2.13, black);
+  // back: tail lamps flush with the tailgate, wrapping round the corners; reflectors
+  for (const sd of [-1, 1]){
+    const xb = sideX(-2.13, 1.02);
+    bx(0.3, 0.1, 0.02, sd*(xb - 0.17), 1.02, -2.142, tailM, 0, 0, sd*0.1);
+    bx(0.02, 0.1, 0.24, sd*(sideX(-2.0, 1.04) + 0.006), 1.04, -2.0, tailM, 0, sd*0.12, 0);
+    bx(0.12, 0.03, 0.02, sd*0.7, 0.42, -2.165, tailM);
+  }
+  // sides: mirrors, door handles, shut lines
+  for (const sd of [-1, 1]){
+    bx(0.09, 0.05, 0.14, sd*0.9, 1.08, 0.86, black);
+    { const mr = add(B.MeshBuilder.CreateSphere('trkMirror', { diameterX: 0.24, diameterY: 0.13, diameterZ: 0.13, segments: 10 }, scene), paint); mr.position.set(sd*0.99, 1.14, 0.83); mr.rotation.y = sd*0.12; }
+    bx(0.012, 0.1, 0.09, sd*(0.99 - 0.0), 1.14, 0.765, black);
+    for (const z of [0.25, -0.86]) bx(0.022, 0.035, 0.17, sd*(sideX(z, 0.99) + 0.004), 0.99, z, silver);
+    for (const [z, y0, y1] of [[0.9, 0.48, 1.05], [-0.27, 0.48, 1.08], [-1.38, 0.62, 1.12]])
+      for (let y = y0; y < y1; y += 0.04){ const l = lower(z), v = (y - (l.y0+l.y1)/2)/((l.y1-l.y0)/2), u = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(v), 4)), 0.25), x = u*lerp(l.wb, l.wt, (v+1)/2);
+        bx(0.004, 0.042, 0.006, sd*(x + 0.002), y + 0.02, z, gloss); }
+  }
+  // wheels: tyres, dark barrel, silver 17" alloys with five twin spokes
+  for (const za of [ZF, ZR]) for (const sd of [-1, 1]){
+    const x = sd*0.775;
+    const t = add(B.MeshBuilder.CreateCylinder('trkTyre', { diameter: 2*RW, height: 0.215, tessellation: 40 }, scene), tyreM); t.rotation.z = Math.PI/2; t.position.set(x, RW, za);
+    const sw = add(B.MeshBuilder.CreateTorus('trkSide', { diameter: 2*RW - 0.07, thickness: 0.07, tessellation: 40 }, scene), tyreM); sw.rotation.z = Math.PI/2; sw.position.set(x + sd*0.075, RW, za);
+    const bar = add(B.MeshBuilder.CreateCylinder('trkBarrel', { diameter: 0.43, height: 0.02, tessellation: 32 }, scene), gloss); bar.rotation.z = Math.PI/2; bar.position.set(x + sd*0.09, RW, za);
+    const lip = add(B.MeshBuilder.CreateTorus('trkLip', { diameter: 0.425, thickness: 0.022, tessellation: 40 }, scene), silver); lip.rotation.z = Math.PI/2; lip.position.set(x + sd*0.1, RW, za);
+    const hub = add(B.MeshBuilder.CreateCylinder('trkHub', { diameter: 0.12, height: 0.03, tessellation: 20 }, scene), silver); hub.rotation.z = Math.PI/2; hub.position.set(x + sd*0.105, RW, za);
+    for (let i = 0; i < 5; i++) for (const off of [-0.11, 0.11]){
+      const a = i*Math.PI*2/5 + off, r = 0.125;
+      bx(0.018, 0.17, 0.032, x + sd*0.104, RW + Math.cos(a)*r, za + Math.sin(a)*r, silver, -a, 0, 0);
+    }
+  }
+  // number plates (Uzbek format: region | number, flag and UZ)
+  const plateTex = new B.DynamicTexture('trkPlate', { width: 520, height: 112 }, scene, true);
+  { const g = plateTex.getContext();
+    g.fillStyle = '#fbfbf8'; g.fillRect(0, 0, 520, 112); g.strokeStyle = '#111'; g.lineWidth = 6; g.strokeRect(3, 3, 514, 106);
+    g.fillRect(0,0,0,0); g.beginPath(); g.moveTo(98, 6); g.lineTo(98, 106); g.lineWidth = 4; g.stroke();
+    g.fillStyle = '#111'; g.font = 'bold 74px Arial, sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'center';
+    g.fillText(MY_CAR.plate[0], 51, 60); g.fillText(MY_CAR.plate[1], 282, 60);
+    const fx = 462; for (const [c, y] of [['#1eb5e8', 14], ['#ffffff', 27], ['#2fa84f', 40]]){ g.fillStyle = c; g.fillRect(fx, y, 44, 13); }
+    g.fillStyle = '#d0021b'; g.fillRect(fx, 26, 44, 2); g.fillRect(fx, 39, 44, 2); g.strokeStyle = '#999'; g.lineWidth = 1; g.strokeRect(fx, 14, 44, 39);
+    g.fillStyle = '#1e5bb5'; g.font = 'bold 30px Arial, sans-serif'; g.fillText('UZ', fx + 22, 82);
+    plateTex.update(); }
+  const plateM = stdMat('trkPlateM', { diffuse: new C3(1,1,1), dt: plateTex, spec: new C3(.3,.3,.3) });
+  for (const [z, y, ry] of [[2.16, 0.46, Math.PI], [-2.162, 0.66, 0]]){
+    const pl = add(B.MeshBuilder.CreatePlane('trkPlate', { width: 0.52, height: 0.112 }, scene), plateM); pl.position.set(0, y, z); pl.rotation.y = ry;
+  }
+  return root;
+}
+let myCar = null;
+function placeMyCar(){
+  const who = MY_CAR.owner.toLowerCase();
+  const p = plots.find(q => q.tpl && q.owner && [q.owner, q.ownerTg].some(n => n && n.toLowerCase().replace(/^@/, '') === who));
+  if (!p){ if (myCar) myCar.setEnabled(false); return null; }
+  if (!myCar){ myCar = trackerModel(); if (shadowGen) for (const m of myCar.getChildMeshes()) shadowGen.addShadowCaster(m, false); }
+  myCar.setEnabled(true);
+  // the road side nearest the house; park at the kerb, facing the lane's direction (right-hand traffic)
+  const gx = Math.floor((p.x - X0)/PITCH), gz = Math.floor((p.z - Z0)/PITCH), x0 = blockX(gx), z0 = blockZ(gz), K = RD/2 - 0.9 - 0.02;
+  const sides = [
+    { d: p.x - x0,         x: x0 - RD/2 + K,       z: p.z, ry: Math.PI },
+    { d: x0 + BLK - p.x,   x: x0 + BLK + RD/2 - K, z: p.z, ry: 0 },
+    { d: p.z - z0,         x: p.x, z: z0 - RD/2 + K,       ry: Math.PI/2 },
+    { d: z0 + BLK - p.z,   x: p.x, z: z0 + BLK + RD/2 - K, ry: -Math.PI/2 },
+  ].sort((a, b) => a.d - b.d);
+  const s = sides.find(s => !onRiverRoad(s.x, s.z) && !inPark(s.x, s.z)) || sides[0];
+  myCar.position.set(s.x, 0.02, s.z); myCar.rotation.y = s.ry;
+  return { p, x: s.x, z: s.z };
+}
 // ---------- traffic lights at every intersection ----------
 // 4 signal heads per crossing (one per approach, on the far-right corner). Phases are offset between neighbouring
 // crossings so the whole city does not switch at once. Cars stop at red/amber and queue behind each other.
@@ -2629,6 +2803,8 @@ function populateDemo(){
     Object.assign(p, { state:'owned', owner:sh.owner, tpl:sh.tpl, style:sh.style, floors:sh.floors, roof:sh.roof, color:sh.color, accent:sh.accent, rot: Math.floor(rnd()*4), likes: 12 });
     addBuilding(p, false);
   }
+  { const p = plots.find(q => { if (q.zone!=='res' || q.state!=='empty' || (q.id % 16) % 4 !== 0 || Math.floor((q.id % 16)/4) !== 1) return false; const rz = blockZ(Math.floor((q.z - Z0)/PITCH)) - RD/2; return !onRiverRoad(q.x, rz) && !inPark(q.x, rz); });   // a house on a block's street side
+    if (p){ Object.assign(p, { state:'owned', owner:MY_CAR.owner, tpl:'house', style:'modern', floors:2, roof:'gable', color:'#f1ece2', accent:'#9c4a32', rot:0, likes: 21 }); addBuilding(p, false); } }
   // the 10 landmark copies around the park, owned by the city and for sale (same rule as the server's seed)
   // the 10 skyscraper copies, each alone in a free block around the park (same rule as the server's landmarkBlocks)
   const freeBlocks = [];
@@ -2755,6 +2931,16 @@ for (const pl of PLACES){
 document.getElementById('goPort').onclick = () => goPlace(PLACES[0]);
 document.getElementById('goAir').onclick = () => goPlace(PLACES[1]);
 document.getElementById('goForest').onclick = () => goPlace(PLACES[2]);
+document.getElementById('goCar').onclick = () => {
+  const c = myCar && myCar.isEnabled() ? myCar : null;
+  if (!c){ toast(MY_CAR.owner + ' ning mashinasi hali shaharda yo‘q'); return; }
+  stopAuto(); select(null); closeSheet(); flyTo(c.position.x, c.position.z, 11, 1.22);
+  const ry = c.rotation.y, lx = 0.75, lz = 0.66;                       // front three-quarter view
+  let a = Math.atan2(-lx*Math.sin(ry) + lz*Math.cos(ry), lx*Math.cos(ry) + lz*Math.sin(ry));
+  while (a - camera.alpha > Math.PI) a -= 2*Math.PI; while (camera.alpha - a > Math.PI) a += 2*Math.PI;
+  fly.from.a = camera.alpha; fly.to.a = a;
+  toast('Oq Chevrolet Tracker — ' + MY_CAR.owner + ' ning uyi oldida');
+};
 function updatePlaces(){
   const k = engine.getHardwareScalingLevel(), vp = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()), W = canvas.clientWidth, H = canvas.clientHeight;
   for (const pl of PLACES){
@@ -3058,7 +3244,7 @@ function openSettings(){
 // ---------- quality ----------
 let shadowGen = null, pipeline = null, glow = null;
 const casters = () => {
-  const list = [...treeCasters(), ...poles.meshes(), basin, jet];
+  const list = [...treeCasters(), ...poles.meshes(), basin, jet, ...(myCar ? myCar.getChildMeshes() : [])];
   for (const t of Object.values(T)) for (const pt of t.parts) list.push(pt.mesh);
   return list;
 };
@@ -3436,6 +3622,7 @@ function applyCity(c){
     if (p.state !== 'empty' || p.tpl) applyDTO(p, { id:p.id, state:'empty', price:emptyPrice(p), owner:null, building:null, likes:0 }, false);
     else { p.price = emptyPrice(p); paintPad(p, false); }
   }
+  placeMyCar();
 }
 async function api(method, url, body, idemKey){
   const headers = {};
@@ -3618,7 +3805,7 @@ async function boot(){
   }
   const offline = () => { // demo mode without a server (e.g. the published artifact)
     API.on = false;
-    populateDemo(); flushBuffers(); updateCoins();
+    populateDemo(); placeMyCar(); flushBuffers(); updateCoins();
     $('#loader').classList.add('hide');
     showHero(); setPopulation(new Set(plots.filter(p => p.owner && p.owner !== 'Shahar hokimligi').map(p => p.owner)).size);
   };
@@ -3655,7 +3842,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { placeMyCar, getMyCar: () => myCar, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
