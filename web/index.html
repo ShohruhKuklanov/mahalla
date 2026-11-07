@@ -779,6 +779,14 @@
    "cost": 30000,
    "income": 1500,
    "build": 240
+  },
+  "lm_chorsu": {
+   "name": "Chorsu bozori",
+   "city": "Toshkent",
+   "realHeight": 30,
+   "cost": 20000,
+   "income": 1200,
+   "build": 200
   }
  }
 }
@@ -1424,6 +1432,7 @@ function lmGlass(key, uRep, vRep){
 const LM_DESIGN = 0.15, LM_K = CAT.landmarkScale / LM_DESIGN;
 function landmarkParts(key){
   if (key==='lm_hilton') return hotelParts();
+  if (key==='lm_chorsu') return chorsuParts();
   const H = Math.round(CAT.landmarks[key].realHeight * LM_DESIGN), P = [], add = (m, mat) => P.push([m, mat, null]);
   const gl = (tint, r) => lmGlass(key, Math.max(4, Math.round(2*Math.PI*r/TILE_W*0.8)), H/(4*FLOOR_H)*1.6);
   if (key==='lm_burj'){
@@ -1564,6 +1573,75 @@ function hotelParts(){
   // a reflecting pool in front
   add(box(5, 0.2, 18, PD.xa - 9, 0.1, 0), mats.water);
   return { P, height: H + 2 };
+}
+
+// ---- Chorsu bozori: the great turquoise dome on a ring of white arches with a gold crown, four small domes in the
+// corners and rows of market stalls with striped awnings, crates of fruit and vegetables, all inside one block ----
+function chorsuParts(){
+  const P = [], add = (m, mat) => { m.computeWorldMatrix(true); m.bakeCurrentTransformIntoVertices(); P.push([m, mat, null]); };
+  const dynTex = (name, w, h, draw) => { const d = new B.DynamicTexture(name + 'd', { width: w, height: h }, scene, true), e = new B.DynamicTexture(name + 'e', { width: w, height: h }, scene, true);
+    const a = d.getContext(), b = e.getContext(); b.fillStyle = '#000'; b.fillRect(0, 0, w, h); draw(a, b, w, h); d.update(true); e.update(true);
+    for (const t of [d, e]){ t.wrapU = t.wrapV = B.Texture.WRAP_ADDRESSMODE; t.anisotropicFilteringLevel = 8; } return { d, e }; };
+  // dome tiles: one gore per texture width — turquoise with darker blue ornament, white rib on each edge, lighter towards the top
+  // (the lathe's u runs up the profile, v around it, so the gore is drawn lying on its side: x = height, y = around)
+  const domeTex = (name, gores) => { const t = dynTex(name, 512, 128, (a, b, w, h) => {
+      const g = a.createLinearGradient(0, 0, w, 0); g.addColorStop(0, '#1f8fb0'); g.addColorStop(0.6, '#2eb3c8'); g.addColorStop(1, '#67d3df'); a.fillStyle = g; a.fillRect(0, 0, w, h);
+      a.fillStyle = '#17607f'; for (let x = 30; x < w - 20; x += 34){ const k = 1 - x/w*0.6; a.beginPath(); a.moveTo(x - 12*k, h/2); a.lineTo(x, h/2 + 18*k); a.lineTo(x + 12*k, h/2); a.lineTo(x, h/2 - 18*k); a.closePath(); a.fill(); }
+      a.fillStyle = '#e8f6f7'; for (let x = 30; x < w - 20; x += 34){ a.beginPath(); a.arc(x, h/2, 3, 0, 6.29); a.fill(); }
+      a.fillStyle = '#9fe2ea'; for (let x = 47; x < w - 20; x += 34){ a.fillRect(x - 1, h*0.22, 4, 4); a.fillRect(x - 1, h*0.78 - 4, 4, 4); }
+      a.fillStyle = '#f4fbfb'; a.fillRect(0, 0, w, 7); a.fillRect(0, h - 7, w, 7);
+      a.fillStyle = '#d9b44a'; a.fillRect(0, 0, 10, h); });
+    t.d.vScale = t.e.vScale = gores; const m = stdMat(name + 'M', { dt: t.d, spec: new C3(.65,.7,.72), power: 90 }); m.emissiveColor = hex('#2eb3c8').scale(0.12); return m; };
+  // a shallow dome on a drum ringed by white arches (glazed behind); r = radius, h = dome rise, y0 = springing height
+  const goldM = stdMat('chGold', { diffuse: hex('#d8ad3e'), spec: new C3(1,.9,.6), power: 120 });
+  const whiteM = stdMat('chWhite', { diffuse: hex('#f4f2ec'), spec: new C3(.3,.3,.3), power: 40 });
+  const wt = dynTex('chWin', 64, 64, (a, b, w, h) => { a.fillStyle = '#52707e'; a.fillRect(0, 0, w, h); a.fillStyle = '#9db8c2'; a.fillRect(0, 0, w, 6); a.fillStyle = '#c6d2d6'; a.fillRect(w/2 - 1, 0, 2, h); a.fillRect(0, h/2, w, 2);
+    b.fillStyle = '#ffcf85'; b.fillRect(2, 8, w - 4, h - 10); });
+  const winM = stdMat('chWinM', { dt: wt.d, et: wt.e, spec: new C3(.6,.6,.6), power: 100 }); nightMats.push(winM);
+  const dome = (cx, cz, r, h, y0, n, mat) => {
+    const prof = []; for (let i = 0; i <= 16; i++){ const t = i/16, rr = r*Math.cos(t*Math.PI/2*0.94), yy = y0 + h*Math.sin(t*Math.PI/2*0.94); prof.push(new V3(Math.max(rr, r*0.09), yy, 0)); }
+    const d = B.MeshBuilder.CreateLathe('chDome', { shape: prof, tessellation: n*4, sideOrientation: B.Mesh.DOUBLESIDE }, scene); d.position.set(cx, 0, cz); add(d, mat);
+    const drum = B.MeshBuilder.CreateCylinder('chDrum', { diameter: 2*r*0.97, height: y0, tessellation: n*2 }, scene); drum.position.set(cx, y0/2, cz);
+    wt.d.uScale = wt.e.uScale = n*2; add(drum, winM);
+    const arches = []; for (let i = 0; i < n; i++){ const a0 = i/n*Math.PI*2, a1 = (i + 1)/n*Math.PI*2, path = [];
+      for (let k = 0; k <= 10; k++){ const t = k/10, a = lerp(a0, a1, t), lift = Math.sin(Math.PI*t); path.push(new V3(cx + (r + 0.15)*Math.cos(a), y0*0.25 + y0*0.8*Math.pow(lift, 0.55), cz + (r + 0.15)*Math.sin(a))); }
+      arches.push(B.MeshBuilder.CreateTube('chArch', { path, radius: Math.max(0.12, r*0.022), tessellation: 5 }, scene));
+      const leg = B.MeshBuilder.CreateCylinder('chLeg', { diameter: Math.max(0.24, r*0.045), height: y0*0.25 + 0.05, tessellation: 5 }, scene); leg.position.set(cx + (r + 0.15)*Math.cos(a0), (y0*0.25)/2, cz + (r + 0.15)*Math.sin(a0)); arches.push(leg); }
+    const ring = B.MeshBuilder.CreateTorus('chRing', { diameter: 2*(r + 0.1), thickness: Math.max(0.2, r*0.04), tessellation: n*3 }, scene); ring.position.set(cx, y0 + 0.05, cz); arches.push(ring);
+    add(merge(arches), whiteM);
+    return y0 + h*Math.sin(Math.PI/2*0.94);
+  };
+  // the great dome
+  const R = 15, top = dome(0, 0, R, 9.5, 4.2, 24, domeTex('chDome', 24));
+  const crown = [];
+  const c1 = B.MeshBuilder.CreateCylinder('chC1', { diameterTop: 4.2, diameterBottom: 3.2, height: 0.8, tessellation: 24 }, scene); c1.position.y = top + 0.3; crown.push(c1);
+  const c2 = B.MeshBuilder.CreateCylinder('chC2', { diameter: 5.6, height: 0.35, tessellation: 24 }, scene); c2.position.y = top + 0.85; crown.push(c2);
+  for (let i = 0; i < 8; i++){ const a = i/8*Math.PI*2, st = B.MeshBuilder.CreateCylinder('chSt', { diameter: 0.18, height: 1.2, tessellation: 4 }, scene); st.position.set(1.6*Math.cos(a), top + 1.5, 1.6*Math.sin(a)); crown.push(st); }
+  const c3 = B.MeshBuilder.CreateCylinder('chC3', { diameterTop: 0.6, diameterBottom: 4, height: 0.9, tessellation: 24 }, scene); c3.position.y = top + 2.4; crown.push(c3);
+  add(merge(crown), goldM);
+  // four small domes in the corners
+  const small = domeTex('chDomeS', 8);
+  for (const [x, z] of [[-17, -17], [17, -17], [-17, 17], [17, 17]]) dome(x, z, 3.6, 2.6, 2.6, 8, small);
+  // stalls: four rows (one per side, between the small domes) of open sheds with striped awnings, crates of produce
+  const aw = ['#c8323a', '#e0a526', '#2f8f5b', '#2a6fb0'].map((c, i) => { const t = new B.DynamicTexture('chAw' + i, { width: 64, height: 16 }, scene, true), g = t.getContext();
+    for (let k = 0; k < 8; k++){ g.fillStyle = k % 2 ? '#f6f1e6' : c; g.fillRect(k*8, 0, 8, 16); } t.update(true); t.wrapU = B.Texture.WRAP_ADDRESSMODE; return stdMat('chAwM' + i, { dt: t, spec: new C3(.1,.1,.1), power: 10 }); });
+  const produce = ['#e8812a', '#c9302c', '#7ab648', '#f2c230', '#8a3c8f'].map((c, i) => stdMat('chFruit' + i, { diffuse: hex(c), spec: new C3(.2,.2,.2), power: 30 }));
+  const posts = [], tables = [], awn = [[], [], [], []], crates = [[], [], [], [], []];
+  let k = 0;
+  for (const side of [0, 1, 2, 3]) for (let i = 0; i < 4; i++){
+    const u = -9.9 + i*6.6, v = 19.2, rot = side*Math.PI/2, place = (m, lx, ly, lz) => { const c = Math.cos(rot), s = Math.sin(rot); m.position.set(lx*c + lz*s, ly, -lx*s + lz*c); m.rotation.y = rot; };
+    const a = box(6.0, 0.08, 3.2, 0, 0, 0); place(a, u, 2.6, v - 0.2); a.rotation.x = 0; awn[k++ % 4].push(a);
+    for (const [px, pz] of [[-2.9, -1.4], [2.9, -1.4], [-2.9, 1.2], [2.9, 1.2]]){ const p = box(0.12, 2.6, 0.12, 0, 0, 0); place(p, u + px, 1.3, v + pz); posts.push(p); }
+    const tb = box(5.4, 0.9, 1.4, 0, 0, 0); place(tb, u, 0.45, v - 0.6); tables.push(tb);
+    for (let j = 0; j < 5; j++){ const c = box(0.95, 0.35, 0.9, 0, 0, 0); place(c, u - 2.2 + j*1.1, 1.08, v - 0.6); crates[(i + j + side) % 5].push(c); }
+  }
+  add(merge(posts), stdMat('chWood', { diffuse: hex('#7a5233'), spec: new C3(.1,.1,.1) }));
+  add(merge(tables), stdMat('chTable', { diffuse: hex('#a77b4f'), spec: new C3(.1,.1,.1) }));
+  awn.forEach((list, i) => list.length && add(merge(list), aw[i]));
+  crates.forEach((list, i) => list.length && add(merge(list), produce[i]));
+  // stone paving under it all
+  add(box(44, 0.12, 44, 0, -0.36, 0), stdMat('chPave', { dt: noiseTex('chp', '#d9cbb0', 0.08, 128, 2) }));
+  return { P, height: top + 4 };
 }
 
 // ---- variants: one set of thin-instanced meshes per (type, style, floors, roof) or per landmark ----

@@ -286,9 +286,9 @@ test('styles, floors and roofs: validated, priced by floors', async () => {
   assert.deepEqual(await ledgerMismatches(db), []);
 });
 
-test('landmark copies: all 11 stand in the centre from the start, for sale, one of each', async () => {
+test('landmark copies: all 12 stand in the centre from the start, for sale, one of each', async () => {
   const lm = (await city()).plots.filter((x: any) => x.building && x.building.template.startsWith('lm_'));
-  assert.equal(lm.length, 11);
+  assert.equal(lm.length, 12);
   assert.ok(lm.every((x: any) => x.zone === 'cen' && x.state === 'sale' && x.owner.nickname === 'Shahar hokimligi'));
   const richify = async (nick: string) => {
     await db.query("update wallets set balance = balance + 300000 where user_id = (select id from users where nickname=$1)", [nick]);
@@ -317,8 +317,8 @@ test('skyscraper copies: each alone in its own block, the rest of the block is c
   const check = async () => {
     const all = await everyPlot();
     const lm = all.filter((x: any) => x.building && x.building.template.startsWith('lm_'));
-    assert.equal(lm.length, 11);
-    assert.equal(new Set(lm.map((x: any) => blockOf(x.id))).size, 11, 'one block each');
+    assert.equal(lm.length, 12);
+    assert.equal(new Set(lm.map((x: any) => blockOf(x.id))).size, 12, 'one block each');
     for (const l of lm) for (const q of all.filter((y: any) => blockOf(y.id) === blockOf(l.id) && y.id !== l.id)) {
       assert.ok(!q.building, 'no other building in a skyscraper block');
     }
