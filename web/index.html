@@ -794,6 +794,15 @@
    "cost": 20000,
    "income": 1200,
    "build": 200
+  },
+  "lm_tvtower": {
+   "name": "Toshkent teleminorasi",
+   "city": "Toshkent",
+   "spot": [140, -470],
+   "realHeight": 375,
+   "cost": 60000,
+   "income": 3000,
+   "build": 360
   }
  }
 }
@@ -1440,6 +1449,7 @@ const LM_DESIGN = 0.15, LM_K = CAT.landmarkScale / LM_DESIGN;
 function landmarkParts(key){
   if (key==='lm_hilton') return hotelParts();
   if (key==='lm_chorsu') return chorsuParts();
+  if (key==='lm_tvtower') return tvTowerParts();
   const H = Math.round(CAT.landmarks[key].realHeight * LM_DESIGN), P = [], add = (m, mat) => P.push([m, mat, null]);
   const gl = (tint, r) => lmGlass(key, Math.max(4, Math.round(2*Math.PI*r/TILE_W*0.8)), H/(4*FLOOR_H)*1.6);
   if (key==='lm_burj'){
@@ -1684,6 +1694,76 @@ function chorsuParts(){
   // stone paving under it all
   add(box(44, 0.12, 44, 0, -0.36, 0), stdMat('chPave', { dt: noiseTex('chp', '#d9cbb0', 0.08, 128, 2) }));
   return { P, height: top + 4 };
+}
+
+// ---- Toshkent teleminorasi (375 m, here at half height): three slender white legs leaning in to a collar, a steel
+// lattice shaft, the lower pod with the observation deck and the upper pod clad in blue-green tile bands, a white
+// antenna mast with small platforms. It glows amber at night like the real one.
+function tvTowerParts(){
+  const P = [], add = (m, mat) => { m.computeWorldMatrix(true); m.bakeCurrentTransformIntoVertices(); P.push([m, mat, null]); };
+  const H = lmHeight('lm_tvtower'), f = k => k*H;
+  const dyn = (name, w, h, draw) => { const d = new B.DynamicTexture(name + 'd', { width: w, height: h }, scene, true), e = new B.DynamicTexture(name + 'e', { width: w, height: h }, scene, true);
+    const a = d.getContext(), b = e.getContext(); b.fillStyle = '#000'; b.fillRect(0, 0, w, h); draw(a, b, w, h); d.update(true); e.update(true);
+    for (const t of [d, e]){ t.wrapU = t.wrapV = B.Texture.WRAP_ADDRESSMODE; t.anisotropicFilteringLevel = 8; } return { d, e }; };
+  const nightMat = (name, diffuse, tex, spec = .35, power = 60) => { const m = stdMat(name, { dt: tex.d, et: tex.e, spec: new C3(spec, spec, spec), power }); if (diffuse) m.diffuseColor = hex(diffuse); nightMats.push(m); return m; };
+  // white concrete-and-steel with an amber floodlight wash at night
+  const wt = dyn('tvWhite', 16, 16, (a, b) => { a.fillStyle = '#ffffff'; a.fillRect(0, 0, 16, 16); b.fillStyle = '#a8561a'; b.fillRect(0, 0, 16, 16); });
+  const whiteM = nightMat('tvWhiteM', '#ebe7df', wt);
+  // the lattice shaft: dark steel X-bracing on blue-grey, amber light strings on the members at night
+  const lt = dyn('tvLattice', 64, 128, (a, b, w, h) => { a.fillStyle = '#3f5468'; a.fillRect(0, 0, w, h); a.strokeStyle = '#c3cdd6'; a.lineWidth = 4;
+    a.beginPath(); a.moveTo(0, 0); a.lineTo(w, h/2); a.lineTo(0, h); a.moveTo(w, 0); a.lineTo(0, h/2); a.lineTo(w, h); a.stroke(); a.fillStyle = '#c3cdd6'; a.fillRect(0, 0, 3, h); a.fillRect(w - 3, 0, 3, h); a.fillRect(0, h/2 - 2, w, 4);
+    b.strokeStyle = '#b8621c'; b.lineWidth = 4; b.beginPath(); b.moveTo(0, 0); b.lineTo(w, h/2); b.lineTo(0, h); b.moveTo(w, 0); b.lineTo(0, h/2); b.lineTo(w, h); b.stroke();
+    b.fillStyle = '#ffb04f'; for (let y = 4; y < h; y += 9){ b.fillRect(0, y, 4, 4); b.fillRect(w - 4, y, 4, 4); } for (let x = 4; x < w; x += 10) b.fillRect(x, h/2 - 2, 4, 4); });
+  const latM = nightMat('tvLatM', null, lt, .5, 80);
+  // the pods: rows of turquoise, blue and green tile lozenges between white bands; warm windows/lights at night
+  const pt = dyn('tvPod', 256, 128, (a, b, w, h) => { a.fillStyle = '#e9eef0'; a.fillRect(0, 0, w, h);
+    const rowC = ['#1f8fb0', '#2fa36b', '#2a67b8', '#2fb3c8'];
+    for (let r = 0; r < 4; r++){ const y = 10 + r*28; a.fillStyle = '#d5dde0'; a.fillRect(0, y - 4, w, 2);
+      for (let x = 0; x < w; x += 16){ a.fillStyle = rowC[(r + (x/16|0)) % 4]; a.beginPath(); a.moveTo(x + 8, y); a.lineTo(x + 16, y + 10); a.lineTo(x + 8, y + 20); a.lineTo(x, y + 10); a.closePath(); a.fill(); }
+      b.fillStyle = '#ffc56a'; for (let x = 4; x < w; x += 16) b.fillRect(x + 2, y + 8, 4, 4); }
+    a.fillStyle = '#2b3a46'; a.fillRect(0, h - 14, w, 10); b.fillStyle = '#ffdca0'; b.fillRect(0, h - 13, w, 8); });
+  pt.d.uScale = pt.e.uScale = 6;
+  const podM = nightMat('tvPodM', null, pt, .5, 90);
+  const steelM2 = stdMat('tvSteel', { diffuse: hex('#9aa5ae'), spec: new C3(.6,.6,.6), power: 90 });
+  // a tapered member between two points
+  const member = (a, b, r0, r1, n = 8) => { const d = b.subtract(a), L = d.length();
+    const m = B.MeshBuilder.CreateCylinder('tvM', { height: L, diameterBottom: 2*r0, diameterTop: 2*r1, tessellation: n }, scene);
+    m.position = a.add(d.scale(0.5)); const up = new V3(0, 1, 0), ax = V3.Cross(up, d.normalize()); const ang = Math.acos(clamp(V3.Dot(up, d.normalize()), -1, 1));
+    if (ax.length() > 1e-6) m.rotationQuaternion = B.Quaternion.RotationAxis(ax.normalize(), ang); return m; };
+  // legs: from the ground at the corners of a triangle to the collar under the lower pod
+  const legs = [], Rf = 19, yJ = f(0.205);
+  for (let i = 0; i < 3; i++){ const a = Math.PI/2 + i*2*Math.PI/3; legs.push(member(new V3(Rf*Math.cos(a), 0, Rf*Math.sin(a)), new V3(1.6*Math.cos(a), yJ, 1.6*Math.sin(a)), 0.9, 1.7)); }
+  const collar = B.MeshBuilder.CreateCylinder('tvCol', { height: f(0.03), diameterBottom: 4.2, diameterTop: 9, tessellation: 24 }, scene); collar.position.y = yJ + f(0.015); legs.push(collar);
+  add(merge(legs), whiteM);
+  // lattice: from the ground through the collar up to the upper pod
+  const latLo = B.MeshBuilder.CreateCylinder('tvL1', { height: yJ, diameter: 3.6, tessellation: 4 }, scene); latLo.position.y = yJ/2;
+  const yP1 = f(0.235), yP1t = f(0.29), yP2 = f(0.6), yP2t = f(0.645);
+  const latHi = B.MeshBuilder.CreateCylinder('tvL2', { height: yP2 - yP1t, diameterBottom: 5.2, diameterTop: 4.2, tessellation: 4 }, scene); latHi.position.y = (yP1t + yP2)/2;
+  lt.d.uScale = lt.e.uScale = 4; lt.d.vScale = lt.e.vScale = Math.round((yP2 - yP1t)/5); add(merge([latLo, latHi]), latM);
+  // pods: tiled drum between white rims, flared underside
+  const pods = [], rims = [];
+  for (const [y0, y1, dia] of [[yP1, yP1t, 13.6], [yP2, yP2t, 11.2]]){
+    const drum = B.MeshBuilder.CreateCylinder('tvPod', { height: y1 - y0, diameterBottom: dia*0.96, diameterTop: dia, tessellation: 32 }, scene); drum.position.y = (y0 + y1)/2; pods.push(drum);
+    const under = B.MeshBuilder.CreateCylinder('tvU', { height: 2.2, diameterBottom: dia*0.45, diameterTop: dia*0.96, tessellation: 32 }, scene); under.position.y = y0 - 1.1; rims.push(under);
+    const top = B.MeshBuilder.CreateCylinder('tvT', { height: 1.6, diameterBottom: dia*1.02, diameterTop: dia*0.6, tessellation: 32 }, scene); top.position.y = y1 + 0.8; rims.push(top);
+    const band = B.MeshBuilder.CreateTorus('tvB', { diameter: dia*1.0, thickness: 0.7, tessellation: 32 }, scene); band.position.y = y0 + (y1 - y0)*0.5; rims.push(band);
+  }
+  add(merge(pods), podM); add(merge(rims), whiteM);
+  // antenna brackets on the lattice (small arms in three directions)
+  const arms = []; for (const k of [0.36, 0.45, 0.53]) for (let i = 0; i < 3; i++){ const a = i*2*Math.PI/3 + k*7; arms.push(member(new V3(0, f(k), 0), new V3(6*Math.cos(a), f(k) + 0.8, 6*Math.sin(a)), 0.18, 0.12, 5)); }
+  add(merge(arms), steelM2);
+  // antenna mast with small platforms, red light at the very top
+  const mast = [member(new V3(0, yP2t + 1.6, 0), new V3(0, H, 0), 1.3, 0.25, 12)];
+  for (const k of [0.72, 0.8, 0.88, 0.94]){ const pl = B.MeshBuilder.CreateCylinder('tvPl', { height: 0.6, diameter: 3.4*(1.05 - k), tessellation: 12 }, scene); pl.position.y = f(k); mast.push(pl); }
+  add(merge(mast), whiteM);
+  const tip = B.MeshBuilder.CreateSphere('tvTip', { diameter: 1.2, segments: 6 }, scene); tip.position.y = H + 0.4;
+  add(tip, (() => { const t = dyn('tvRed', 8, 8, (a, b) => { a.fillStyle = '#ff3b30'; a.fillRect(0, 0, 8, 8); b.fillStyle = '#ff2a1f'; b.fillRect(0, 0, 8, 8); }); return nightMat('tvRedM', null, t); })());
+  // a small paved plaza and the entrance pavilion between the legs
+  { const m = B.MeshBuilder.CreateCylinder('tvPlaza', { height: 0.14, diameter: 44, tessellation: 40 }, scene); m.position.y = -0.35; add(m, stdMat('tvPave', { dt: noiseTex('tvp', '#d4cfc4', 0.07, 128, 2) })); }
+  const hall = B.MeshBuilder.CreateCylinder('tvHall', { height: 4.5, diameter: 12, tessellation: 24 }, scene); hall.position.y = 2.25;
+  add(hall, (() => { const t = dyn('tvHallT', 128, 32, (a, b, w, h) => { a.fillStyle = '#5c7180'; a.fillRect(0, 0, w, h); a.fillStyle = '#e9e6df'; a.fillRect(0, 0, w, 5); for (let x = 0; x < w; x += 16) a.fillRect(x, 0, 2, h); b.fillStyle = '#ffcf85'; b.fillRect(0, 6, w, h - 8); });
+    t.d.uScale = t.e.uScale = 3; return nightMat('tvHallM', null, t, .6, 100); })());
+  return { P, height: H + 4 };
 }
 
 // ---- variants: one set of thin-instanced meshes per (type, style, floors, roof) or per landmark ----
