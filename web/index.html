@@ -2269,152 +2269,204 @@ const carLights = CAR_KINDS.flatMap(c => [c.k.parts[3], c.k.parts[4]]);
 const MY_CAR = { owner: 'shohruh.97', plate: ['90', 'Y 095 AB'] };
 function trackerModel(){
   const root = new B.TransformNode('tracker', scene);
-  const paint  = stdMat('trkPaint',  { diffuse: hex('#f2f3f1'), spec: new C3(.85,.85,.85), power: 140 });
-  const black  = stdMat('trkBlack',  { diffuse: hex('#1c1d20'), spec: new C3(.1,.1,.1), power: 20 });
+  const bodyM  = stdMat('trkBodyM',  { diffuse: new C3(1,1,1), spec: new C3(.7,.7,.7), power: 120 });
+  const black  = stdMat('trkBlack',  { diffuse: hex('#16171a'), spec: new C3(.1,.1,.1), power: 20 });
   const gloss  = stdMat('trkGloss',  { diffuse: hex('#0c0d0f'), spec: new C3(.8,.8,.8), power: 160 });
-  const glassM = stdMat('trkGlass',  { diffuse: hex('#101419'), spec: new C3(1,1,1), power: 220 });
-  const silver = stdMat('trkSilver', { diffuse: hex('#c9cdd1'), spec: new C3(.9,.9,.9), power: 90 });
-  const tyreM  = stdMat('trkTyre',   { diffuse: hex('#18191c'), spec: new C3(.04,.04,.04) });
-  const lensM  = stdMat('trkLens',   { diffuse: hex('#6f7882'), spec: new C3(1,1,1), power: 220 });
-  const drlM   = stdMat('trkDrl',    { diffuse: hex('#ffffff'), emissive: hex('#eef4ff') });
-  const tailM  = stdMat('trkTail',   { diffuse: hex('#9a1016'), emissive: hex('#4a0306'), spec: new C3(.9,.9,.9), power: 160 });
-  const add = (m, mat) => { m.material = mat; m.parent = root; m.isPickable = false; m.receiveShadows = true; return m; };
+  const paint  = stdMat('trkPaint',  { diffuse: hex('#f1f2f0'), spec: new C3(.7,.7,.7), power: 120 });
+  const silver = stdMat('trkSilver', { diffuse: hex('#cfd3d7'), spec: new C3(1,1,1), power: 110 });
+  const gunm   = stdMat('trkGunm',   { diffuse: hex('#4a4e54'), spec: new C3(.5,.5,.5), power: 60 });
+  const tyreM  = stdMat('trkTyre',   { diffuse: hex('#1a1b1e'), spec: new C3(.05,.05,.05) });
+  const tailM  = stdMat('trkTail',   { diffuse: hex('#b01019'), emissive: hex('#5a0508'), spec: new C3(.9,.9,.9), power: 160 });
+  const add = (m, mat, parent = root) => { m.material = mat; m.parent = parent; m.isPickable = false; m.receiveShadows = true; return m; };
   const bx = (w, h, d, x, y, z, mat, rx = 0, ry = 0, rz = 0) => { const m = box(w, h, d, x, y, z); m.rotation.set(rx, ry, rz); return add(m, mat); };
 
-  // smooth skin through cross-sections; each section is a rounded trapezoid (half-width wb at the bottom, wt at the top)
-  const NS = 32;
-  const secPt = (s, k, n) => {
-    const t = k/NS*Math.PI*2, c = Math.cos(t), si = Math.sin(t);
-    const u = Math.sign(c)*Math.pow(Math.abs(c), 2/n), v = Math.sign(si)*Math.pow(Math.abs(si), 2/n);
-    return [u*lerp(s.wb, s.wt, (v+1)/2), (s.y0+s.y1)/2 + v*(s.y1-s.y0)/2, s.z];
+  // ---- profiles (front z = +2.135), interpolated with Catmull-Rom ----
+  const cr = (pts, z) => {
+    if (z >= pts[0][0]) return pts[0][1];
+    const n = pts.length; if (z <= pts[n-1][0]) return pts[n-1][1];
+    let i = 0; while (z < pts[i+1][0]) i++;
+    const p0 = pts[Math.max(0, i-1)][1], p1 = pts[i][1], p2 = pts[i+1][1], p3 = pts[Math.min(n-1, i+2)][1], t = (pts[i][0] - z)/(pts[i][0] - pts[i+1][0]);
+    return 0.5*(2*p1 + (-p0 + p2)*t + (2*p0 - 5*p1 + 4*p2 - p3)*t*t + (-p0 + 3*p1 - 3*p2 + p3)*t*t*t);
   };
-  function sweep(secs, name, mat, n = 4, colorAt = null){
-    const pos = [], idx = [], ring = i => i*NS;
-    for (const s of secs) for (let k = 0; k < NS; k++) pos.push(...secPt(s, k, n));
-    const P = i => new V3(pos[3*i], pos[3*i+1], pos[3*i+2]);
-    const tri = (a, b, c, out) => {
-      const A = P(a), Bv = P(b), Cv = P(c), nrm = V3.Cross(Bv.subtract(A), Cv.subtract(A));
-      if (V3.Dot(nrm, out(A.add(Bv).add(Cv).scale(1/3))) < 0) idx.push(a, b, c); else idx.push(a, c, b);
-    };
-    for (let i = 0; i + 1 < secs.length; i++){
-      const yc = (secs[i].y0 + secs[i].y1 + secs[i+1].y0 + secs[i+1].y1)/4, out = m => new V3(m.x, m.y - yc, 0);
-      for (let k = 0; k < NS; k++){ const a = ring(i)+k, b = ring(i)+(k+1)%NS, c = a+NS, d = b+NS; tri(a, b, d, out); tri(a, d, c, out); }
-    }
-    for (const [i, dir] of [[0, Math.sign(secs[0].z - secs[1].z)], [secs.length-1, Math.sign(secs[secs.length-1].z - secs[secs.length-2].z)]]){
-      const base = pos.length/3, s = secs[i];
-      for (let k = 0; k < NS; k++) pos.push(...secPt(s, k, n));          // own vertices: a crisp edge round the cap
-      pos.push(0, (s.y0+s.y1)/2, s.z);
-      for (let k = 0; k < NS; k++) tri(base+NS, base+k, base+(k+1)%NS, () => new V3(0, 0, dir));
-    }
-    const m = new B.Mesh(name, scene), vd = new B.VertexData(), nr = [];
-    vd.positions = pos; vd.indices = idx; B.VertexData.ComputeNormals(pos, idx, nr); vd.normals = nr;
-    if (colorAt){ const col = []; for (let i = 0; i < pos.length; i += 3) col.push(...colorAt(pos[i], pos[i+1], pos[i+2]), 1); vd.colors = col; }
-    vd.applyToMesh(m);
-    return add(m, mat);
+  const L2 = 2.135, ZF = 1.295, ZR = -1.275, RW = 0.333, AR = 0.4, AB = 0.085;
+  const TOP = [[2.135,0.6],[2.125,0.74],[2.1,0.86],[2.06,0.935],[2.0,0.97],[1.8,0.995],[1.4,1.035],[1.0,1.075],[0.66,1.11],[0.5,1.2],[0.3,1.345],[0.1,1.49],[-0.05,1.565],[-0.3,1.59],[-0.9,1.595],[-1.45,1.58],[-1.7,1.565],[-1.76,1.54],[-1.84,1.46],[-1.92,1.36],[-1.99,1.27],[-2.05,1.18],[-2.09,1.08],[-2.115,0.96],[-2.13,0.78],[-2.135,0.6]];
+  const BOT = [[2.135,0.5],[2.125,0.36],[2.1,0.26],[2.05,0.215],[1.95,0.21],[1.82,0.27],[1.7,0.3],[-1.85,0.31],[-2.0,0.33],[-2.09,0.37],[-2.12,0.44],[-2.135,0.56]];
+  const BELT = [[2.2,1.11],[0.66,1.11],[-0.3,1.14],[-1.2,1.18],[-2.2,1.2]];
+  const WID = [[2.135,0.6],[2.13,0.7],[2.12,0.77],[2.1,0.825],[2.05,0.862],[1.95,0.882],[1.75,0.892],[1.4,0.895],[-1.5,0.895],[-1.8,0.886],[-1.98,0.862],[-2.07,0.825],[-2.11,0.77],[-2.128,0.68],[-2.135,0.55]];
+  const WRF = [[2.2,0.68],[0.6,0.68],[0.0,0.655],[-1.0,0.64],[-1.6,0.615],[-1.9,0.58],[-2.05,0.55],[-2.2,0.5]];
+  const archY = z => { let y = 0; for (const za of [ZF, ZR]){ const d = Math.abs(z - za); if (d < AR) y = Math.max(y, RW + Math.sqrt(AR*AR - d*d)); } return y; };
+  const chaikin = (pts, it) => { for (let k = 0; k < it; k++){ const o = [pts[0]]; for (let i = 0; i + 1 < pts.length; i++){ const [ax, ay] = pts[i], [bx_, by] = pts[i+1]; o.push([0.75*ax + 0.25*bx_, 0.75*ay + 0.25*by], [0.25*ax + 0.75*bx_, 0.25*ay + 0.75*by]); } o.push(pts[pts.length-1]); pts = o; } return pts; };
+  function half(z){
+    const yt = cr(TOP, z), W = cr(WID, z), belt = Math.min(cr(BELT, z), yt), WR = Math.min(cr(WRF, z), W - 0.05);
+    const yb = Math.min(Math.max(cr(BOT, z), archY(z)), yt - 0.01), h = Math.max(0.01, belt - yb), k = clamp((yt - belt)/0.1, 0, 1);
+    const lower = [[0, yb], [W*0.93, yb], [W*0.985, yb + 0.2*h], [W, yb + 0.6*h], [W*0.985, belt - 0.012]];
+    const hood  = [[W*0.93, yt - 0.006], [W*0.75, yt + 0.008], [W*0.5, yt + 0.016], [W*0.25, yt + 0.02], [0, yt + 0.021]];
+    const glass = [[W - 0.065, belt + 0.01], [WR + 0.035, yt - 0.085], [WR - 0.005, yt - 0.025], [WR*0.6, yt + 0.006], [0, yt + 0.013]];
+    return chaikin([...lower, ...hood.map((p, i) => [lerp(p[0], glass[i][0], k), lerp(p[1], glass[i][1], k)])], 3);
   }
-  const L2 = 2.135, ZF = 1.295, ZR = -1.275, RW = 0.336, ARCH = 0.43;
-  const arch = z => { let y = 0; for (const za of [ZF, ZR]){ const d = Math.abs(z - za); if (d < ARCH) y = Math.max(y, RW + Math.sqrt(ARCH*ARCH - d*d)); } return y; };
-  const smooth = (pts, z) => { for (let i = 0; i + 1 < pts.length; i++){ const [za, a] = pts[i], [zb, b] = pts[i+1]; if (z <= za && z >= zb){ const t = (za - z)/((za - zb) || 1); return lerp(a, b, t*t*(3 - 2*t)); } } return pts[z > pts[0][0] ? 0 : pts.length-1][1]; };
-  // the side profile, front (z = +2.135) to back
-  const TOP = [[2.135,0.78],[2.11,0.85],[2.04,0.9],[1.85,0.95],[1.4,1.0],[0.95,1.05],[-0.6,1.09],[-1.6,1.13],[-2.0,1.16],[-2.1,1.13],[-2.135,1.06]];
-  const BOT = [[2.135,0.42],[2.1,0.34],[1.9,0.31],[-1.9,0.31],[-2.1,0.35],[-2.135,0.42]];
-  const WB  = [[2.135,0.74],[2.1,0.83],[1.95,0.88],[1.6,0.895],[-1.7,0.895],[-1.98,0.875],[-2.1,0.83],[-2.135,0.76]];
-  const WT  = [[2.135,0.6],[2.1,0.7],[1.95,0.78],[1.5,0.83],[0.9,0.85],[-1.5,0.85],[-1.95,0.82],[-2.1,0.76],[-2.135,0.68]];
-  const zs = []; for (let z = L2; z > -L2; z -= 0.035) zs.push(z); zs.push(-L2);
-  for (const za of [ZF, ZR]) for (const d of [-ARCH, -ARCH+0.004, ARCH-0.004, ARCH]) zs.push(za + d);
-  zs.sort((a, b) => b - a);
-  const lower = z => ({ z, y0: Math.max(smooth(BOT, z), arch(z)), y1: smooth(TOP, z), wb: smooth(WB, z), wt: smooth(WT, z) });
-  const BN = 5;
-  sweep(zs.map(lower), 'trkBody', paint, BN);
-  const sideX = (z, y) => { const l = lower(z), v = clamp((y - (l.y0+l.y1)/2)/((l.y1-l.y0)/2), -1, 1); return Math.pow(Math.max(0, 1 - Math.pow(Math.abs(v), BN)), 1/BN)*lerp(l.wb, l.wt, (v+1)/2); };
-  // black cladding: bumpers' lower parts and the sills (slightly proud of the paint)
-  const clad = (z0, z1, top, grow) => { const s = []; for (let z = z0; z >= z1 - 1e-6; z -= 0.03){ const l = lower(z); s.push({ z, y0: l.y0 - 0.005, y1: top(z), wb: l.wb + grow, wt: l.wb + grow*0.6 }); } return sweep(s, 'trkClad', black, 12); };
-  clad(2.15, 1.73, z => 0.4, 0.016);
-  clad(ZF - ARCH - 0.01, ZR + ARCH + 0.01, z => 0.46, 0.016);
-  clad(ZR - ARCH - 0.01, -2.15, z => 0.6, 0.016);
-  // wheel-arch flares
+  // ---- colours painted on the body: tinted glass, white paint, black cladding ----
+  const GLASS = [.05,.06,.075], WHITE = [.95,.955,.95], CLAD = [.1,.105,.11];
+  const dloEdge = y => lerp(-1.32, -1.62, clamp((y - 1.18)/0.35, 0, 1));         // rear edge of the side glass, leaning back
+  function shade(x, y, z){
+    const ax = Math.abs(x), yt = cr(TOP, z), belt = Math.min(cr(BELT, z), yt), WR = Math.min(cr(WRF, z), cr(WID, z) - 0.05);
+    if (y > belt + 0.004){
+      if (z < 0.655 && z > -0.02 && y < yt + 0.03) return GLASS;                                  // windscreen and A-pillars
+      if (z <= -0.02 && z > dloEdge(y) && ax > WR - 0.02 && y < yt - 0.02) return GLASS;          // side glass, black B-pillar
+      if (z < -1.74 && y > 1.235 && y < 1.525 && ax < WR - 0.045) return GLASS;                   // tailgate glass
+    }
+    if (y < 0.47 && z < ZF - AR && z > ZR + AR) return CLAD;                                        // sills
+    for (const za of [ZF, ZR]){ const d = Math.hypot(z - za, y - RW); if (d < AR + AB && y > 0.2 && ax > 0.5) return CLAD; }   // arch flares
+    return WHITE;
+  }
+  // ---- the body skin ----
+  const zs = new Set(); for (let z = L2; z > -L2; z -= 0.02) zs.add(+z.toFixed(4));
+  for (const z of [2.133,2.13,2.127,2.124,2.12,2.116,2.112,2.108,-2.108,-2.112,-2.116,-2.12,-2.124,-2.127,-2.13,-2.133,-L2]) zs.add(z);
+  for (const za of [ZF, ZR]) for (const d of [-AR, -AR+0.003, AR-0.003, AR, -AR-AB, AR+AB]) zs.add(+(za + d).toFixed(4));
+  const Z = [...zs].sort((a, b) => b - a);
+  const pos = [], col = [], idx = [];
+  let NR = 0;
+  for (const z of Z){
+    const hp = half(z), ring = [...hp.map(([x, y]) => [x, y]), ...hp.slice(1, -1).reverse().map(([x, y]) => [-x, y])];
+    NR = ring.length;
+    for (const [x0, y] of ring){
+      let x = x0; const c = shade(x, y, z);
+      if (c === CLAD && Math.abs(x) > 0.6) x += Math.sign(x)*(y > 0.47 || Math.abs(z) > 0.8 ? 0.022 : 0.012);   // flares stand proud
+      pos.push(x, y, z); col.push(c[0], c[1], c[2], 1);
+    }
+  }
+  const P = i => new V3(pos[3*i], pos[3*i+1], pos[3*i+2]);
+  const tri = (a, b, c, out) => { const A = P(a), Bv = P(b), Cv = P(c), nrm = V3.Cross(Bv.subtract(A), Cv.subtract(A)); if (V3.Dot(nrm, out(A.add(Bv).add(Cv).scale(1/3))) < 0) idx.push(a, b, c); else idx.push(a, c, b); };
+  for (let i = 0; i + 1 < Z.length; i++){
+    const yc = (cr(TOP, Z[i]) + cr(BOT, Z[i]))/2, out = m => new V3(m.x, m.y - yc, 0);
+    for (let k = 0; k < NR; k++){ const a = i*NR + k, b = i*NR + (k+1)%NR, c = a + NR, d = b + NR; tri(a, b, d, out); tri(a, d, c, out); }
+  }
+  for (const [i, dir] of [[0, 1], [Z.length-1, -1]]){
+    const base = pos.length/3; let cy = 0;
+    for (let k = 0; k < NR; k++){ const j = i*NR + k; pos.push(pos[3*j], pos[3*j+1], pos[3*j+2]); col.push(col[4*j], col[4*j+1], col[4*j+2], 1); cy += pos[3*j+1]/NR; }
+    pos.push(0, cy, Z[i]); col.push(...WHITE, 1);
+    for (let k = 0; k < NR; k++) tri(base + NR, base + k, base + (k+1)%NR, () => new V3(0, 0, dir));
+  }
+  const body = new B.Mesh('trkBody', scene), vd = new B.VertexData(), nr = [];
+  vd.positions = pos; vd.indices = idx; vd.colors = col; B.VertexData.ComputeNormals(pos, idx, nr); vd.normals = nr;
+  { const uv = []; for (let i = 0; i < pos.length; i += 3) uv.push(pos[i+2], pos[i+1]); vd.uvs = uv; }
+  vd.applyToMesh(body); add(body, bodyM); body.computeWorldMatrix(true);
+
+  // ---- painted details: decals projected onto the skin (front fascia, rear, both sides) ----
+  const plate = (g, cx, cy, S) => {
+    const w = 0.52*S, h = 0.112*S, x = cx - w/2, y = cy - h/2;
+    g.fillStyle = '#fbfbf8'; g.fillRect(x, y, w, h); g.strokeStyle = '#111'; g.lineWidth = h*0.05; g.strokeRect(x + h*0.03, y + h*0.03, w - h*0.06, h - h*0.06);
+    g.beginPath(); g.moveTo(x + w*0.19, y + h*0.06); g.lineTo(x + w*0.19, y + h*0.94); g.stroke();
+    g.fillStyle = '#111'; g.font = `bold ${h*0.7}px Arial, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(MY_CAR.plate[0], x + w*0.098, y + h*0.55); g.fillText(MY_CAR.plate[1], x + w*0.54, y + h*0.55);
+    const fx = x + w*0.885, fw = w*0.085, fh = h*0.12;
+    [['#1eb5e8', 0], ['#ffffff', 1], ['#2fa84f', 2]].forEach(([c, i]) => { g.fillStyle = c; g.fillRect(fx, y + h*0.14 + i*fh, fw, fh); });
+    g.fillStyle = '#1e5bb5'; g.font = `bold ${h*0.28}px Arial, sans-serif`; g.fillText('UZ', fx + fw/2, y + h*0.74);
+  };
+  function decal(name, center, normal, w, h, depth, S, draw, flipU){
+    const cw = Math.round(w*S), ch = Math.round(h*S);
+    const dt = new B.DynamicTexture(name + 'T', { width: cw, height: ch }, scene, true), gt = new B.DynamicTexture(name + 'G', { width: cw, height: ch }, scene, true);
+    const g = dt.getContext(), gg = gt.getContext(); g.clearRect(0, 0, cw, ch); gg.fillStyle = '#000'; gg.fillRect(0, 0, cw, ch);
+    // drawing helpers in metres: u across (as seen when facing the decal), v up
+    const P_ = (u, v) => [(u + w/2)*S, (h/2 - (v - center.y))*S];
+    draw({ g, gg, S, P: P_, poly: (ctx, pts, fill) => { ctx.beginPath(); pts.forEach(([u, v], i) => { const [px, py] = P_(u, v); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); },
+           line: (ctx, pts, stroke, wpx) => { ctx.beginPath(); pts.forEach(([u, v], i) => { const [px, py] = P_(u, v); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }); ctx.strokeStyle = stroke; ctx.lineWidth = wpx; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke(); } });
+    dt.update(); gt.update(); dt.hasAlpha = true;
+    for (const t of [dt, gt]){ t.wrapU = t.wrapV = B.Texture.CLAMP_ADDRESSMODE; if (flipU){ t.uScale = -1; t.uOffset = 1; } }
+    const m = stdMat(name + 'M', { diffuse: new C3(1,1,1), dt, spec: new C3(.6,.6,.6), power: 120 });
+    m.useAlphaFromDiffuseTexture = true; m.emissiveTexture = gt; m.zOffset = -2;
+    const d = B.MeshBuilder.CreateDecal(name, body, { position: center, normal, size: new V3(w, h, depth), cullBackFaces: true, localMode: true });
+    d.material = m; d.isPickable = false; d.receiveShadows = true;
+    return d;
+  }
+  const FLIP = window.__trkFlip || { f: false, r: false, s: [false, false] };
+  // front: slim headlamps, black upper bar, the big trapezoid lower grille, L-shaped LED daytime lights
+  decal('trkFront', new V3(0, 0.6, 2.2), new V3(0, 0, 1), 1.9, 0.88, 0.7, 600, ({ g, gg, poly, line, P, S }) => {
+    poly(g, [[-0.5,0.905],[0.5,0.905],[0.47,0.795],[-0.47,0.795]], '#111214');
+    for (let v = 0.805; v < 0.9; v += 0.014) line(g, [[-0.47,v],[0.47,v]], '#26292d', 2);
+    for (const s of [-1, 1]){
+      const lamp = [[s*0.44,0.952],[s*0.83,0.946],[s*0.875,0.918],[s*0.85,0.862],[s*0.44,0.902]];
+      poly(g, lamp, '#2a2f35');
+      poly(g, [[s*0.47,0.944],[s*0.8,0.94],[s*0.83,0.92],[s*0.81,0.885],[s*0.47,0.912]], '#59626c');
+      for (const u of [0.56, 0.66, 0.75]){ const [px, py] = P(s*u, 0.926); g.fillStyle = '#d9e1ea'; g.beginPath(); g.ellipse(px, py, 0.026*S, 0.014*S, 0, 0, 7); g.fill(); }
+      for (const ctx of [g, gg]) line(ctx, [[s*0.46,0.905],[s*0.84,0.866]], '#ffffff', 0.007*S);
+      poly(g, [[s*0.82,0.73],[s*0.89,0.73],[s*0.9,0.47],[s*0.8,0.47]], '#121315');
+      for (const ctx of [g, gg]){ poly(ctx, [[s*0.842,0.705],[s*0.866,0.705],[s*0.866,0.495],[s*0.842,0.495]], '#ffffff'); poly(ctx, [[s*0.79,0.515],[s*0.866,0.515],[s*0.866,0.495],[s*0.79,0.495]], '#ffffff'); }
+    }
+    poly(g, [[-0.95,0.31],[0.95,0.31],[0.95,0.15],[-0.95,0.15]], '#1a1b1e');
+    poly(g, [[-0.63,0.748],[0.63,0.748],[0.705,0.69],[0.61,0.305],[-0.61,0.305],[-0.705,0.69]], '#36393e');
+    poly(g, [[-0.615,0.735],[0.615,0.735],[0.685,0.685],[0.595,0.318],[-0.595,0.318],[-0.685,0.685]], '#0d0e10');
+    for (let v = 0.34; v < 0.73; v += 0.032) line(g, [[-0.68,v],[0.68,v]], '#2b2f34', 0.009*S);
+    for (let u = -0.66; u <= 0.66; u += 0.055) line(g, [[u,0.32],[u,0.73]], 'rgba(10,10,12,0.9)', 0.006*S);
+    plate(g, P(0, 0.445)[0], P(0, 0.445)[1], S);
+    line(g, [[-0.43,0.957],[0.43,0.957]], 'rgba(60,64,70,0.7)', 2);
+  }, FLIP.f);
+  // rear: arrow-shaped tail lamps under the glass, plate on the black bumper, reflectors
+  decal('trkRear', new V3(0, 0.84, -2.2), new V3(0, 0, -1), 1.9, 0.9, 0.7, 600, ({ g, gg, poly, line, P, S }) => {
+    for (const s of [-1, 1]){
+      poly(g, [[s*0.9,1.222],[s*0.52,1.222],[s*0.465,1.17],[s*0.52,1.098],[s*0.9,1.066]], '#2a0507');
+      poly(g, [[s*0.89,1.212],[s*0.53,1.212],[s*0.48,1.17],[s*0.53,1.108],[s*0.89,1.078]], '#a50f18');
+      for (const ctx of [g, gg]){ line(ctx, [[s*0.86,1.19],[s*0.54,1.19],[s*0.5,1.168]], '#ff5a5a', 0.008*S); line(ctx, [[s*0.86,1.1],[s*0.54,1.122],[s*0.5,1.168]], '#ff5a5a', 0.008*S); }
+    }
+    poly(g, [[-0.95,0.68],[-0.5,0.685],[0.5,0.685],[0.95,0.68],[0.95,0.3],[-0.95,0.3]], '#1a1b1e');
+    line(g, [[-0.6,0.66],[0.6,0.66]], 'rgba(60,62,66,1)', 3);
+    line(g, [[-0.48,0.75],[0.48,0.75]], 'rgba(70,74,80,0.8)', 3);
+    plate(g, P(0, 0.56)[0], P(0, 0.56)[1], S);
+    for (const s of [-1, 1]) poly(g, [[s*0.66,0.415],[s*0.8,0.415],[s*0.8,0.44],[s*0.66,0.44]], '#8a0c13');
+  }, FLIP.r);
+  // sides: door gaps, the shoulder crease, the lamp wrap-rounds, the fuel door on the right
+  [-1, 1].forEach((s, si) => decal('trkSide' + si, new V3(s*1.0, 0.78, 0), new V3(s, 0, 0), 4.4, 1.0, 0.6, 320, ({ g, poly, line, S }) => {
+    const U = z => s*z;                      // u axis along the car as seen from that side (front on the right for x>0)
+    const L = (pts, c, wp) => line(g, pts.map(([z, y]) => [U(z), y]), c, wp), PL = (pts, c) => poly(g, pts.map(([z, y]) => [U(z), y]), c);
+    const gap = '#575c62';
+    L([[1.04,0.935],[0.2,0.97],[-1.0,1.01],[-2.0,1.06]], 'rgba(255,255,255,0.45)', 3);
+    L([[1.04,0.92],[0.2,0.955],[-1.0,0.995],[-2.0,1.045]], 'rgba(0,0,0,0.16)', 5);
+    L([[0.72,0.6],[-0.2,0.63],[-0.78,0.66]], 'rgba(0,0,0,0.10)', 9);
+    L([[0.775,1.11],[0.775,0.47]], gap, 2); L([[-0.26,1.14],[-0.26,0.47]], gap, 2);
+    { const pts = [[-1.17,1.17],[-1.17,0.86]]; for (let a = 78; a >= 14; a -= 4){ const r = AR + AB + 0.035, q = a*Math.PI/180; pts.push([ZR + r*Math.cos(q), RW + r*Math.sin(q)]); } L(pts, gap, 2); }
+    if (s > 0){ g.strokeStyle = gap; g.lineWidth = 2; const [cx] = [(U(-1.62) + 2.2)*S], cy = (0.5 - (0.95 - 0.78))*S; g.beginPath(); g.roundRect ? g.roundRect(cx - 0.085*S, cy - 0.065*S, 0.17*S, 0.13*S, 0.025*S) : g.rect(cx - 0.085*S, cy - 0.065*S, 0.17*S, 0.13*S); g.stroke(); }
+    PL([[1.68,0.4],[1.9,0.33],[2.2,0.31],[2.2,0.15],[1.68,0.15]], '#1a1b1e');
+    PL([[-1.69,0.56],[-1.85,0.62],[-2.2,0.68],[-2.2,0.2],[-1.69,0.2]], '#1a1b1e');
+    PL([[-1.96,1.225],[-2.16,1.225],[-2.16,1.07],[-2.0,1.09]], '#a50f18');
+    PL([[1.86,0.952],[2.16,0.952],[2.16,0.86],[1.96,0.872]], '#2a2f35');
+  }, FLIP.s[si]));
+
+  // ---- glass-house trim, roof rails, spoiler, aerial, wipers ----
+  for (const sd of [-1, 1]){
+    const path = []; for (let z = 0.02; z >= -1.66; z -= 0.08) path.push(new V3(sd*0.56, cr(TOP, z) + 0.045, z));
+    add(B.MeshBuilder.CreateTube('trkRail', { path, radius: 0.016, tessellation: 8, cap: B.Mesh.CAP_ALL }, scene), black);
+    for (const z of [0.0, -0.8, -1.62]) bx(0.04, 0.05, 0.1, sd*0.56, cr(TOP, z) + 0.02, z, black);
+  }
+  bx(1.08, 0.03, 0.16, 0, cr(TOP, -1.72) + 0.005, -1.77, paint, -0.1);                 // roof spoiler lip
+  bx(0.3, 0.016, 0.012, 0, cr(TOP, -1.72) - 0.012, -1.845, tailM, 0.5);              // high brake light
+  { const fin = prismZ([[-0.035,0],[0.035,0],[0.0,0.06]], -1.55, -1.35, 'trkFin'); fin.position.y = cr(TOP, -1.45) + 0.005; add(fin, gloss); }
+  for (const sd of [-1, 1]) bx(0.55, 0.012, 0.02, sd*0.22, 1.125, 0.66, black, 0, sd*0.06, sd*0.05);   // wipers
+  bx(0.012, 0.012, 0.32, 0.06, 1.33, -1.94, black, 0.85, 0, 0.35);                     // rear wiper
+  // ---- mirrors (body-coloured caps on black bases), door handles ----
+  for (const sd of [-1, 1]){
+    bx(0.12, 0.05, 0.13, sd*0.865, 1.135, 0.62, black);
+    const mr = add(B.MeshBuilder.CreateSphere('trkMirror', { diameterX: 0.24, diameterY: 0.135, diameterZ: 0.15, segments: 12 }, scene), paint); mr.position.set(sd*0.975, 1.17, 0.6); mr.rotation.y = sd*0.15;
+    bx(0.17, 0.09, 0.01, sd*0.965, 1.17, 0.532, gloss, 0, sd*0.15, 0);
+    for (const z of [0.25, -0.95]) bx(0.03, 0.032, 0.16, sd*0.905, 0.985, z, paint);
+  }
+  // ---- underbody and wheel wells ----
+  bx(1.55, 0.04, 3.9, 0, 0.29, 0, black);
+  for (const za of [ZF, ZR]) bx(1.3, 0.5, 0.88, 0, 0.56, za, black);
+  // ---- wheels: 215/55 R17 tyres with rounded sidewalls, five twin-spoke silver alloys ----
+  const tyreShape = [[0.2,-0.098],[0.272,-0.106],[0.31,-0.1],[0.327,-0.08],[0.333,-0.05],[0.334,0],[0.333,0.05],[0.327,0.08],[0.31,0.1],[0.272,0.106],[0.2,0.098]].map(([r, a]) => new V3(r, a, 0));
+  const dishShape = [[0.0,0.088],[0.04,0.09],[0.06,0.084],[0.19,0.062],[0.21,0.07],[0.214,0.088],[0.214,-0.08]].map(([r, a]) => new V3(r, a, 0));
   for (const za of [ZF, ZR]) for (const sd of [-1, 1]){
-    const paths = [[], [], [], []];
-    for (let a = -0.18; a <= Math.PI + 0.18 + 1e-6; a += Math.PI/24){
-      const c = Math.cos(a), s = Math.sin(a), xo = sd*0.925, xi = sd*0.83;
-      paths[0].push(new V3(xo, RW + s*ARCH, za + c*ARCH)); paths[1].push(new V3(xo, RW + s*(ARCH+0.075), za + c*(ARCH+0.075)));
-      paths[2].push(new V3(xi, RW + s*(ARCH+0.075), za + c*(ARCH+0.075))); paths[3].push(new V3(xi, RW + s*ARCH, za + c*ARCH));
+    const w = new B.TransformNode('trkWheel', scene); w.parent = root; w.position.set(sd*0.773, RW, za); w.rotation.y = sd*Math.PI/2;
+    const tl = add(B.MeshBuilder.CreateLathe('trkTyre', { shape: tyreShape, tessellation: 48, sideOrientation: B.Mesh.DOUBLESIDE }, scene), tyreM, w); tl.rotation.x = Math.PI/2;
+    const dl = add(B.MeshBuilder.CreateLathe('trkDish', { shape: dishShape, tessellation: 40, sideOrientation: B.Mesh.DOUBLESIDE }, scene), gunm, w); dl.rotation.x = Math.PI/2;
+    const disc = add(B.MeshBuilder.CreateCylinder('trkDisc', { diameter: 0.3, height: 0.02, tessellation: 24 }, scene), gunm, w); disc.rotation.x = Math.PI/2; disc.position.z = 0.0;
+    const lip = add(B.MeshBuilder.CreateTorus('trkLip', { diameter: 0.418, thickness: 0.016, tessellation: 48 }, scene), silver, w); lip.rotation.x = Math.PI/2; lip.position.z = 0.092;
+    for (let i = 0; i < 5; i++) for (const off of [-0.105, 0.105]){
+      const sp = add(prismZ([[0.055,-0.026],[0.205,-0.016],[0.208,0.016],[0.055,0.026]], 0.07, 0.095, 'trkSpoke'), silver, w);
+      sp.rotation.z = i*Math.PI*2/5 + off + Math.PI/2;
     }
-    add(B.MeshBuilder.CreateRibbon('trkFlare', { pathArray: paths, closePath: true, sideOrientation: B.Mesh.DOUBLESIDE }, scene), black);
-  }
-  for (const za of [ZF, ZR]) bx(1.32, 0.5, 0.86, 0, 0.56, za, black);                // inner wheel wells
-  // the glasshouse: tinted glass, then the white roof and the white C-pillar block behind it
-  const ROOF = [[0.97,1.05],[0.6,1.3],[0.18,1.52],[-0.15,1.58],[-0.9,1.59],[-1.6,1.57],[-1.9,1.55],[-1.99,1.53],[-2.05,1.42],[-2.1,1.27],[-2.125,1.15]];
-  const glassC = [0.062, 0.078, 0.098], paintC = [0.95, 0.953, 0.945];
-  const cpEdge = y => lerp(-1.74, -1.5, clamp((y - 1.1)/0.46, 0, 1));          // rear edge of the side glass, leaning forward
-  const houseM = stdMat('trkHouse', { diffuse: new C3(1,1,1), spec: new C3(.95,.95,.95), power: 180 });
-  { const s2 = []; for (let z = 0.97; z >= -2.125 - 1e-6; z -= 0.025){ const y0 = smooth(TOP, z) - 0.03; s2.push({ z, y0, y1: Math.max(y0 + 0.002, smooth(ROOF, z)), wb: smooth(WT, z) - 0.03, wt: 0.63 - Math.max(0, -1.9 - z)*0.4 }); }
-    sweep(s2, 'trkGlasshouse', houseM, 6, (x, y, z) => z < cpEdge(y) ? paintC : glassC); }
-  { const s3 = []; for (let z = -0.05; z >= -1.62; z -= 0.04){ const y = smooth(ROOF, z); s3.push({ z, y0: y - 0.03, y1: y + 0.014, wb: 0.645, wt: 0.6 }); } sweep(s3, 'trkRoof', paint, 6); }
-  bx(1.06, 0.33, 0.012, 0, 1.36, -2.083, glassM, 0.34);                               // tailgate glass
-  bx(0.012, 0.012, 0.3, 0.08, 1.31, -2.1, gloss, 0.34, 0, 0.3);                        // rear wiper
-  bx(1.18, 0.045, 0.2, 0, 1.585, -1.98, paint, -0.08);                                // roof spoiler
-  bx(0.32, 0.018, 0.012, 0, 1.575, -2.081, tailM);                                    // third brake light
-  for (const sd of [-1, 1]){                                                           // roof rails on legs
-    bx(0.04, 0.035, 1.55, sd*0.55, 1.63, -0.85, black);
-    for (const z of [-0.1, -1.6]) bx(0.05, 0.05, 0.12, sd*0.55, 1.6, z, black);
-  }
-  // front: slim headlamps, the upper slot, the big lower grille, L-shaped DRLs in the bumper corners
-  for (const sd of [-1, 1]){
-    bx(0.42, 0.07, 0.16, sd*0.6, 0.875, 2.05, lensM, 0, sd*0.42, sd*-0.06);
-    bx(0.34, 0.012, 0.02, sd*0.6, 0.845, 2.115, drlM, 0, sd*0.42, 0);
-    bx(0.03, 0.12, 0.03, sd*0.71, 0.55, 2.105, drlM, 0, sd*0.35, 0);
-    bx(0.09, 0.025, 0.03, sd*0.67, 0.495, 2.11, drlM, 0, sd*0.35, 0);
-    bx(0.07, 0.2, 0.05, sd*0.71, 0.55, 2.09, gloss, 0, sd*0.35, 0);
-  }
-  bx(0.66, 0.05, 0.03, 0, 0.865, 2.112, gloss);
-  { const g = prismZ([[-0.47,0.42],[0.47,0.42],[0.54,0.6],[0.45,0.77],[-0.45,0.77],[-0.54,0.6]], 2.1, 2.138, 'trkGrille'); add(g, gloss); }
-  for (let i = 0; i < 6; i++) bx(0.9 + (i === 2 || i === 3 ? 0.12 : 0), 0.012, 0.012, 0, 0.47 + i*0.055, 2.142, black);
-  bx(1.14, 0.03, 0.02, 0, 0.78, 2.13, black);
-  // back: tail lamps flush with the tailgate, wrapping round the corners; reflectors
-  for (const sd of [-1, 1]){
-    const xb = sideX(-2.13, 1.02);
-    bx(0.3, 0.1, 0.02, sd*(xb - 0.17), 1.02, -2.142, tailM, 0, 0, sd*0.1);
-    bx(0.02, 0.1, 0.24, sd*(sideX(-2.0, 1.04) + 0.006), 1.04, -2.0, tailM, 0, sd*0.12, 0);
-    bx(0.12, 0.03, 0.02, sd*0.7, 0.42, -2.165, tailM);
-  }
-  // sides: mirrors, door handles, shut lines
-  for (const sd of [-1, 1]){
-    bx(0.09, 0.05, 0.14, sd*0.9, 1.08, 0.86, black);
-    { const mr = add(B.MeshBuilder.CreateSphere('trkMirror', { diameterX: 0.24, diameterY: 0.13, diameterZ: 0.13, segments: 10 }, scene), paint); mr.position.set(sd*0.99, 1.14, 0.83); mr.rotation.y = sd*0.12; }
-    bx(0.012, 0.1, 0.09, sd*(0.99 - 0.0), 1.14, 0.765, black);
-    for (const z of [0.25, -0.86]) bx(0.022, 0.035, 0.17, sd*(sideX(z, 0.99) + 0.004), 0.99, z, silver);
-    for (const [z, y0, y1] of [[0.9, 0.48, 1.05], [-0.27, 0.48, 1.08], [-1.38, 0.62, 1.12]])
-      for (let y = y0; y < y1; y += 0.04){ const l = lower(z), v = (y - (l.y0+l.y1)/2)/((l.y1-l.y0)/2), u = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(v), 4)), 0.25), x = u*lerp(l.wb, l.wt, (v+1)/2);
-        bx(0.004, 0.042, 0.006, sd*(x + 0.002), y + 0.02, z, gloss); }
-  }
-  // wheels: tyres, dark barrel, silver 17" alloys with five twin spokes
-  for (const za of [ZF, ZR]) for (const sd of [-1, 1]){
-    const x = sd*0.775;
-    const t = add(B.MeshBuilder.CreateCylinder('trkTyre', { diameter: 2*RW, height: 0.215, tessellation: 40 }, scene), tyreM); t.rotation.z = Math.PI/2; t.position.set(x, RW, za);
-    const sw = add(B.MeshBuilder.CreateTorus('trkSide', { diameter: 2*RW - 0.07, thickness: 0.07, tessellation: 40 }, scene), tyreM); sw.rotation.z = Math.PI/2; sw.position.set(x + sd*0.075, RW, za);
-    const bar = add(B.MeshBuilder.CreateCylinder('trkBarrel', { diameter: 0.43, height: 0.02, tessellation: 32 }, scene), gloss); bar.rotation.z = Math.PI/2; bar.position.set(x + sd*0.09, RW, za);
-    const lip = add(B.MeshBuilder.CreateTorus('trkLip', { diameter: 0.425, thickness: 0.022, tessellation: 40 }, scene), silver); lip.rotation.z = Math.PI/2; lip.position.set(x + sd*0.1, RW, za);
-    const hub = add(B.MeshBuilder.CreateCylinder('trkHub', { diameter: 0.12, height: 0.03, tessellation: 20 }, scene), silver); hub.rotation.z = Math.PI/2; hub.position.set(x + sd*0.105, RW, za);
-    for (let i = 0; i < 5; i++) for (const off of [-0.11, 0.11]){
-      const a = i*Math.PI*2/5 + off, r = 0.125;
-      bx(0.018, 0.17, 0.032, x + sd*0.104, RW + Math.cos(a)*r, za + Math.sin(a)*r, silver, -a, 0, 0);
-    }
-  }
-  // number plates (Uzbek format: region | number, flag and UZ)
-  const plateTex = new B.DynamicTexture('trkPlate', { width: 520, height: 112 }, scene, true);
-  { const g = plateTex.getContext();
-    g.fillStyle = '#fbfbf8'; g.fillRect(0, 0, 520, 112); g.strokeStyle = '#111'; g.lineWidth = 6; g.strokeRect(3, 3, 514, 106);
-    g.fillRect(0,0,0,0); g.beginPath(); g.moveTo(98, 6); g.lineTo(98, 106); g.lineWidth = 4; g.stroke();
-    g.fillStyle = '#111'; g.font = 'bold 74px Arial, sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'center';
-    g.fillText(MY_CAR.plate[0], 51, 60); g.fillText(MY_CAR.plate[1], 282, 60);
-    const fx = 462; for (const [c, y] of [['#1eb5e8', 14], ['#ffffff', 27], ['#2fa84f', 40]]){ g.fillStyle = c; g.fillRect(fx, y, 44, 13); }
-    g.fillStyle = '#d0021b'; g.fillRect(fx, 26, 44, 2); g.fillRect(fx, 39, 44, 2); g.strokeStyle = '#999'; g.lineWidth = 1; g.strokeRect(fx, 14, 44, 39);
-    g.fillStyle = '#1e5bb5'; g.font = 'bold 30px Arial, sans-serif'; g.fillText('UZ', fx + 22, 82);
-    plateTex.update(); }
-  const plateM = stdMat('trkPlateM', { diffuse: new C3(1,1,1), dt: plateTex, spec: new C3(.3,.3,.3) });
-  for (const [z, y, ry] of [[2.16, 0.46, Math.PI], [-2.162, 0.66, 0]]){
-    const pl = add(B.MeshBuilder.CreatePlane('trkPlate', { width: 0.52, height: 0.112 }, scene), plateM); pl.position.set(0, y, z); pl.rotation.y = ry;
+    const cap = add(B.MeshBuilder.CreateCylinder('trkCap', { diameter: 0.115, height: 0.03, tessellation: 24 }, scene), silver, w); cap.rotation.x = Math.PI/2; cap.position.z = 0.09;
+    const capc = add(B.MeshBuilder.CreateCylinder('trkCapC', { diameter: 0.075, height: 0.006, tessellation: 20 }, scene), gunm, w); capc.rotation.x = Math.PI/2; capc.position.z = 0.106;
+    for (let i = 0; i < 5; i++){ const a = i*Math.PI*2/5, n = add(B.MeshBuilder.CreateCylinder('trkNut', { diameter: 0.018, height: 0.02, tessellation: 6 }, scene), silver, w); n.rotation.x = Math.PI/2; n.position.set(Math.cos(a)*0.045, Math.sin(a)*0.045, 0.1); }
   }
   return root;
 }
