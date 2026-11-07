@@ -843,8 +843,9 @@ const CITY_S = Z0 + D + RD, COAST_Z = CITY_S + 120, CITY_N = Z0 - RD;
 const AIR = { z: CITY_N - 470, x0: -760, x1: 760 };
 // the car dealership (Mahalla Avtosalon): just outside the east edge of the city, on road row 13, facing the city
 const DEALER = { x0: X0 + W + RD, x1: X0 + W + RD + 64, z0: -34, z1: 34 };
-// the hotel (a tower on a lattice-clad podium, after Tashkent City's Hilton): south of the dealership
-const HOTEL = { x0: X0 + W + RD, x1: X0 + W + RD + 100, z0: 46, z1: 166 };
+// the hotel (a tower on a lattice-clad podium, after Tashkent City's Hilton): between the city and the airport,
+// beside the airport road, its plaza facing the road
+const HOTEL = { x0: 13, x1: 113, z0: CITY_N - 134, z1: CITY_N - 22 };
 // ---------- the river ----------
 // Springs from a lake in the forest behind the mountains, runs through a gorge, across the plain, then through the city
 // along two road lines (so no plot moves): west→east on road row 9 up to the central park, then south past the park,
@@ -2319,7 +2320,7 @@ const HTL = (() => {
   const wall = (name, lo, hi, mat) => { const m = B.MeshBuilder.CreateRibbon(name, { pathArray: [lo, hi], closePath: true, sideOrientation: B.Mesh.DOUBLESIDE }, scene); m.material = mat; m.receiveShadows = true; m.isPickable = false; parts.push(m); return m; };
   const cap = (name, ring, mat) => {
     const c = ring.reduce((a, p) => a.addInPlace(p), new V3(0,0,0)).scale(1/ring.length), pos = [c.x, c.y, c.z], idx = [];
-    ring.forEach((p, i) => { pos.push(p.x, p.y, p.z); idx.push(0, 1 + (i + 1) % ring.length, 1 + i); });
+    ring.forEach((p, i) => { pos.push(p.x, p.y, p.z); const j = 1 + (i + 1) % ring.length; idx.push(0, 1 + i, j); });   // wound to face up
     const m = new B.Mesh(name, scene), vd = new B.VertexData(); vd.positions = pos; vd.indices = idx; vd.normals = []; B.VertexData.ComputeNormals(pos, idx, vd.normals); vd.applyToMesh(m);
     m.material = mat; m.receiveShadows = true; m.isPickable = false; return m;
   };
@@ -2398,9 +2399,9 @@ const HTL = (() => {
     const f = B.MeshBuilder.CreateTube('htlFin', { path, radius: 0.32, tessellation: 6, cap: B.Mesh.CAP_ALL }, scene); f.material = finM; f.isPickable = false; parts.push(f);
   }
   // plaza towards the city: paving, a long reflecting pool, a white tensile shade and trees
-  flatBox('htlPlaza', x0, x1, z0, z1, 0, 0.1, stdMat('htlPave', { dt: noiseTex('htlp', '#c9c4ba', 0.07, 128, 2) }));
-  const pool = box(12, 0.25, 44, x0 + 9, 0.12, cz - 26); pool.material = mats.water;
-  const rim = box(13, 0.18, 45, x0 + 9, 0.09, cz - 26); rim.material = whiteM;
+  flatBox('htlPlaza', x0, x1, z0, z1, 0, 0.2, stdMat('htlPave', { dt: noiseTex('htlp', '#c9c4ba', 0.07, 128, 2) }));
+  const pool = box(12, 0.1, 44, x0 + 9, 0.24, cz - 26); pool.material = mats.water;
+  const rim = box(13, 0.1, 45, x0 + 9, 0.21, cz - 26); rim.material = whiteM;
   const sail = B.MeshBuilder.CreateRibbon('htlSail', { pathArray: [[new V3(x0 + 6, 5.5, cz + 22), new V3(x0 + 11, 3.2, cz + 26), new V3(x0 + 16, 5.5, cz + 30)], [new V3(x0 + 6, 3.2, cz + 30), new V3(x0 + 11, 4.6, cz + 26), new V3(x0 + 16, 3.2, cz + 22)]], sideOrientation: B.Mesh.DOUBLESIDE }, scene);
   sail.material = whiteM;
   for (const [x, z] of [[x0 + 6, cz + 22], [x0 + 16, cz + 30], [x0 + 6, cz + 30], [x0 + 16, cz + 22]]){ const m = box(0.18, 5.6, 0.18, x, 2.8, z); m.material = darkM; }
@@ -3631,8 +3632,8 @@ const PLACES = [
     view:{ x:-450, z:COAST_Z+20, r:520, b:1.1, a:Math.PI/2.6 } },
   { key:'air', name:'Aeroport', icon:document.querySelector('#goAir svg').outerHTML, pos:new V3(0, 30, AIR.z+250),
     view:{ x:0, z:AIR.z+120, r:620, b:1.0, a:-Math.PI/2.6 } },
-  { key:'hotel', name:'Mehmonxona', icon:'<svg viewBox="0 0 24 24"><path d="M8 22V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v18"/><path d="M3 22h18M5 22v-6h3M19 22v-6h-3M12 3c-1 5-1 11 0 19"/></svg>', pos:new V3(X0 + W + RD + 58, 112, (HOTEL.z0 + HOTEL.z1)/2),
-    view:{ x:X0 + W + RD + 50, z:(HOTEL.z0 + HOTEL.z1)/2, r:230, b:1.2, a:Math.PI - 0.5 } },
+  { key:'hotel', name:'Mehmonxona', icon:'<svg viewBox="0 0 24 24"><path d="M8 22V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v18"/><path d="M3 22h18M5 22v-6h3M19 22v-6h-3M12 3c-1 5-1 11 0 19"/></svg>', pos:new V3(HOTEL.x0 + 58, 112, (HOTEL.z0 + HOTEL.z1)/2),
+    view:{ x:HOTEL.x0 + 50, z:(HOTEL.z0 + HOTEL.z1)/2, r:230, b:1.2, a:Math.PI - 0.5 } },
   { key:'avto', name:'Avtosalon', icon:'<svg viewBox="0 0 24 24"><path d="M5 16h14l-1.5-5a2 2 0 0 0-1.9-1.4H8.4A2 2 0 0 0 6.5 11z"/><circle cx="8" cy="17" r="1.6"/><circle cx="16" cy="17" r="1.6"/></svg>', pos:new V3(X0 + W + RD + 40, 14, 0),
     view:{ x:X0 + W + RD + 30, z:0, r:95, b:1.15, a:Math.PI - 0.45 } },
   { key:'forest', name:'Bog‘ va o‘rmon', icon:document.querySelector('#goForest svg').outerHTML, pos:new V3((GARDEN.x0+GARDEN.x1)/2, 30, (GARDEN.z0+GARDEN.z1)/2),
