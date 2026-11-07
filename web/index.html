@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Susambil — 3D shahar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@600;800&family=Philosopher:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg: rgba(18,22,30,.78);
@@ -154,7 +154,8 @@
       linear-gradient(180deg, rgba(10,12,30,.0) 0%, rgba(10,12,30,.0) 35%, rgba(12,14,34,.55) 80%, rgba(12,14,34,.85) 100%)}
   .h-top{position:absolute;left:18px;right:18px;top:16px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:auto}
   .h-brand{display:flex;align-items:center;gap:10px;padding:10px 16px 10px 12px;border-radius:16px;background:rgba(16,18,40,.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-           font:800 14px/1 Unbounded,Manrope,sans-serif;letter-spacing:.12em;border:1px solid rgba(255,255,255,.08)}
+           font:700 19px/1 Philosopher,Georgia,serif;letter-spacing:.18em;color:#f6efe2;border:1px solid rgba(255,255,255,.08)}
+  .h-brand svg{flex:0 0 26px}
   .h-brand i{width:22px;height:22px;border-radius:7px;background:conic-gradient(from 45deg,#2fb5a3,#3a6ea5,#f6c453,#2fb5a3);animation:spin 9s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   .h-pop{padding:10px 18px;border-radius:16px;background:rgba(16,18,40,.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);text-align:center;border:1px solid rgba(255,255,255,.08)}
@@ -166,9 +167,11 @@
   .h-langs button.on{background:#f6c453;color:#2a1d00}
   .h-badge{display:inline-block;padding:8px 16px;border-radius:12px;background:#f6c453;color:#2a1d00;font:800 14px/1.1 Manrope,sans-serif;box-shadow:0 0 0 0 rgba(246,196,83,.6);animation:pulse 2.8s ease-out infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(246,196,83,.55)}70%{box-shadow:0 0 0 18px rgba(246,196,83,0)}100%{box-shadow:0 0 0 0 rgba(246,196,83,0)}}
-  #hero h1{margin:16px 0 12px;font:800 clamp(34px,6.4vw,64px)/1.04 Unbounded,Manrope,sans-serif;letter-spacing:-.01em;
-           background:linear-gradient(180deg,#fffaf0 30%,#ffd98a);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 6px 40px rgba(0,0,0,.25)}
-  #hero p.h-sub{margin:0 auto 22px;max-width:560px;font-size:clamp(15px,2.1vw,18px);line-height:1.5;color:#e8e4f6;font-weight:600}
+  #hero h1{margin:4px 0 10px;font:700 clamp(56px,9vw,108px)/.95 Philosopher,Georgia,serif;letter-spacing:.01em;color:#f6e2b0;text-shadow:0 6px 40px rgba(0,0,0,.35)}
+  .h-orn{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:14px;white-space:nowrap;color:#f0c566;font:700 12.5px/1 Manrope,sans-serif;letter-spacing:.24em}
+  .h-orn::before,.h-orn::after{content:'';width:56px;height:1px;background:#f0c566}
+  .h-orn svg{flex:0 0 14px}
+  #hero p.h-sub{margin:0 auto 22px;max-width:600px;font-size:clamp(15px,2.1vw,18px);line-height:1.6;color:#efe6d6;font-weight:500}
   .h-in{display:flex;align-items:center;height:62px;border-radius:18px;background:rgba(14,16,36,.82);border:2px solid #f6c453;box-shadow:0 0 34px rgba(246,196,83,.25);padding:0 18px;margin-bottom:12px}
   .h-in span{color:#2AABEE;font:800 22px/1 Manrope,sans-serif;margin-right:6px}
   .h-in input{flex:1;min-width:0;height:100%;background:none;border:0;outline:none;color:#fff;font:700 19px Manrope,sans-serif;text-align:center}
@@ -196,8 +199,8 @@
   .h-mid > *:nth-child(2){animation-delay:.06s} .h-mid > *:nth-child(3){animation-delay:.12s} .h-mid > *:nth-child(4){animation-delay:.18s}
   .h-mid > *:nth-child(5){animation-delay:.24s} .h-mid > *:nth-child(6){animation-delay:.3s} .h-mid > *:nth-child(7){animation-delay:.36s}
   @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
-  @media (prefers-reduced-motion: reduce){ .h-mid > *, .h-badge, .h-cta, .h-brand i{animation:none} }
-  @media (max-width:560px){ .h-mid{top:auto;bottom:18px;transform:translateX(-50%)} .h-pop b{font-size:20px} .h-brand{font-size:12px} .h-in,.h-btn{height:56px} .h-chips button:nth-child(n+5){display:none} }
+  @media (prefers-reduced-motion: reduce){ .h-mid > *, .h-badge, .h-cta{animation:none} }
+  @media (max-width:560px){ .h-orn::before,.h-orn::after{width:28px} .h-orn{gap:8px;letter-spacing:.18em} .h-mid{top:auto;bottom:18px;transform:translateX(-50%)} .h-pop b{font-size:20px} .h-brand{font-size:12px} .h-in,.h-btn{height:56px} .h-chips button:nth-child(n+5){display:none} }
   @media (max-height:700px) and (min-width:561px){ .h-mid{transform:translate(-50%,-50%) scale(.88)} }
 
   /* owner labels over buildings */
@@ -387,12 +390,13 @@
 
 <div id="hero" aria-label="Xush kelibsiz">
   <div class="h-top">
-    <div class="h-brand"><i></i>SUSAMBIL</div>
+    <div class="h-brand"><svg width="26" height="26" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 2l3.2 7.8L26 13l-7.8 3.2L15 24l-3.2-7.8L4 13l7.8-3.2z" fill="none" stroke="#f0c566" stroke-width="2"/><circle cx="15" cy="13" r="2.6" fill="#f0c566"/></svg>SUSAMBIL</div>
     <div class="h-pop"><small data-i18n="pop">AHOLI</small><b id="popN">0</b></div>
   </div>
   <div class="h-mid">
     <div class="h-langs" id="hLangs"><button data-l="uz">O‘zbekcha</button><button data-l="ru">Русский</button><button data-l="en">English</button></div>
     <div><span class="h-badge" data-i18n="badge">1 Telegram = 1 hovli</span></div>
+    <div class="h-orn"><svg width="14" height="14" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1l2 6 6 2-6 2-2 6-2-6-6-2 6-2z" fill="#f0c566"/></svg><span data-i18n="tag">ERTAKDAGI SHAHAR</span><svg width="14" height="14" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1l2 6 6 2-6 2-2 6-2-6-6-2 6-2z" fill="#f0c566"/></svg></div>
     <h1 data-i18n="title">Susambil</h1>
     <p class="h-sub" data-i18n="sub"></p>
     <form id="findForm" autocomplete="off">
@@ -4579,15 +4583,15 @@ function showNickname(){
 
 // ---------- welcome screen ----------
 const I18N = {
-  uz: { pop:'AHOLI', badge:'1 Telegram = 1 hovli', title:'Susambil',
+  uz: { pop:'AHOLI', badge:'1 Telegram = 1 hovli', tag:'ERTAKDAGI SHAHAR', title:'Susambil',
         sub:'Ertaklardagi farovonlik va osoyishtalik maskani — endi o‘zimiz bunyod etamiz. Uy quring, baland imoratlar qad rostlating va Susambilni orzularingizdagi shaharga aylantiring.',
         ph:'Telegram nikingiz', find:'Hovlimni top', tour:'Dunyo osmono‘parlari bo‘ylab sayohat ›', get:'Hovli olish', browse:'Shunchaki aylanib chiqish', popLine:'Aholi',
         notFound:'Bu nik bilan hovli topilmadi. “Hovli olish” ni bosing — Telegram orqali kirib, o‘zingizga yer oling.', tourEnd:'Sayohat tugadi', choyxona:'Milliy choyxona' },
-  ru: { pop:'ЖИТЕЛИ', badge:'1 Telegram = 1 двор', title:'Сусамбиль',
+  ru: { pop:'ЖИТЕЛИ', badge:'1 Telegram = 1 двор', tag:'СКАЗОЧНЫЙ ГОРОД', title:'Сусамбиль',
         sub:'Сказочный край достатка и покоя — теперь мы строим его сами. Возводите дома и высотки и превратите Сусамбиль в город своей мечты.',
         ph:'Ваш ник в Telegram', find:'Найти мой двор', tour:'Тур по небоскрёбам мира ›', get:'Получить двор', browse:'Просто посмотреть', popLine:'Жители',
         notFound:'Двор с таким ником не найден. Нажмите «Получить двор» — войдите через Telegram и выберите участок.', tourEnd:'Тур завершён', choyxona:'Национальная чайхана' },
-  en: { pop:'RESIDENTS', badge:'1 Telegram = 1 home', title:'Susambil',
+  en: { pop:'RESIDENTS', badge:'1 Telegram = 1 home', tag:'A FAIRY-TALE CITY', title:'Susambil',
         sub:'The fairy-tale land of plenty and peace — now we build it ourselves. Raise homes and towers, and turn Susambil into the city of your dreams.',
         ph:'Your Telegram username', find:'Find my home', tour:'Tour the world’s skyscrapers ›', get:'Get a home', browse:'Just look around', popLine:'Residents',
         notFound:'No home found for that name. Tap “Get a home” to sign in with Telegram and claim a plot.', tourEnd:'Tour finished', choyxona:'National teahouse' },
