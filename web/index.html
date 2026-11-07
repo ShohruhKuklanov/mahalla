@@ -159,6 +159,10 @@
   .h-brand i{width:22px;height:22px;border-radius:7px;background:conic-gradient(from 45deg,#2fb5a3,#3a6ea5,#f6c453,#2fb5a3);animation:spin 9s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   .h-pop{padding:10px 18px;border-radius:16px;background:rgba(16,18,40,.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);text-align:center;border:1px solid rgba(255,255,255,.08)}
+  .h-right{display:flex;gap:10px;align-items:flex-start}
+  .h-snd{width:52px;height:52px;border-radius:16px;background:rgba(16,18,40,.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);color:#f0c566;display:grid;place-items:center}
+  .h-snd .x{display:none} .h-snd.off .x{display:inline} .h-snd.off .w1,.h-snd.off .w2{display:none} .h-snd.off{color:#cfcbe6}
+  .h-snd.playing .w2{animation:sndw 1.2s ease-in-out infinite} @keyframes sndw{50%{opacity:.25}}
   .h-pop small{display:block;color:#f6c453;font:800 11px/1 Unbounded,sans-serif;letter-spacing:.14em;margin-bottom:4px}
   .h-pop b{font:800 26px/1 Unbounded,sans-serif;font-variant-numeric:tabular-nums}
   .h-mid{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%);width:min(640px,calc(100% - 32px));text-align:center;pointer-events:auto}
@@ -200,7 +204,7 @@
   .h-mid > *:nth-child(5){animation-delay:.24s} .h-mid > *:nth-child(6){animation-delay:.3s} .h-mid > *:nth-child(7){animation-delay:.36s}
   @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
   @media (prefers-reduced-motion: reduce){ .h-mid > *, .h-badge, .h-cta{animation:none} }
-  @media (max-width:560px){ .h-orn::before,.h-orn::after{width:28px} .h-orn{gap:8px;letter-spacing:.18em} .h-mid{top:auto;bottom:18px;transform:translateX(-50%)} .h-pop b{font-size:20px} .h-brand{font-size:12px} .h-in,.h-btn{height:56px} .h-chips button:nth-child(n+5){display:none} }
+  @media (max-width:560px){ .h-snd{width:44px;height:44px} .h-orn::before,.h-orn::after{width:28px} .h-orn{gap:8px;letter-spacing:.18em} .h-mid{top:auto;bottom:18px;transform:translateX(-50%)} .h-pop b{font-size:20px} .h-brand{font-size:12px} .h-in,.h-btn{height:56px} .h-chips button:nth-child(n+5){display:none} }
   @media (max-height:700px) and (min-width:561px){ .h-mid{transform:translate(-50%,-50%) scale(.88)} }
 
   /* owner labels over buildings */
@@ -391,7 +395,7 @@
 <div id="hero" aria-label="Xush kelibsiz">
   <div class="h-top">
     <div class="h-brand"><svg width="26" height="26" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 2l3.2 7.8L26 13l-7.8 3.2L15 24l-3.2-7.8L4 13l7.8-3.2z" fill="none" stroke="#f0c566" stroke-width="2"/><circle cx="15" cy="13" r="2.6" fill="#f0c566"/></svg>SUSAMBIL</div>
-    <div class="h-pop"><small data-i18n="pop">AHOLI</small><b id="popN">0</b></div>
+    <div class="h-right"><button class="h-snd" id="hSnd" aria-label="Ovoz" title="Ovoz"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="w1" d="M16 9a4 4 0 0 1 0 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="w2" d="M18.5 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="x" d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button><div class="h-pop"><small data-i18n="pop">AHOLI</small><b id="popN">0</b></div></div>
   </div>
   <div class="h-mid">
     <div class="h-langs" id="hLangs"><button data-l="uz">O‘zbekcha</button><button data-l="ru">Русский</button><button data-l="en">English</button></div>
@@ -4679,11 +4683,46 @@ function setPopulation(n){ countUp($('#popN'), n); countUp($('#popN2'), n); }
 function visitPlot(p){ const h = (p.vkey && T[p.vkey] ? T[p.vkey].height : 10); flyTo(p.x, p.z, Math.max(70, h*2.1), h > 40 ? 1.12 : 1.05); showPlot(p); }
 function showHero(){
   document.body.classList.add('hero'); $('#hero').classList.add('show');
+  introAudio().then(() => playIntro()).catch(() => {});      // load early; plays now if the browser allows it
   S.heroSpeed = S.speed; S.speed = 0; S.hours = 17.6; S.cine = true; S.cinePause = 0;
   closeSheet(); select(null); tut(0); applyLang();
 }
+// ---------- intro sound: the Susambil voice-over on a calm dutar/nay/doira tune (web/audio/intro.js) ----------
+// Plays once on the welcome screen. Browsers allow sound only after a tap, so it starts on the first tap or key
+// on the welcome screen (or right away when allowed); the speaker button mutes it, and the choice is remembered.
+const INTRO = { el: null, muted: false, started: false };
+try { INTRO.muted = localStorage.getItem('susambil_mute') === '1'; } catch(_){}
+function introAudio(){
+  if (INTRO.el) return Promise.resolve(INTRO.el);
+  return new Promise((ok, no) => {
+    const go = () => { const a = new Audio(window.SUSAMBIL_INTRO); a.volume = 0.9; a.onplay = () => $('#hSnd').classList.add('playing'); a.onpause = a.onended = () => $('#hSnd').classList.remove('playing'); ok(INTRO.el = a); };
+    if (window.SUSAMBIL_INTRO) return go();
+    const sc = document.createElement('script'); sc.src = 'audio/intro.js'; sc.onload = go; sc.onerror = no; document.head.appendChild(sc);
+  });
+}
+function playIntro(){
+  if (INTRO.muted || INTRO.started || !$('#hero').classList.contains('show')) return;
+  introAudio().then(a => a.play().then(() => { INTRO.started = true; }).catch(() => {})).catch(() => {});
+}
+function fadeIntro(){
+  const a = INTRO.el; if (!a || a.paused) return;
+  const v0 = a.volume, t0 = performance.now();
+  const step = () => { const k = (performance.now() - t0)/1400; if (k >= 1){ a.pause(); a.volume = v0; return; } a.volume = v0*(1 - k); requestAnimationFrame(step); };
+  step();
+}
+$('#hSnd').classList.toggle('off', INTRO.muted);
+$('#hSnd').onclick = e => {
+  e.stopPropagation();
+  if (!INTRO.muted && !INTRO.started){ playIntro(); return; }        // sound was blocked until now: this tap starts it
+  INTRO.muted = !INTRO.muted; try { localStorage.setItem('susambil_mute', INTRO.muted ? '1' : '0'); } catch(_){}
+  $('#hSnd').classList.toggle('off', INTRO.muted);
+  if (INTRO.muted){ if (INTRO.el) INTRO.el.pause(); }
+  else introAudio().then(a => { if (a.ended || a.currentTime > a.duration - 0.5) a.currentTime = 0; a.play().then(() => { INTRO.started = true; }).catch(() => {}); });
+};
+for (const ev of ['pointerdown', 'keydown']) $('#hero').addEventListener(ev, e => { if (!e.target.closest('#hSnd')) playIntro(); }, { capture: true });
 function leaveHero(){
   if (!$('#hero').classList.contains('show')) return;
+  fadeIntro();
   $('#hero').classList.remove('show'); document.body.classList.remove('hero');
   S.cine = false; S.speed = S.heroSpeed ?? 1; S.hours = 15.8; // play starts in bright afternoon light
 }
