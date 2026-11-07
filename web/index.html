@@ -3223,7 +3223,7 @@ const S = {
   selected: null, limit: 3, autoOrbit: false, orbitAnim: 0, sheet: null, build: null, tut: 1
 };
 const API = { on:false, me:null, daySeconds:86400 };
-const SPEEDS = {0:0, 1:24/360, 10:24/36}; // game-hours per real second (1x: 1 day = 6 min)
+const SPEEDS = {0:0, 1:24/1440, 10:24/144}; // game-hours per real second (1x: 1 day = 24 min)
 const zoneOf = p => ZONES[p.zone];
 // per-mahalla occupancy and "my plots", cached; any plot repaint (state change) invalidates them
 let occCache = null, mineCache = null;
@@ -3600,7 +3600,7 @@ function openSettings(){
     <label class="chk" style="margin:0 0 10px"><input type="checkbox" id="lblToggle" ${LBL.on?'checked':''}> Bino ustida egalarning nomlari</label>
     ${API.on && API.me && API.me.telegram ? `<label class="chk" style="margin:0 0 14px"><input type="checkbox" id="tgToggle" ${API.me.showTelegram?'checked':''}> Mening Telegram nikim (@${esc(API.me.telegram)}) boshqalarga ko‘rinsin</label>` : ''}
     <div class="lbl2" style="margin-bottom:6px">Vaqt tezligi</div>
-    <div class="seg" id="sseg">${[[0,'To‘xtatish'],[1,'1× (kun = 6 daq)'],[10,'10×']].map(([v,l])=>`<button data-s="${v}" class="${sp===v?'on':''}">${l}</button>`).join('')}</div>
+    <div class="seg" id="sseg">${[[0,'To‘xtatish'],[1,'1× (kun = 24 daq)'],[10,'10×']].map(([v,l])=>`<button data-s="${v}" class="${sp===v?'on':''}">${l}</button>`).join('')}</div>
     ${API.on ? '<div class="row" style="margin-bottom:12px"><button class="btn" id="logoutBtn">Chiqish</button></div>' : ''}
     <div class="note">Past — soyasiz, tez. O‘rta — soyalar va silliqlash. Yuqori — chuqur soyalar, yorug‘lik porlashi va kino ranglari.</div>`, 'settings');
   body.querySelectorAll('[data-q]').forEach(el=>el.onclick=()=>{ S.quality=el.dataset.q; applyQuality(S.quality==='auto'?autoStart():S.quality); openSettings(); });
