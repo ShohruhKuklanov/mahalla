@@ -772,6 +772,7 @@
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/babylonjs@9.34.0/babylon.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs-loaders@9.34.0/babylonjs.loaders.min.js"></script>
 <script>
 (function(){
 'use strict';
@@ -2295,7 +2296,12 @@ const CAR_MODELS = {
              specs: [['Dvigatel', '1.2 turbo'], ['Uzunligi', '4,27 m'], ['Klirens', '18 sm'], ['O‘rindiq', '5 ta']], make: dto => makeCar(dto) },
   coupe: { name: 'Mahalla GT', price: 15000, kind: 'Sport kupe', about: 'Past va keng ikki eshikli sport kupe: uzun kapot, vertikal panjara, ingichka LED faralar, qora 10 parrakli disklar.',
            specs: [['Dvigatel', '4.0 V8'], ['Uzunligi', '4,73 m'], ['Klirens', '12 sm'], ['O‘rindiq', '2 ta']], snapR: 6.7, make: dto => makeCar(dto, coupeTemplate) },
+  gtpro: { name: 'Mahalla GT Pro', price: 25000, kind: 'Sport kupe', about: 'Blenderda yaratilgan batafsil model: bo‘rtiq kapot, orqaga tortilgan proyektorli faralar, vertikal panjara, orqa qanot va to‘rtta chiqindi trubasi.',
+           specs: [['Dvigatel', '4.0 V8 biturbo'], ['Uzunligi', '4,73 m'], ['Klirens', '12 sm'], ['O‘rindiq', '2 ta']], snapR: 6.7,
+           ready: () => !!GTP_TPL, load: () => gtProLoad(), make: dto => makeCar(dto, gtProTemplate) },
 };
+/** a model that streams in (a .glb): false until its template is loaded (and starts the load) */
+const modelReady = m => { const M = CAR_MODELS[m] || CAR_MODELS.tracker; if (!M.ready || M.ready()) return true; M.load(); return false; };
 const modelPrice = m => { const sv = API.on && API.city && API.city.economy && API.city.economy.car && API.city.economy.car.models; return (sv && sv[m] && sv[m].price) || CAR_MODELS[m].price; };
 const CAR_COLORS_UI = [['#f2f3f1','Oq'],['#16181c','Qora'],['#b9bec4','Kumush'],['#5b6068','Grafit'],['#a8202a','Qizil'],['#1f4f9a','Ko‘k'],['#5fa3d6','Havorang'],['#c9652b','To‘q sariq'],['#2f6b45','Yashil'],['#7a5a3a','Jigarrang']];
 const STD_PLATE = /^[A-Z][0-9]{3}[A-Z]{2}$/;
@@ -2700,6 +2706,68 @@ function coupeTemplate(){
   root.setEnabled(false);
   return GT_TPL = root;
 }
+// ---------- Mahalla GT Pro: the detailed Blender coupe, streamed in as a .glb (cars/gt-pro.glb) ----------
+// Loaded once; its PBR materials become the city's standard materials, small parts are merged by material,
+// each wheel gets a 'trkWheel' node at its hub (so it turns and steers like the other cars), plates are added.
+let GTP_TPL = null, GTP_LOAD = null;
+const gtProTemplate = () => { if (!GTP_TPL) throw new Error('GT Pro not loaded'); return GTP_TPL; };
+function gtProLoad(){
+  if (GTP_LOAD) return GTP_LOAD;
+  GTP_LOAD = B.SceneLoader.ImportMeshAsync('', 'cars/', 'gt-pro.glb', scene).then(res => {
+    const root = new B.TransformNode('gtpTpl', scene); root.metadata = { wheels: [] };
+    const bodyM = stdMat('gtpBodyM', { diffuse: new C3(1,1,1), spec: new C3(.85,.85,.85), power: 160 });
+    const MATS = new Map(), matFor = pm => {
+      const n = pm ? pm.name : '';
+      if (/^Paint/.test(n)) return bodyM;
+      if (MATS.has(n)) return MATS.get(n);
+      const a = pm && pm.albedoColor ? pm.albedoColor.toGammaSpace() : new C3(.5,.5,.5), metal = pm && pm.metallic != null ? pm.metallic : 0, rough = pm && pm.roughness != null ? pm.roughness : 0.5;
+      const m = stdMat('gtp' + n, { diffuse: a, spec: new C3(1,1,1).scale(0.15 + 0.75*(1 - rough)), power: 20 + 220*(1 - rough) });
+      if (metal > 0.5) m.diffuseColor = a.scale(0.85);
+      if (/Glass_Tinted|Mirror_Glass/.test(n)){ m.diffuseColor = hex('#1b2128'); m.alpha = /Mirror/.test(n) ? 1 : 0.62; m.specularPower = 260; m.specularColor = new C3(1,1,1); m.backFaceCulling = false; }
+      if (/Lens_Clear/.test(n)){ m.diffuseColor = hex('#d8e2ea'); m.alpha = 0.22; m.specularColor = new C3(1,1,1); m.specularPower = 300; }
+      if (/LED/.test(n)) m.emissiveColor = hex('#e9f3ff');
+      if (/Taillight/.test(n)) m.emissiveColor = hex('#6a0508');
+      if (/Opening_Cavity|Interior/.test(n)) m.backFaceCulling = false;
+      MATS.set(n, m); return m;
+    };
+    const wheelOf = m => { for (let p = m; p; p = p.parent) if (/^Wheel_(FL|FR|RL|RR)$/.test(p.name)) return p; return null; };
+    const parts = [], wheelParts = new Map();
+    for (const m of res.meshes){
+      if (!m.getTotalVertices || !m.getTotalVertices()) continue;
+      const wn = wheelOf(m), hub = wn ? wn.getAbsolutePosition().clone() : null;
+      m.computeWorldMatrix(true); m.setParent(null); m.bakeCurrentTransformIntoVertices();
+      m.material = matFor(m.material); m.isPickable = false; m.receiveShadows = true;
+      if (wn){ if (!wheelParts.has(wn.name)) wheelParts.set(wn.name, { hub, list: [] }); wheelParts.get(wn.name).list.push(m); }
+      else parts.push(m);
+    }
+    const merge = list => {
+      const by = new Map(), out = []; for (const m of list){ if (!by.has(m.material)) by.set(m.material, []); by.get(m.material).push(m); }
+      for (const [mat, ms] of by){ const mm = ms.length > 1 ? B.Mesh.MergeMeshes(ms, true, true) : ms[0]; mm.material = mat; mm.isPickable = false; mm.receiveShadows = true; out.push(mm); }
+      return out;
+    };
+    for (const m of merge(parts)){ m.name = m.material === bodyM ? 'gtpBody' : 'gtpPart'; m.parent = root; }
+    for (const [nm, { hub, list }] of wheelParts){
+      const sd = Math.sign(hub.x) || 1, w = new B.TransformNode('trkWheel' + nm.slice(6), scene);
+      w.parent = root; w.position.copyFrom(hub); w.rotation.y = sd*Math.PI/2; w.computeWorldMatrix(true);
+      for (const m of merge(list)) m.setParent(w);
+      root.metadata.wheels.push({ w, sd, front: hub.z > 0 });
+    }
+    // plates: found on the bodywork with a ray from in front of / behind the car
+    const statics = root.getChildMeshes(true);
+    for (const [nm, y, dir] of [['trkPlateF', 0.2, -1], ['trkPlateR', 0.537, 1]]){
+      const hit = scene.pickWithRay(new B.Ray(new V3(0, y, -dir*6), new V3(0, 0, dir), 12), m => statics.includes(m));
+      const z = hit && hit.hit ? hit.pickedPoint.z - dir*0.012 : -dir*2.37;
+      const pl = B.MeshBuilder.CreatePlane(nm, { width: 0.52, height: 0.112 }, scene); pl.parent = root; pl.position.set(0, y, z);
+      if (dir < 0) pl.rotation.y = Math.PI; pl.material = stdMat(nm + 'M', { diffuse: new C3(1,1,1) }); pl.isPickable = false;
+    }
+    for (const t of res.transformNodes) t.dispose(); for (const m of res.meshes) if (!m.isDisposed() && !m.getTotalVertices()) m.dispose();
+    root.metadata.mats = { bodyM, paint: bodyM };
+    root.setEnabled(false);
+    return (GTP_TPL = root);
+  });
+  GTP_LOAD.catch(e => { console.warn('GT Pro', e); GTP_LOAD = null; });
+  return GTP_LOAD;
+}
 /** A player's car: a clone of its model's template (shared geometry) with its own paint and plates. */
 function makeCar(dto, tplFn = trackerTemplate){
   const tpl = tplFn(), col = hex(dto.color), key = dto.owner.id;
@@ -2782,13 +2850,13 @@ const DLR = (() => {
   for (const z of [z0 + 6, z1 - 6]){ add(box(0.2, 7, 0.2, x0 + 6, 3.5, z), darkM, true); add(box(1.4, 0.25, 0.5, x0 + 6.5, 7, z), lightM); }
   // the cars on show (built only when the camera is near): models × colours, inside and outside
   const SHOW = [
-    { m: 'coupe',   c: '#b9bec4', x: 0, z: 0, ry: 0, spin: true },                              // inside, on the turntable
-    { m: 'coupe',   c: '#16181c', x: SX0 + 7, z: SZ0 + 7.5, ry: -Math.PI/2 + 0.55 },
+    { m: 'gtpro',   c: '#b9bec4', x: 0, z: 0, ry: 0, spin: true },                              // inside, on the turntable
+    { m: 'gtpro',   c: '#16181c', x: SX0 + 7, z: SZ0 + 7.5, ry: -Math.PI/2 + 0.55 },
     { m: 'tracker', c: '#a8202a', x: SX0 + 7, z: SZ1 - 7.5, ry: -Math.PI/2 - 0.55 },
     { m: 'tracker', c: '#1f4f9a', x: SX1 - 8, z: SZ0 + 6, ry: -Math.PI/2 + 0.2 },
-    { m: 'coupe',   c: '#a8202a', x: x0 + 11.5, z: cz - 18, ry: -Math.PI/2 + 0.35 },          // outside, nose to the road
+    { m: 'coupe',   c: '#f2f3f1', x: x0 + 11.5, z: cz - 18, ry: -Math.PI/2 + 0.35 },          // outside, nose to the road
     { m: 'tracker', c: '#f2f3f1', x: x0 + 11.5, z: cz - 6,  ry: -Math.PI/2 + 0.35 },
-    { m: 'coupe',   c: '#f2f3f1', x: x0 + 11.5, z: cz + 6,  ry: -Math.PI/2 - 0.35 },
+    { m: 'gtpro',   c: '#a8202a', x: x0 + 11.5, z: cz + 6,  ry: -Math.PI/2 - 0.35 },
     { m: 'tracker', c: '#16181c', x: x0 + 11.5, z: cz + 18, ry: -Math.PI/2 - 0.35 },
   ];
   const cars = SHOW.map(() => null);
@@ -2798,7 +2866,7 @@ const DLR = (() => {
     SHOW.forEach((c, i) => {
       if (!near){ if (cars[i]) cars[i].setEnabled(false); return; }
       if (!cars[i]){
-        if (!force && built >= 1) return;
+        if ((!force && built >= 1) || !modelReady(c.m)) return;
         const n = CAR_MODELS[c.m].make({ owner: { id: 'dlr' + i, nickname: '' }, model: c.m, color: c.c, plate: { region: '01', text: 'SALON', kind: 'custom' } });
         n.metadata.body.isPickable = false; built++;
         if (c.spin){ n.parent = spin; n.position.set(0, 0, 0); } else { n.position.set(c.x, 0.3 * (c.x > SX0 ? 1 : 0) + 0.1, c.z); n.rotation.y = c.ry; }
@@ -2854,7 +2922,7 @@ function setCar(dto){
   const k = dto.owner.id, c = CARS.get(k);
   if (c){
     const changed = c.dto.model !== dto.model || c.dto.color !== dto.color || c.dto.plate.text !== dto.plate.text || c.dto.plate.region !== dto.plate.region;
-    c.dto = dto; if (changed && c.node){ const wasDriving = !!c.drive; const pos = c.node.position.clone(), ry = c.node.rotation.y; disposeCar(c.node); c.node = null; if (wasDriving){ c.node = (CAR_MODELS[dto.model] || CAR_MODELS.tracker).make(dto); c.node.position.copyFrom(pos); c.node.rotation.y = ry; } }
+    c.dto = dto; if (changed && c.node){ const wasDriving = !!c.drive; const pos = c.node.position.clone(), ry = c.node.rotation.y; disposeCar(c.node); c.node = null; if (wasDriving && modelReady(dto.model)){ c.node = (CAR_MODELS[dto.model] || CAR_MODELS.tracker).make(dto); c.node.position.copyFrom(pos); c.node.rotation.y = ry; } }
   } else CARS.set(k, { dto, node: null, park: null, drive: null });
 }
 function setCars(list){
@@ -2876,7 +2944,7 @@ function carLOD(force){
   let built = 0;
   near.forEach(([d, c], i) => {
     if (i >= 30 && !c.drive){ if (c.node) c.node.setEnabled(false); return; }
-    if (!c.node){ if (!force && built >= 2) return; c.node = (CAR_MODELS[c.dto.model] || CAR_MODELS.tracker).make(c.dto); built++; c.node.position.set(c.park.x, 0.02, c.park.z); c.node.rotation.y = c.park.ry; }
+    if (!c.node){ if ((!force && built >= 2) || !modelReady(c.dto.model)) return; c.node = (CAR_MODELS[c.dto.model] || CAR_MODELS.tracker).make(c.dto); built++; c.node.position.set(c.park.x, 0.02, c.park.z); c.node.rotation.y = c.park.ry; }
     c.node.setEnabled(true);
   });
 }
@@ -4169,6 +4237,7 @@ const SNAPS = new Map();
 function carSnapshot(model, color){
   const key = model + color; if (SNAPS.has(key)) return SNAPS.get(key);
   const job = (async () => {
+    if (CAR_MODELS[model].load) await CAR_MODELS[model].load();
     const W = 640, H = 360, Y = -600;
     const node = CAR_MODELS[model].make({ owner: { id: 'snap', nickname: '' }, model, color, plate: { region: '01', text: 'MAHALLA', kind: 'custom' } });
     node.position.set(0, Y, 0); node.rotation.y = 0;
