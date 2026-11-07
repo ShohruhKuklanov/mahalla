@@ -169,7 +169,7 @@ export function accrued(incomePerDay: number, readyAt: Date, from: Date, now: Da
 // ---------- cars: one model (Chevrolet Tracker), any colour, Uzbek plates ----------
 export const CAR = {
   /** the showroom: add a model here (and its 3D model in the client's CAR_MODELS) to sell it */
-  models: { tracker: { name: 'Chevrolet Tracker', price: 5000 } } as Record<string, { name: string; price: number }>,
+  models: { tracker: { name: 'Chevrolet Tracker', price: 5000 }, coupe: { name: 'Mahalla GT', price: 15000 } } as Record<string, { name: string; price: number }>,
   price: 5000,          // default model's price (older clients)
   repaint: 300,         // a new colour later
   plate: { random: 0, standard: 500, custom: 2000 },
