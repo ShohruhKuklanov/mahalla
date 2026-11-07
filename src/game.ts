@@ -300,12 +300,14 @@ function checkPlate(p: { kind: PlateKind; region: string; text?: string }) {
 }
 const plateTaken = (e: any) => e && e.code === '23505' && String(e.constraint || '').includes('plate');
 
-export async function buyCar(db: Db, user: SessionUser | null, body: { color: string; plate: { kind: PlateKind; region: string; text?: string } }, key: string | null) {
+export async function buyCar(db: Db, user: SessionUser | null, body: { model?: string; color: string; plate: { kind: PlateKind; region: string; text?: string } }, key: string | null) {
   const u = requirePlayer(user);
+  const model = body.model || 'tracker', M = CAR.models[model];
+  if (!M) throw E.bad('bad_model', 'Bunday mashina bozorda yo‘q.');
   const color = String(body.color || '').toLowerCase();
   if (!isHexColor(color)) throw E.bad('bad_color', 'Rang noto‘g‘ri.');
   const n = checkPlate(body.plate);
-  const cost = CAR.price + plateCost(body.plate.kind);
+  const cost = M.price + plateCost(body.plate.kind);
   try {
     return await tx(db, async (c) => {
       const bal = await lockWallets(c, [u.id]);
@@ -315,7 +317,7 @@ export async function buyCar(db: Db, user: SessionUser | null, body: { color: st
       if (!(await plateFree(c, n.region, text))) throw E.conflict('plate_taken', 'Bu raqam band. Boshqasini tanlang.');
       const have = bal.get(u.id) ?? 0;
       if (have < cost) throw E.funds(cost - have);
-      const id = (await c.query('insert into cars(owner_id,color,plate_region,plate_text,plate_kind) values ($1,$2,$3,$4,$5) returning id', [u.id, color, n.region, text, n.kind])).rows[0].id;
+      const id = (await c.query('insert into cars(owner_id,model,color,plate_region,plate_text,plate_kind) values ($1,$2,$3,$4,$5,$6) returning id', [u.id, model, color, n.region, text, n.kind])).rows[0].id;
       const balance = await move(c, u.id, -cost, 'car_buy', 'car', Number(id), key);
       return { replayed: false, cost, balance, car: await carOf(c, u.id) };
     });

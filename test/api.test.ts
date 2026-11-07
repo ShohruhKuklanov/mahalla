@@ -377,6 +377,9 @@ test('cars: buy one Tracker, any colour, random / chosen / custom plates, unique
   assert.equal(r.json().car.color, '#c0392b');
   assert.equal((await a.me()).balance, 5000);
   assert.equal((await a.me()).car.plate.region, '01');
+  assert.equal(r.json().car.model, 'tracker');
+  assert.equal((await c.call('POST', '/api/car/buy', { model: 'lada', color: '#ffffff', plate: { kind: 'random', region: '01' } })).json().error, 'bad_model');
+  assert.ok((await city()).economy.car.models.tracker.price > 0);
   // one car each
   r = await a.call('POST', '/api/car/buy', { color: '#ffffff', plate: { kind: 'random', region: '01' } });
   assert.equal(r.json().error, 'already_have_car');

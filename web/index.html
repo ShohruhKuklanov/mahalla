@@ -98,6 +98,15 @@
   .swatches{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
   .sw{width:30px;height:30px;border-radius:50%;border:3px solid transparent;box-shadow:0 0 0 1px rgba(255,255,255,.2) inset}
   .sw.sel{border-color:var(--ink)}
+  .carcard{border-radius:16px;background:rgba(255,255,255,.05);overflow:hidden;margin-bottom:12px}
+  .carimg{aspect-ratio:16/9;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 85%,rgba(255,255,255,.16),rgba(255,255,255,.03) 60%);color:var(--muted);font-size:12.5px}
+  .carimg img{width:100%;height:100%;object-fit:contain;display:block}
+  .carinfo{padding:12px 14px 14px}.carinfo>b{font-size:17px}.carinfo small{display:block;color:var(--muted);font-size:12.5px;margin:3px 0 10px;line-height:1.4}
+  .carinfo .specs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+  .carinfo .specs span{background:rgba(255,255,255,.05);border-radius:10px;padding:6px 8px;font-weight:800;font-size:13px}
+  .carinfo .specs i{display:block;font-style:normal;color:var(--muted);font-weight:600;font-size:10.5px}
+  .carinfo .price{color:var(--gold);font-size:17px;flex:1}
+  .carbox .carimg{border-radius:14px;margin-bottom:6px}
   .carbox canvas.plate{display:block;width:min(260px,100%);height:auto;margin:4px auto 12px;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.35)}
   .carbox .fld{display:flex;gap:8px;margin-bottom:10px}
   .carbox select,.carbox input.pt{height:46px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);padding:0 12px;font:700 17px Manrope,sans-serif;letter-spacing:1px}
@@ -2277,6 +2286,12 @@ const carLights = CAR_KINDS.flatMap(c => [c.k.parts[3], c.k.parts[4]]);
 // 4.27 m long, 1.79 m wide, 1.63 m high, 2.57 m wheelbase, 215/55 R17 wheels. Faces +z, ground at y = 0.
 const CAR_DEF = { price: 5000, repaint: 300, plate: { random: 0, standard: 500, custom: 2000 }, plateChangeRandom: 100,
   regions: ['01','10','20','25','30','40','50','60','70','75','80','85','90','95'] };
+/** The showroom (Bozor → Mashinalar). Add a model here with its 3D builder to sell it; the server's CAR.models has the price. */
+const CAR_MODELS = {
+  tracker: { name: 'Chevrolet Tracker', price: 5000, kind: 'Krossover', about: 'Ixcham shahar krossoveri: baland o‘rindiq, keng salon, tejamkor turbo dvigatel.',
+             specs: [['Dvigatel', '1.2 turbo'], ['Uzunligi', '4,27 m'], ['Klirens', '18 sm'], ['O‘rindiq', '5 ta']], make: dto => makeCar(dto) },
+};
+const modelPrice = m => { const sv = API.on && API.city && API.city.economy && API.city.economy.car && API.city.economy.car.models; return (sv && sv[m] && sv[m].price) || CAR_MODELS[m].price; };
 const CAR_COLORS_UI = [['#f2f3f1','Oq'],['#16181c','Qora'],['#b9bec4','Kumush'],['#5b6068','Grafit'],['#a8202a','Qizil'],['#1f4f9a','Ko‘k'],['#5fa3d6','Havorang'],['#c9652b','To‘q sariq'],['#2f6b45','Yashil'],['#7a5a3a','Jigarrang']];
 const STD_PLATE = /^[A-Z][0-9]{3}[A-Z]{2}$/;
 const plateShown = pl => pl.kind === 'standard' && STD_PLATE.test(pl.text) ? `${pl.text[0]} ${pl.text.slice(1, 4)} ${pl.text.slice(4)}` : pl.text;
@@ -2592,7 +2607,7 @@ function carLOD(force){
   let built = 0;
   near.forEach(([d, c], i) => {
     if (i >= 30 && !c.drive){ if (c.node) c.node.setEnabled(false); return; }
-    if (!c.node){ if (!force && built >= 2) return; c.node = makeCar(c.dto); built++; c.node.position.set(c.park.x, 0.02, c.park.z); c.node.rotation.y = c.park.ry; }
+    if (!c.node){ if (!force && built >= 2) return; c.node = (CAR_MODELS[c.dto.model] || CAR_MODELS.tracker).make(c.dto); built++; c.node.position.set(c.park.x, 0.02, c.park.z); c.node.rotation.y = c.park.ry; }
     c.node.setEnabled(true);
   });
 }
@@ -3455,17 +3470,18 @@ function myCarDto(){ if (API.on) return API.me && API.me.car || null; const c = 
 function plateCanvasURL(pl){ const c = document.createElement('canvas'); c.width = 520; c.height = 112; drawPlate(c.getContext('2d'), 260, 56, 1000, pl); return c.toDataURL(); }
 function myCarCard(){
   const car = myCarDto(), P = carPrices();
-  if (!car) return `<div class="list"><div class="item"><div><b>Mashina — Chevrolet Tracker</b><small>Uyingiz oldida turadi, ustiga bossangiz mahallani aylanadi · ${fmt(P.price)} tanga</small></div><button id="carBuy">Sotib olish</button></div></div>`;
-  return `<div class="list"><div class="item"><span class="sw" style="background:${car.color};flex:0 0 30px"></span><div><b>Mening mashinam</b><small>${esc(car.plate.region)} ${esc(plateShown(car.plate))} · Chevrolet Tracker</small></div><button id="carShow">Ko‘rsatish</button><button id="carEdit">O‘zgartirish</button></div></div>`;
+  if (!car) return `<div class="list"><div class="item"><div><b>Mashina</b><small>Bozorda: ${Object.values(CAR_MODELS).map(m => esc(m.name)).join(', ')} · ${fmt(Math.min(...Object.keys(CAR_MODELS).map(modelPrice)))} tangadan</small></div><button id="carBuy">Bozorga</button></div></div>`;
+  return `<div class="list"><div class="item"><span class="sw" style="background:${car.color};flex:0 0 30px"></span><div><b>Mening mashinam</b><small>${esc(car.plate.region)} ${esc(plateShown(car.plate))} · ${esc((CAR_MODELS[car.model] || CAR_MODELS.tracker).name)}</small></div><button id="carShow">Ko‘rsatish</button><button id="carEdit">O‘zgartirish</button></div></div>`;
 }
 function bindMyCarCard(){
   const b = $('#carBuy'), e = $('#carEdit'), sh = $('#carShow');
-  if (b) b.onclick = () => openCarShop(false);
+  if (b) b.onclick = () => { setTab('market'); openMarket('cars'); };
   if (e) e.onclick = () => openCarShop(true);
   if (sh) sh.onclick = () => { const c = myCarEntry(); if (c && (c.park || c.drive)){ closeSheet(); const x = c.node ? c.node.position.x : c.park.x, z = c.node ? c.node.position.z : c.park.z; flyTo(x, z, 14, 1.2); } else toast('Uy qursangiz, mashinangiz uy oldida turadi'); };
 }
-function openCarShop(edit){
-  const P = carPrices(), cur = edit ? myCarDto() : null;
+function openCarShop(edit, model){
+  const P = carPrices(), cur = edit ? myCarDto() : null; model = cur ? cur.model : (model || 'tracker');
+  const MD = CAR_MODELS[model] || CAR_MODELS.tracker, price = modelPrice(model);
   const st = { color: cur ? cur.color : CAR_COLORS_UI[0][0], kind: cur ? cur.plate.kind : 'random', region: cur ? cur.plate.region : '01', text: cur ? cur.plate.text : '', check: null };
   if (cur && cur.plate.kind === 'standard') st.kind = 'keep';
   const kinds = edit ? [['keep','Shu raqam'],['random','Tasodifiy'],['standard','Raqam tanlash'],['custom','O‘z yozuvim']] : [['random','Tasodifiy'],['standard','Raqam tanlash'],['custom','O‘z yozuvim']];
@@ -3483,7 +3499,7 @@ function openCarShop(edit){
     return null;
   };
   const cost = () => {
-    if (!edit) return P.price + P.plate[st.kind];
+    if (!edit) return price + P.plate[st.kind];
     let c = st.color !== cur.color ? P.repaint : 0;
     if (st.kind === 'random') c += P.plateChangeRandom;
     else if (st.kind !== 'keep' && !(norm(st.text) === cur.plate.text && st.region === cur.plate.region)) c += P.plate[st.kind];
@@ -3491,7 +3507,8 @@ function openCarShop(edit){
     return c;
   };
   const render = () => {
-    openSheet(`<div class="carbox"><h3>${edit ? 'Mashinamni o‘zgartirish' : 'Mashina sotib olish'}</h3><div class="sub">Chevrolet Tracker · uyingiz oldida turadi, ustiga bossangiz mahallani aylanib keladi</div>
+    openSheet(`<div class="carbox"><h3>${edit ? 'Mashinamni o‘zgartirish' : 'Mashina sotib olish'}</h3><div class="sub">${esc(MD.name)} · uyingiz oldida turadi, ustiga bossangiz mahallani aylanib keladi</div>
+      <div class="carimg" id="shopImg"><span>3D ko‘rinish tayyorlanmoqda…</span></div>
       <canvas class="plate" id="plPrev" width="520" height="112"></canvas>
       <div class="swatches"><span class="lbl2">Rang</span>${CAR_COLORS_UI.map(([c, n]) => `<button class="sw ${c === st.color ? 'sel' : ''}" data-c="${c}" title="${n}" style="background:${c}"></button>`).join('')}
         <label class="sw pick ${CAR_COLORS_UI.some(([c]) => c === st.color) ? '' : 'sel'}" title="Boshqa rang"><input type="color" id="carCol" value="${st.color}"></label></div>
@@ -3504,9 +3521,9 @@ function openCarShop(edit){
       <div class="row"><button class="btn primary" id="carGo">${edit ? 'Saqlash' : 'Sotib olish'}</button></div>
       ${!edit && !myPlots().some(p => p.tpl) ? '<div class="note">Uyingiz hali yo‘q: mashina uy qurganingizdan keyin uy oldida paydo bo‘ladi.</div>' : ''}
       ${st.kind === 'random' && !edit ? '<div class="note">Tasodifiy raqam sotib olayotganda beriladi (ko‘rinish — namuna).</div>' : ''}</div>`, 'car');
-    paint();
+    paint(); showImg();
     body.querySelectorAll('.sw[data-c]').forEach(b => b.onclick = () => { st.color = b.dataset.c; render(); });
-    $('#carCol').oninput = e => { st.color = e.target.value.toLowerCase(); body.querySelectorAll('.sw').forEach(x => x.classList.remove('sel')); e.target.parentNode.classList.add('sel'); paint(); };
+    $('#carCol').oninput = e => { st.color = e.target.value.toLowerCase(); body.querySelectorAll('.sw').forEach(x => x.classList.remove('sel')); e.target.parentNode.classList.add('sel'); paint(); clearTimeout(imgT); imgT = setTimeout(showImg, 350); };
     body.querySelectorAll('#pkSeg button').forEach(b => b.onclick = () => { const k = b.dataset.k; if (k !== st.kind){ st.kind = k; if (k === 'standard' || k === 'custom') st.text = ''; st.check = null; } render(); });
     $('#pRegion').onchange = e => { st.region = e.target.value; st.check = null; paint(); check(); };
     const t = $('#pText'); if (t){ t.oninput = () => { st.text = t.value; st.check = null; paint(); check(); }; }
@@ -3521,7 +3538,8 @@ function openCarShop(edit){
     if (el){ el.className = 'chkline' + (msg ? ' bad' : st.check === true ? ' ok' : st.check === false ? ' bad' : ''); el.textContent = msg || (st.check === true ? 'Bu raqam bo‘sh ✓' : st.check === false ? 'Bu raqam band' : ''); }
     const go_ = $('#carGo'); if (go_) go_.disabled = !!msg || st.check === false || cost() > S.coins || (edit && cost() === 0 && st.color === cur.color && st.kind === 'keep');
   };
-  let chkT = 0;
+  let chkT = 0, imgT = 0;
+  const showImg = async () => { const want = st.color, url = await carSnapshot(model, want).catch(() => null), el = $('#shopImg'); if (url && el && st.color === want) el.innerHTML = `<img src="${url}" alt="">`; };
   const check = () => {
     clearTimeout(chkT); if (st.kind !== 'standard' && st.kind !== 'custom') return; if (valid()) return;
     const t = norm(st.text), r = st.region;
@@ -3534,7 +3552,7 @@ function openCarShop(edit){
     if (API.on){
       try {
         const key = 'car-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-        const r = edit ? await api('POST', '/api/car/update', { color: st.color, ...(plate ? { plate } : {}) }, key) : await api('POST', '/api/car/buy', { color: st.color, plate }, key);
+        const r = edit ? await api('POST', '/api/car/update', { color: st.color, ...(plate ? { plate } : {}) }, key) : await api('POST', '/api/car/buy', { model, color: st.color, plate }, key);
         if (r.balance != null) S.coins = r.balance; updateCoins();
         if (r.car){ API.me.car = r.car; setCar(r.car); placeCars(); }
         await refreshMe().catch(() => {});
@@ -3546,7 +3564,7 @@ function openCarShop(edit){
     const c = cost(); if (c > S.coins){ toast('Tanga yetmaydi'); btn.disabled = false; return; }
     S.coins -= c; updateCoins();
     const pl = plate ? (plate.kind === 'random' ? { region: plate.region, text: sample, kind: 'standard' } : { region: plate.region, text: plate.text, kind: plate.kind }) : cur.plate;
-    const dto = { owner: { id: -2, nickname: 'Siz', telegram: null }, model: 'tracker', color: st.color, plate: pl };
+    const dto = { owner: { id: -2, nickname: 'Siz', telegram: null }, model, color: st.color, plate: pl };
     setCar(dto); placeCars(); done(dto);
   };
   const done = car => {
@@ -3851,12 +3869,51 @@ $('#cityBtn').onclick = ()=>{ closeSheet(); setTab('city'); const m = myPlots()[
 $('#mineBtn').onclick = ()=>{ select(null); openMine(); setTab('mine'); };
 $('#marketBtn').onclick = ()=>{ select(null); openMarket(); setTab('market'); };
 $('#setBtn').onclick = ()=>{ select(null); openSettings(); setTab('settings'); };
-function openMarket(){
-  const list = plots.filter(p => p.state === 'sale').map(p => ({ p, price: salePrice(p) })).sort((a,b) => a.price - b.price);
-  const items = list.length ? list.map(({p, price}) => `<div class="item"><div><b>${p.tpl ? esc(buildingName(p)) : 'Bo‘sh yer'}</b><small>${esc(ZONES[p.zone].name)} · ${esc(DISTRICTS[p.district])} · sotuvchi ${esc(p.owner || '—')}</small><small style="color:#f6c453;font-weight:800">${fmt(price)} tanga${p.tpl ? ' · +' + fmt(specIncome(p)) + '/kun' : ''}</small></div><button data-id="${p.id}">Ko‘rish</button></div>`).join('')
-    : '<div class="note">Hozircha sotuvda hech narsa yo‘q.</div>';
-  openSheet(`<h3>Bozor</h3><div class="sub">${list.length} ta e’lon · arzonidan qimmatiga. Bo‘sh yerni xaritadan yoki “Yer top” bilan tanlang.</div><div class="list">${items}</div>`, 'market');
-  body.querySelectorAll('.item button').forEach(el => el.onclick = () => visitPlot(plots[+el.dataset.id]));
+function openMarket(tab){
+  if (tab) S.marketTab = tab; tab = S.marketTab || 'land';
+  const seg = `<div class="seg" id="mkSeg"><button data-t="land" class="${tab === 'land' ? 'on' : ''}">Uylar va yerlar</button><button data-t="cars" class="${tab === 'cars' ? 'on' : ''}">Mashinalar</button></div>`;
+  if (tab === 'cars'){
+    const mine = myCarDto();
+    const cards = Object.entries(CAR_MODELS).map(([k, m]) => `<div class="carcard">
+        <div class="carimg" data-m="${k}"><span>3D ko‘rinish tayyorlanmoqda…</span></div>
+        <div class="carinfo"><b>${esc(m.name)}</b><small>${esc(m.kind)} · ${esc(m.about)}</small>
+          <div class="specs">${m.specs.map(([a, v]) => `<span><i>${esc(a)}</i>${esc(v)}</span>`).join('')}</div>
+          <div class="row" style="align-items:center;gap:10px"><b class="price">${fmt(modelPrice(k))} tanga</b>
+          ${mine ? `<button class="btn" data-edit="1" style="flex:0 0 auto">${mine.model === k ? 'Sizda bor · o‘zgartirish' : 'Sizda mashina bor'}</button>` : `<button class="btn primary" data-buy="${k}" style="flex:0 0 auto">Sotib olish</button>`}</div></div></div>`).join('');
+    openSheet(`<h3>Bozor</h3><div class="sub">Mashinalar: rangini va davlat raqamini o‘zingiz tanlaysiz. Mashina uyingiz oldida turadi, ustiga bossangiz mahallani aylanib keladi.</div>${seg}${cards}<div class="note">Yangi mashinalar tez orada qo‘shiladi.</div>`, 'market');
+    body.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => openCarShop(false, b.dataset.buy));
+    body.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openCarShop(true));
+    body.querySelectorAll('.carimg').forEach(async el => { const url = await carSnapshot(el.dataset.m, mine && mine.model === el.dataset.m ? mine.color : '#f2f3f1').catch(() => null); if (url && el.isConnected) el.innerHTML = `<img src="${url}" alt="">`; });
+  } else {
+    const list = plots.filter(p => p.state === 'sale').map(p => ({ p, price: salePrice(p) })).sort((a,b) => a.price - b.price);
+    const items = list.length ? list.map(({p, price}) => `<div class="item"><div><b>${p.tpl ? esc(buildingName(p)) : 'Bo‘sh yer'}</b><small>${esc(ZONES[p.zone].name)} · ${esc(DISTRICTS[p.district])} · sotuvchi ${esc(p.owner || '—')}</small><small style="color:#f6c453;font-weight:800">${fmt(price)} tanga${p.tpl ? ' · +' + fmt(specIncome(p)) + '/kun' : ''}</small></div><button data-id="${p.id}">Ko‘rish</button></div>`).join('')
+      : '<div class="note">Hozircha sotuvda hech narsa yo‘q.</div>';
+    openSheet(`<h3>Bozor</h3><div class="sub">${list.length} ta e’lon · arzonidan qimmatiga. Bo‘sh yerni xaritadan yoki “Yer top” bilan tanlang.</div>${seg}<div class="list">${items}</div>`, 'market');
+    body.querySelectorAll('.item button').forEach(el => el.onclick = () => visitPlot(plots[+el.dataset.id]));
+  }
+  body.querySelectorAll('#mkSeg button').forEach(b => b.onclick = () => openMarket(b.dataset.t));
+}
+// a real 3D picture of a car model in a colour: rendered once off-screen, then cached
+const SNAPS = new Map();
+function carSnapshot(model, color){
+  const key = model + color; if (SNAPS.has(key)) return SNAPS.get(key);
+  const job = (async () => {
+    const W = 640, H = 360, Y = -600;
+    const node = CAR_MODELS[model].make({ owner: { id: 'snap', nickname: '' }, model, color, plate: { region: '01', text: 'MAHALLA', kind: 'custom' } });
+    node.position.set(0, Y, 0); node.rotation.y = 0;
+    const meshes = node.getChildMeshes(); for (const m of meshes){ m.receiveShadows = false; m.isPickable = false; if (shadowGen) shadowGen.removeShadowCaster(m); }
+    const light = new B.HemisphericLight('snapL', new V3(0.3, 1, -0.4), scene); light.intensity = 0.4; light.groundColor = new C3(0.2, 0.21, 0.24); light.includedOnlyMeshes = meshes;
+    const cam = new B.ArcRotateCamera('snapCam', 0.62, 1.32, 6.1, new V3(0, Y + 0.72, 0), scene); cam.fov = 0.55; cam.minZ = 0.1; cam.maxZ = 60;
+    try {
+      for (let i = 0; i < 60 && !meshes.every(m => m.isReady(true)); i++) await new Promise(r => setTimeout(r, 50));
+      return await new Promise((res, rej) => {
+        B.Tools.CreateScreenshotUsingRenderTarget(engine, cam, { width: W, height: H }, d => d ? res(d) : rej(new Error('snapshot')), 'image/png', engine.webGLVersion > 1 ? 4 : 1, false, undefined, false, false, false, undefined,
+          t => { t.renderList = meshes; t.clearColor = new B.Color4(0, 0, 0, 0); });
+      });
+    } finally { cam.dispose(); light.dispose(); disposeCar(node); }
+  })();
+  SNAPS.set(key, job); job.catch(() => SNAPS.delete(key));
+  return job;
 }
 $('#rotL').onclick = ()=>{ stopAuto(); S.orbitAnim = -Math.PI/4; };
 $('#rotR').onclick = ()=>{ stopAuto(); S.orbitAnim = Math.PI/4; };

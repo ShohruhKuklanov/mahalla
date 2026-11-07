@@ -211,7 +211,7 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
   const plateBody = z.object({ kind: z.enum(['random', 'standard', 'custom']), region: z.string().max(2), text: z.string().max(16).optional() });
   const pushCar = async (userId: number) => { const c = await game.carOf(db, userId); if (c) broadcast({ type: 'car', car: c }); };
   app.post('/api/car/buy', async (req) => {
-    const body = z.object({ color: z.string().max(7), plate: plateBody }).parse(req.body);
+    const body = z.object({ model: z.string().max(20).optional(), color: z.string().max(7), plate: plateBody }).parse(req.body);
     const r = await game.buyCar(db, req.user, body, idem(req));
     if (req.user) await pushCar(req.user.id);
     return r;
