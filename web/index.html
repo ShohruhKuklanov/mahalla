@@ -1526,7 +1526,7 @@ function hotelParts(){
     for (let r = 0; r < rows; r++){ const g = a.createLinearGradient(0, r*rh, 0, (r + 1)*rh); g.addColorStop(0, '#c4d4e0'); g.addColorStop(0.75, '#8aa3b8'); g.addColorStop(1, '#6d879d'); a.fillStyle = g; a.fillRect(0, r*rh, w, rh); }
     a.fillStyle = '#4c5b68'; for (let r = 0; r < rows; r++) a.fillRect(0, r*rh + rh - 7, w, 7);
     a.fillStyle = '#c9d4dc'; for (let c = 0; c < cols; c++) a.fillRect(c*cw, 0, 1.5, h);
-    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (rnd() < 0.32){ b.fillStyle = rnd() < 0.85 ? '#ffc778' : '#cfe0ff'; b.fillRect(c*cw + 2, r*rh + 4, cw - 4, rh - 13); } });
+  });
   tg.d.uScale = tg.e.uScale = ringLen(rr(T.hx, T.hz, T.r, 0))/6; tg.d.vScale = tg.e.vScale = (H - PH)/(4*FLOOR_H);
   const glassM = stdMat('htlGlassM', { dt: tg.d, et: tg.e, spec: new C3(.8,.84,.9), power: 140 }); glassM.emissiveColor = hex('#9fb6c9').scale(0.2); nightMats.push(glassM);
   const lt = tex('htlLattice', 256, 128, (a, b, w, h) => { a.fillStyle = '#9da3a9'; a.fillRect(0, 0, w, h); a.strokeStyle = '#f7f5f0'; a.lineWidth = 7;
@@ -1558,6 +1558,41 @@ function hotelParts(){
     add(merge(cols), darkM); }
   // tower: glass shaft, LED line, dark crown, roof, plant
   add(wall(rr(T.hx, T.hz, T.r, PH), rr(T.hx, T.hz, T.r, H - 3)), glassM);
+  // night show: the flag of Uzbekistan in lit windows all round the shaft — blue, white and green bands with thin red
+  // lines between them, the crescent and 12 stars on the blue band of the front and back faces. An additive overlay
+  // just outside the glass: black (invisible) by day, its emissive follows the night like the city's windows.
+  { const ring = rr(T.hx + 0.06, T.hz + 0.06, T.r, PH), seg = (a, b) => V3.Distance(a, b);
+    const at = []; ring.reduce((s, p, i, a) => { at.push(i ? s + seg(a[i - 1], p) : 0); return at[i]; }, 0);
+    const len = at[at.length - 1] + seg(ring[ring.length - 1], ring[0]);           // all the way round (the closing span is the +x face)
+    const n = 8, arc = Math.PI*T.r/2, side = 2*(T.hx - T.r), face = 2*(T.hz - T.r);
+    const front0 = (2*arc + side)/len, back0 = (4*arc + 2*side + face)/len, fw = face/len;      // u where the −x and +x faces start
+    const W = 2048, Hh = 512, floors = Math.round((H - 3 - PH)/FLOOR_H);
+    const ft = new B.DynamicTexture('htlFlag', { width: W, height: Hh }, scene, true), g = ft.getContext();
+    const bands = [['#0099b5', 0, 0.32], ['#ce1126', 0.32, 0.34], ['#ffffff', 0.34, 0.66], ['#ce1126', 0.66, 0.68], ['#1eb53a', 0.68, 1]];
+    for (const [c, a, b] of bands){ g.fillStyle = c; g.fillRect(0, a*Hh, W, (b - a)*Hh + 1); }
+    const emblem = u0 => {                                                         // crescent + 12 stars (3, 4, 5 rows)
+      const x0 = u0*W, fwp = fw*W, cy = 0.16*Hh, r = 0.115*Hh;
+      g.fillStyle = '#ffffff'; g.beginPath(); g.arc(x0 + fwp*0.13, cy, r, 0, 6.29); g.fill();
+      g.fillStyle = '#0099b5'; g.beginPath(); g.arc(x0 + fwp*0.13 + r*0.32, cy - r*0.05, r*0.88, 0, 6.29); g.fill();
+      const star = (x, y, rad) => { g.beginPath(); for (let i = 0; i < 10; i++){ const a = -Math.PI/2 + i*Math.PI/5, rr2 = i % 2 ? rad*0.42 : rad; g.lineTo(x + rr2*Math.cos(a), y + rr2*Math.sin(a)); } g.closePath(); g.fill(); };
+      g.fillStyle = '#ffffff'; const dx = fwp*0.075, dy = 0.075*Hh;
+      [[3, 2], [4, 1], [5, 0]].forEach(([cnt, skip], row) => { for (let i = 0; i < cnt; i++) star(x0 + fwp*0.27 + (skip + i)*dx, cy - dy + row*dy, 0.022*Hh); });
+    };
+    emblem(front0); emblem(back0);
+    g.fillStyle = 'rgba(0,0,0,0.88)';                                              // the window grid: spandrels and mullions
+    for (let f = 0; f <= floors; f++) g.fillRect(0, f*Hh/floors - 2, W, 5);
+    const cols = Math.round(len/1.6); for (let c = 0; c < cols; c++) g.fillRect(c*W/cols - 1, 0, 2.5, Hh);
+    ft.update(true);
+    const flagM = new B.StandardMaterial('htlFlagM', scene);
+    flagM.diffuseColor = new C3(0,0,0); flagM.specularColor = new C3(0,0,0); flagM.emissiveTexture = ft; flagM.alphaMode = B.Engine.ALPHA_ADD; flagM.alpha = 0.999; flagM.backFaceCulling = false;
+    nightMats.push(flagM);
+    const lo = ring, hi = rr(T.hx + 0.06, T.hz + 0.06, T.r, H - 3);
+    const m = B.MeshBuilder.CreateRibbon('htlFlag', { pathArray: [lo, hi], closePath: true }, scene);
+    // the ribbon's own u follows point index; set it by real distance round the shaft so the emblem lands on the faces
+    const uv = m.getVerticesData(B.VertexBuffer.UVKind), np = lo.length;
+    if (uv.length/2 === 2*(np + 1)){ for (let i = 0; i < uv.length/2; i++){ const k = i % (np + 1); uv[2*i] = k < np ? at[k]/len : 1; } m.setVerticesData(B.VertexBuffer.UVKind, uv); }
+    else console.warn('htlFlag: unexpected ribbon layout', uv.length/2, np);
+    add(m, flagM); }
   add(wall(rr(T.hx + 0.1, T.hz + 0.1, T.r, H - 3), rr(T.hx + 0.1, T.hz + 0.1, T.r, H - 2.6)), ledM);
   add(wall(rr(T.hx + 0.2, T.hz + 0.2, T.r, H - 2.6), rr(T.hx + 0.2, T.hz + 0.2, T.r, H)), darkM);
   add(merge([cap(rr(T.hx + 0.2, T.hz + 0.2, T.r, H)), box(6, 2, 10, T.x + 1.5, H + 1, T.z)]), darkM);
