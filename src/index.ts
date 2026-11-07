@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { createPool, migrate, startEmbedded } from './db.js';
 import { seed } from './seed.js';
 import { buildApp } from './server.js';
+import { grantFounderCar } from './game.js';
 
 async function main() {
   let url = config.databaseUrl;
@@ -15,6 +16,7 @@ async function main() {
   const db = createPool(url);
   await migrate(db, console.log);
   await seed(db, { demo: config.seedDemo, log: console.log });
+  await grantFounderCar(db);
   const app = await buildApp(db, { logger: config.production });
   await app.listen({ port: config.port, host: config.host });
   console.log(`Mahalla: http://localhost:${config.port}`);

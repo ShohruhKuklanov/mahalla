@@ -165,3 +165,33 @@ export function accrued(incomePerDay: number, readyAt: Date, from: Date, now: Da
   const secs = Math.min((now.getTime() - start) / 1000, capDays * daySeconds);
   return Math.floor((incomePerDay * secs) / daySeconds);
 }
+
+// ---------- cars: one model (Chevrolet Tracker), any colour, Uzbek plates ----------
+export const CAR = {
+  price: 5000,          // the car, in the colour of your choice
+  repaint: 300,         // a new colour later
+  plate: { random: 0, standard: 500, custom: 2000 },
+  plateChangeRandom: 100,
+  regions: ['01', '10', '20', '25', '30', '40', '50', '60', '70', '75', '80', '85', '90', '95'],
+};
+export type PlateKind = 'random' | 'standard' | 'custom';
+const STD_PLATE = /^[A-Z][0-9]{3}[A-Z]{2}$/;          // personal cars: Y 095 AB
+export function normalizePlate(kind: PlateKind, region: string, text: string | undefined):
+  { region: string; text: string | null; kind: 'standard' | 'custom' } | { code: string; error: string } {
+  if (!CAR.regions.includes(region)) return { code: 'bad_region', error: 'Viloyat kodi noto‘g‘ri.' };
+  if (kind === 'random') return { region, text: null, kind: 'standard' };
+  const t = String(text ?? '').toUpperCase().replace(/[\s-]/g, '');
+  if (kind === 'standard'){
+    if (!STD_PLATE.test(t)) return { code: 'bad_plate', error: 'Raqam shakli: harf, 3 ta raqam, 2 ta harf (masalan, Y 095 AB).' };
+    return { region, text: t, kind: 'standard' };
+  }
+  if (!/^[A-Z0-9]{1,8}$/.test(t)) return { code: 'bad_plate', error: 'Yozuvda 1–8 ta lotin harfi yoki raqam bo‘lsin.' };
+  if (!/[A-Z]/.test(t) && t.length < 3) return { code: 'bad_plate', error: 'Yozuv juda qisqa.' };
+  return { region, text: t, kind: 'custom' };
+}
+export const plateCost = (kind: PlateKind) => CAR.plate[kind];
+export function randomPlateText(rnd: () => number = Math.random) {
+  const L = 'ABCDEFGHIJKLMNOPQRSTUVXYZ', l = () => L[Math.floor(rnd() * L.length)];
+  return l() + String(Math.floor(rnd() * 1000)).padStart(3, '0') + l() + l();
+}
+export const isHexColor = (c: string) => /^#[0-9a-f]{6}$/.test(c);

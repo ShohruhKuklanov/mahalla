@@ -366,3 +366,66 @@ test('rate limit protects login', async () => {
   assert.ok(codes.includes(429));
   await limited.close();
 });
+
+test('cars: buy one Tracker, any colour, random / chosen / custom plates, unique plates, changes are charged', async () => {
+  const a = await player('driver1'), b = await player('driver2'), c = await player('driver3');
+  // a: random plate, free
+  let r = await a.call('POST', '/api/car/buy', { color: '#C0392B', plate: { kind: 'random', region: '01' } });
+  assert.equal(r.statusCode, 200, r.body);
+  assert.equal(r.json().cost, 5000);
+  assert.match(r.json().car.plate.text, /^[A-Z][0-9]{3}[A-Z]{2}$/);
+  assert.equal(r.json().car.color, '#c0392b');
+  assert.equal((await a.me()).balance, 5000);
+  assert.equal((await a.me()).car.plate.region, '01');
+  // one car each
+  r = await a.call('POST', '/api/car/buy', { color: '#ffffff', plate: { kind: 'random', region: '01' } });
+  assert.equal(r.json().error, 'already_have_car');
+  // b: chosen standard plate (+500), spaces and lower case are fine
+  r = await b.call('POST', '/api/car/buy', { color: '#1f6fb2', plate: { kind: 'standard', region: '10', text: 'a 777 aa' } });
+  assert.equal(r.statusCode, 200, r.body);
+  assert.equal(r.json().cost, 5500);
+  assert.deepEqual(r.json().car.plate, { region: '10', text: 'A777AA', kind: 'standard' });
+  // the same plate is taken for c; availability check says so
+  assert.equal((await c.call('GET', '/api/car/plate?kind=standard&region=10&text=A777AA')).json().ok, false);
+  assert.equal((await c.call('GET', '/api/car/plate?kind=standard&region=20&text=A777AA')).json().ok, true);
+  r = await c.call('POST', '/api/car/buy', { color: '#000000', plate: { kind: 'standard', region: '10', text: 'A777AA' } });
+  assert.equal(r.json().error, 'plate_taken');
+  assert.equal((await c.me()).balance, 10000);
+  // bad formats, bad colours, blocked words
+  assert.equal((await c.call('POST', '/api/car/buy', { color: '#000000', plate: { kind: 'standard', region: '10', text: '777' } })).json().error, 'bad_plate');
+  assert.equal((await c.call('POST', '/api/car/buy', { color: '#000000', plate: { kind: 'custom', region: '33', text: 'SALOM' } })).json().error, 'bad_region');
+  assert.equal((await c.call('POST', '/api/car/buy', { color: 'red', plate: { kind: 'random', region: '01' } })).json().error, 'bad_color');
+  assert.equal((await c.call('POST', '/api/car/buy', { color: '#000000', plate: { kind: 'custom', region: '01', text: 'AHMOQ' } })).json().error, 'plate_blocked');
+  // c: custom inscription (+2000)
+  r = await c.call('POST', '/api/car/buy', { color: '#000000', plate: { kind: 'custom', region: '01', text: 'Mahalla' } });
+  assert.equal(r.statusCode, 200, r.body);
+  assert.equal(r.json().cost, 7000);
+  assert.deepEqual(r.json().car.plate, { region: '01', text: 'MAHALLA', kind: 'custom' });
+  // changes: colour 300, chosen plate 500, nothing changed = free
+  r = await b.call('POST', '/api/car/update', { color: '#ffffff' });
+  assert.equal(r.json().cost, 300);
+  r = await b.call('POST', '/api/car/update', { color: '#ffffff', plate: { kind: 'standard', region: '10', text: 'A777AA' } });
+  assert.equal(r.json().cost, 0);
+  r = await b.call('POST', '/api/car/update', { plate: { kind: 'custom', region: '01', text: 'MAHALLA' } });
+  assert.equal(r.json().error, 'plate_taken');
+  r = await b.call('POST', '/api/car/update', { plate: { kind: 'standard', region: '90', text: 'B001BB' } });
+  assert.equal(r.json().cost, 500);
+  assert.equal((await b.me()).balance, 10000 - 5500 - 300 - 500);
+  // everyone sees the cars in the city
+  const cars = (await city()).cars;
+  assert.ok(cars.some((x: any) => x.owner.nickname === 'driver2' && x.plate.text === 'B001BB' && x.color === '#ffffff'));
+  assert.deepEqual(await ledgerMismatches(db), []);
+});
+
+test('cars: the same buy sent twice charges once; the founder keeps the white Tracker 90 Y 095 AB', async () => {
+  const a = await player('driver4');
+  const key = crypto.randomUUID();
+  const [r1, r2] = await Promise.all([1, 2].map(() => a.call('POST', '/api/car/buy', { color: '#2b2f36', plate: { kind: 'random', region: '30' } }, { 'idempotency-key': key })));
+  assert.equal(r1.statusCode, 200, r1.body); assert.equal(r2.statusCode, 200, r2.body);
+  assert.equal((await a.me()).balance, 5000);
+  const f = await player('founder', 'shohruh.97');
+  const car = (await f.me()).car;
+  assert.deepEqual(car.plate, { region: '90', text: 'Y095AB', kind: 'standard' });
+  assert.equal(car.color, '#f2f3f1');
+  assert.equal((await f.me()).balance, 10000);
+});

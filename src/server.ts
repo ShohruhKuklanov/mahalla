@@ -12,7 +12,7 @@ import { AppError, E } from './errors.js';
 import { SESSION_COOKIE, SessionUser, createSession, destroySession, sessionUser, upsertIdentity, verifyTelegram } from './auth.js';
 import { checkNickname, isCleanText, suggestions } from './nickname.js';
 import * as game from './game.js';
-import { DISTRICTS, ZONES } from './economy.js';
+import { DISTRICTS, ZONES, CAR, normalizePlate } from './economy.js';
 
 declare module 'fastify' { interface FastifyRequest { user: SessionUser | null } }
 
@@ -101,18 +101,19 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
   // ---------- me ----------
   app.get('/api/me', async (req) => {
     const u = req.user; if (!u) throw E.auth();
-    const [w, plots, inc, eco, extra] = await Promise.all([
+    const [w, plots, inc, eco, extra, car] = await Promise.all([
       db.query('select balance from wallets where user_id = $1', [u.id]),
       db.query('select id from plots where owner_id = $1 order by id', [u.id]),
       game.pendingIncome(db, u.id),
       game.economy(db),
       db.query('select telegram_username, show_telegram from users where id = $1', [u.id]),
+      game.carOf(db, u.id),
     ]);
     return {
       telegram: extra.rows[0]?.telegram_username ?? null, showTelegram: extra.rows[0]?.show_telegram ?? true,
       id: u.id, nickname: u.nickname, role: u.role, status: u.status,
       balance: w.rows[0]?.balance ?? 0, plots: plots.rows.map((r) => r.id),
-      pending: inc.pending, dailyIncome: inc.dailyIncome, plotLimit: eco.plot_limit,
+      pending: inc.pending, dailyIncome: inc.dailyIncome, plotLimit: eco.plot_limit, car,
     };
   });
 
@@ -127,6 +128,7 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
       if (e.code === '23505') throw E.conflict('nickname_taken', 'Bu nik band. Boshqasini tanlang.', { suggestions: suggestions(chk.nick) });
       throw e;
     }
+    if (chk.lower === 'shohruh.97') await game.grantFounderCar(db);
     return { nickname: chk.nick };
   });
 
@@ -154,7 +156,7 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
     const eco = await game.economy(db);
     return {
       districts: DISTRICTS, zones: ZONES, // building types, styles, prices: the catalog block in index.html
-      economy: { plotLimit: eco.plot_limit, saleFee: eco.sale_fee, daySeconds: config.daySeconds },
+      economy: { plotLimit: eco.plot_limit, saleFee: eco.sale_fee, daySeconds: config.daySeconds, car: CAR },
       stats: { residents: (await db.query("select count(distinct p.owner_id)::int n from plots p join users u on u.id = p.owner_id where u.role <> 'bot'")).rows[0].n },
       ...(await game.cityView(db)),
     };
@@ -204,6 +206,29 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
     const id = plotId(req); const r = await game.unlist(db, req.user, id); await pushPlot(id); return r;
   });
   app.post('/api/plots/:id/like', async (req) => game.like(db, req.user, plotId(req)));
+
+  // ---------- cars ----------
+  const plateBody = z.object({ kind: z.enum(['random', 'standard', 'custom']), region: z.string().max(2), text: z.string().max(16).optional() });
+  const pushCar = async (userId: number) => { const c = await game.carOf(db, userId); if (c) broadcast({ type: 'car', car: c }); };
+  app.post('/api/car/buy', async (req) => {
+    const body = z.object({ color: z.string().max(7), plate: plateBody }).parse(req.body);
+    const r = await game.buyCar(db, req.user, body, idem(req));
+    if (req.user) await pushCar(req.user.id);
+    return r;
+  });
+  app.post('/api/car/update', async (req) => {
+    const body = z.object({ color: z.string().max(7).optional(), plate: plateBody.optional() }).parse(req.body);
+    const r = await game.updateCar(db, req.user, body, idem(req));
+    if (req.user) await pushCar(req.user.id);
+    return r;
+  });
+  app.get('/api/car/plate', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req) => {
+    const q = z.object({ kind: z.enum(['standard', 'custom']), region: z.string().max(2), text: z.string().max(16) }).parse(req.query);
+    const n = normalizePlate(q.kind, q.region, q.text);
+    if ('error' in n) return { ok: false, reason: n.error };
+    const free = await game.plateFree(db, n.region, n.text!, req.user?.id ?? 0);
+    return free ? { ok: true, text: n.text } : { ok: false, reason: 'Bu raqam band' };
+  });
 
   app.get('/api/users/:id', async (req) => {
     const id = z.coerce.number().int().parse((req.params as any).id);

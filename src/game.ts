@@ -4,7 +4,8 @@ import type { Db, Tx } from './db.js';
 import { tx } from './db.js';
 import { config } from './config.js';
 import { E } from './errors.js';
-import { ECONOMY_DEFAULTS, Economy, ZoneCode, landPrice, estimate, accrued, normalizeSpec, zonesOf, costOf, incomeOf, buildSecondsOf, isLandmark, } from './economy.js';
+import { ECONOMY_DEFAULTS, Economy, ZoneCode, landPrice, estimate, accrued, normalizeSpec, zonesOf, costOf, incomeOf, buildSecondsOf, isLandmark, CAR, PlateKind, normalizePlate, plateCost, randomPlateText, isHexColor } from './economy.js';
+import { isCleanText } from './nickname.js';
 import type { SessionUser } from './auth.js';
 
 // ---------- economy config (DB overrides, cached briefly) ----------
@@ -68,7 +69,7 @@ export async function allPlots(db: Db): Promise<PlotDTO[]> {
 export async function cityView(db: Db) {
   const [eco, occ, rows, total] = await Promise.all([economy(db), occupancy(db), db.query(PLOT_SQL + " where p.status <> 'empty' order by p.id"), db.query('select count(*)::int n from plots')]);
   const occ2: Record<number, number> = {}; for (const [k, v] of occ) occ2[k] = v;
-  return { total: total.rows[0].n as number, land: { occupancy: occ2, demandWeight: eco.demand_weight }, plots: rows.rows.map((r) => toDTO(r, occ, eco)) };
+  return { total: total.rows[0].n as number, land: { occupancy: occ2, demandWeight: eco.demand_weight }, plots: rows.rows.map((r) => toDTO(r, occ, eco)), cars: await allCars(db) };
 }
 export async function onePlot(db: Db | Tx, id: number): Promise<PlotDTO | null> {
   const [eco, occ, rows] = await Promise.all([economy(db), occupancy(db), db.query(PLOT_SQL + ' where p.id = $1', [id])]);
@@ -271,4 +272,102 @@ export async function ledgerMismatches(db: Db) {
     `select w.user_id, w.balance, coalesce(sum(t.amount),0)::bigint as ledger from wallets w
      left join transactions t on t.user_id = w.user_id group by w.user_id, w.balance
      having w.balance <> coalesce(sum(t.amount),0)`)).rows;
+}
+
+// ---------- cars ----------
+export interface CarDTO { owner: { id: number; nickname: string | null; telegram: string | null }; model: string; color: string; plate: { region: string; text: string; kind: string } }
+const CAR_SQL = `select c.*, u.nickname, case when u.show_telegram then u.telegram_username end as tg from cars c join users u on u.id = c.owner_id`;
+const carDTO = (r: any): CarDTO => ({ owner: { id: Number(r.owner_id), nickname: r.nickname, telegram: r.tg || null }, model: r.model, color: r.color, plate: { region: r.plate_region, text: r.plate_text, kind: r.plate_kind } });
+export async function allCars(db: Db | Tx): Promise<CarDTO[]> {
+  return (await db.query(CAR_SQL + " where u.status = 'active' order by c.id")).rows.map(carDTO);
+}
+export async function carOf(db: Db | Tx, userId: number): Promise<CarDTO | null> {
+  const r = (await db.query(CAR_SQL + ' where c.owner_id = $1', [userId])).rows[0];
+  return r ? carDTO(r) : null;
+}
+export async function plateFree(db: Db | Tx, region: string, text: string, exceptOwner = 0) {
+  return !(await db.query('select 1 from cars where plate_region = $1 and plate_text = $2 and owner_id <> $3', [region, text, exceptOwner])).rows.length;
+}
+async function pickRandomPlate(c: Tx, region: string) {
+  for (let i = 0; i < 50; i++){ const t = randomPlateText(); if (await plateFree(c, region, t)) return t; }
+  throw E.conflict('plate_taken', 'Bo‘sh raqam topilmadi, qayta urinib ko‘ring.');
+}
+function checkPlate(p: { kind: PlateKind; region: string; text?: string }) {
+  const n = normalizePlate(p.kind, p.region, p.text);
+  if ('error' in n) throw E.bad(n.code, n.error);
+  if (n.kind === 'custom' && n.text && !isCleanText(n.text)) throw E.bad('plate_blocked', 'Bu yozuvni qo‘yib bo‘lmaydi.');
+  return n;
+}
+const plateTaken = (e: any) => e && e.code === '23505' && String(e.constraint || '').includes('plate');
+
+export async function buyCar(db: Db, user: SessionUser | null, body: { color: string; plate: { kind: PlateKind; region: string; text?: string } }, key: string | null) {
+  const u = requirePlayer(user);
+  const color = String(body.color || '').toLowerCase();
+  if (!isHexColor(color)) throw E.bad('bad_color', 'Rang noto‘g‘ri.');
+  const n = checkPlate(body.plate);
+  const cost = CAR.price + plateCost(body.plate.kind);
+  try {
+    return await tx(db, async (c) => {
+      const bal = await lockWallets(c, [u.id]);
+      if (await alreadyDone(c, u.id, key)) return { replayed: true, car: await carOf(c, u.id) };
+      if ((await c.query('select 1 from cars where owner_id = $1', [u.id])).rows.length) throw E.conflict('already_have_car', 'Sizda mashina bor. Rangini yoki raqamini o‘zgartirishingiz mumkin.');
+      const text = n.text ?? await pickRandomPlate(c, n.region);
+      if (!(await plateFree(c, n.region, text))) throw E.conflict('plate_taken', 'Bu raqam band. Boshqasini tanlang.');
+      const have = bal.get(u.id) ?? 0;
+      if (have < cost) throw E.funds(cost - have);
+      const id = (await c.query('insert into cars(owner_id,color,plate_region,plate_text,plate_kind) values ($1,$2,$3,$4,$5) returning id', [u.id, color, n.region, text, n.kind])).rows[0].id;
+      const balance = await move(c, u.id, -cost, 'car_buy', 'car', Number(id), key);
+      return { replayed: false, cost, balance, car: await carOf(c, u.id) };
+    });
+  } catch (e) {
+    if (isUnique(e)) return { replayed: true, car: await carOf(db, u.id) };
+    if (plateTaken(e)) throw E.conflict('plate_taken', 'Bu raqam band. Boshqasini tanlang.');
+    if (e && (e as any).code === '23505') throw E.conflict('already_have_car', 'Sizda mashina bor.');
+    throw e;
+  }
+}
+export async function updateCar(db: Db, user: SessionUser | null, body: { color?: string; plate?: { kind: PlateKind; region: string; text?: string } }, key: string | null) {
+  const u = requirePlayer(user);
+  const color = body.color != null ? String(body.color).toLowerCase() : null;
+  if (color != null && !isHexColor(color)) throw E.bad('bad_color', 'Rang noto‘g‘ri.');
+  const n = body.plate ? checkPlate(body.plate) : null;
+  try {
+    return await tx(db, async (c) => {
+      const bal = await lockWallets(c, [u.id]);
+      if (await alreadyDone(c, u.id, key)) return { replayed: true, car: await carOf(c, u.id) };
+      const car = (await c.query('select * from cars where owner_id = $1 for update', [u.id])).rows[0];
+      if (!car) throw E.notFound('Sizda hali mashina yo‘q');
+      let cost = 0;
+      const newColor = color && color !== car.color ? color : null;
+      if (newColor) cost += CAR.repaint;
+      let plate: { region: string; text: string; kind: string } | null = null;
+      if (n && body.plate){
+        const text = n.text ?? await pickRandomPlate(c, n.region);
+        if (!(n.region === car.plate_region && text === car.plate_text)){
+          if (!(await plateFree(c, n.region, text, u.id))) throw E.conflict('plate_taken', 'Bu raqam band. Boshqasini tanlang.');
+          plate = { region: n.region, text, kind: n.kind };
+          cost += body.plate.kind === 'random' ? CAR.plateChangeRandom : plateCost(body.plate.kind);
+        }
+      }
+      if (!newColor && !plate) return { replayed: false, cost: 0, car: await carOf(c, u.id) };
+      const have = bal.get(u.id) ?? 0;
+      if (have < cost) throw E.funds(cost - have);
+      await c.query(`update cars set color = coalesce($2, color), plate_region = coalesce($3, plate_region), plate_text = coalesce($4, plate_text),
+                     plate_kind = coalesce($5, plate_kind), updated_at = now() where id = $1`, [car.id, newColor, plate?.region ?? null, plate?.text ?? null, plate?.kind ?? null]);
+      const balance = cost > 0 ? await move(c, u.id, -cost, 'car_change', 'car', Number(car.id), key) : bal.get(u.id);
+      return { replayed: false, cost, balance, car: await carOf(c, u.id) };
+    });
+  } catch (e) {
+    if (isUnique(e)) return { replayed: true, car: await carOf(db, u.id) };
+    if (plateTaken(e)) throw E.conflict('plate_taken', 'Bu raqam band. Boshqasini tanlang.');
+    throw e;
+  }
+}
+/** The founder's white Tracker (90 Y 095 AB) stays with shohruh.97, granted once, free. */
+export async function grantFounderCar(db: Db) {
+  await db.query(`insert into cars(owner_id,color,plate_region,plate_text,plate_kind)
+    select id, '#f2f3f1', '90', 'Y095AB', 'standard' from users
+    where (nickname_lower = 'shohruh.97' or lower(telegram_username) = 'shohruh.97') and status = 'active'
+    order by (nickname_lower = 'shohruh.97') desc limit 1
+    on conflict do nothing`);
 }
