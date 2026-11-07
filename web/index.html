@@ -771,6 +771,14 @@
    "cost": 80000,
    "income": 4000,
    "build": 460
+  },
+  "lm_hilton": {
+   "name": "Hilton Tashkent City",
+   "city": "Toshkent",
+   "realHeight": 95,
+   "cost": 30000,
+   "income": 1500,
+   "build": 240
   }
  }
 }
@@ -847,9 +855,6 @@ const CITY_S = Z0 + D + RD, COAST_Z = CITY_S + 120, CITY_N = Z0 - RD;
 const AIR = { z: CITY_N - 470, x0: -760, x1: 760 };
 // the car dealership (Mahalla Avtosalon): just outside the east edge of the city, on road row 13, facing the city
 const DEALER = { x0: X0 + W + RD, x1: X0 + W + RD + 64, z0: -34, z1: 34 };
-// the hotel (a tower on a lattice-clad podium, after Tashkent City's Hilton): between the city and the airport,
-// beside the airport road, its plaza facing the road
-const HOTEL = { x0: 13, x1: 113, z0: CITY_N - 134, z1: CITY_N - 22 };
 // ---------- the river ----------
 // Springs from a lake in the forest behind the mountains, runs through a gorge, across the plain, then through the city
 // along two road lines (so no plot moves): west→east on road row 9 up to the central park, then south past the park,
@@ -1418,6 +1423,7 @@ function lmGlass(key, uRep, vRep){
 // The shapes are modelled at a 0.15 design scale, then scaled up uniformly by LM_K (window tiles scale with them).
 const LM_DESIGN = 0.15, LM_K = CAT.landmarkScale / LM_DESIGN;
 function landmarkParts(key){
+  if (key==='lm_hilton') return hotelParts();
   const H = Math.round(CAT.landmarks[key].realHeight * LM_DESIGN), P = [], add = (m, mat) => P.push([m, mat, null]);
   const gl = (tint, r) => lmGlass(key, Math.max(4, Math.round(2*Math.PI*r/TILE_W*0.8)), H/(4*FLOOR_H)*1.6);
   if (key==='lm_burj'){
@@ -1476,6 +1482,88 @@ function landmarkParts(key){
   }
   for (const [m] of P){ m.scaling.scaleInPlace(LM_K); m.position.scaleInPlace(LM_K); m.bakeCurrentTransformIntoVertices(); }
   return { P, height: H*LM_K + 2 };
+}
+
+// ---- Hilton Tashkent City copy: a glass tower with rounded corners and two sweeping fins on each long face, on a
+// podium clad in a white lattice screen with a bowed, glazed front and an entrance canopy. Built in metres around the
+// block centre (front = local −x), half the real height like the other copies; thin-instanced like them.
+function hotelParts(){
+  const P = [], add = (m, mat) => { m.computeWorldMatrix(true); m.bakeCurrentTransformIntoVertices(); P.push([m, mat, null]); };
+  const T = { x: 3, z: 0, hx: 8.5, hz: 14, r: 4.5 }, PH = 8, G0 = 3.4, H = lmHeight('lm_hilton') + PH;
+  const PD = { xa: -15, xb: 19, za: -20.5, zb: 20.5, bulge: 3 };
+  const rr = (hx, hz, r, y, n = 8) => { const pts = [], C = [[T.x + hx - r, T.z + hz - r], [T.x - hx + r, T.z + hz - r], [T.x - hx + r, T.z - hz + r], [T.x + hx - r, T.z - hz + r]];
+    C.forEach(([px, pz], k) => { for (let i = 0; i <= n; i++){ const a = (k + i/n) * Math.PI/2; pts.push(new V3(px + r*Math.cos(a), y, pz + r*Math.sin(a))); } }); return pts; };
+  const podRing = (y, g = 0) => { const pts = [], n = 20;
+    for (let i = 0; i <= n; i++){ const t = i/n; pts.push(new V3(PD.xa - g - PD.bulge*Math.sin(Math.PI*t), y, lerp(PD.zb + g, PD.za - g, t))); }
+    for (const [x, z] of [[PD.xb + g - 2, PD.za - g], [PD.xb + g, PD.za - g + 2], [PD.xb + g, PD.zb + g - 2], [PD.xb + g - 2, PD.zb + g]]) pts.push(new V3(x, y, z)); return pts; };
+  const ringLen = r => r.reduce((s, p, i, a) => s + V3.Distance(p, a[(i + 1) % a.length]), 0);
+  const wall = (lo, hi) => B.MeshBuilder.CreateRibbon('htlW', { pathArray: [lo, hi], closePath: true, sideOrientation: B.Mesh.DOUBLESIDE }, scene);
+  const cap = ring => { const c = ring.reduce((a, p) => a.addInPlace(p), new V3(0,0,0)).scale(1/ring.length), pos = [c.x, c.y, c.z], idx = [];
+    ring.forEach((p, i) => { pos.push(p.x, p.y, p.z); idx.push(0, 1 + i, 1 + (i + 1) % ring.length); });
+    const uvs = []; for (let i = 0; i < pos.length; i += 3) uvs.push(pos[i]/10, pos[i + 2]/10);      // UVs too, so it merges with boxes
+    const m = new B.Mesh('htlCap', scene), vd = new B.VertexData(); vd.positions = pos; vd.indices = idx; vd.uvs = uvs; vd.normals = []; B.VertexData.ComputeNormals(pos, idx, vd.normals); vd.applyToMesh(m); return m; };
+  const tex = (name, w, h, draw) => { const d = new B.DynamicTexture(name + 'd', { width: w, height: h }, scene, true), e = new B.DynamicTexture(name + 'e', { width: w, height: h }, scene, true);
+    const a = d.getContext(), b = e.getContext(); b.fillStyle = '#000'; b.fillRect(0, 0, w, h); draw(a, b, w, h); d.update(true); e.update(true);
+    for (const t of [d, e]){ t.wrapU = t.wrapV = B.Texture.WRAP_ADDRESSMODE; t.anisotropicFilteringLevel = 8; } return { d, e }; };
+  // materials
+  const tg = tex('htlGlass', 256, 256, (a, b, w, h) => { const rows = 4, cols = 8, rh = h/rows, cw = w/cols;
+    for (let r = 0; r < rows; r++){ const g = a.createLinearGradient(0, r*rh, 0, (r + 1)*rh); g.addColorStop(0, '#c4d4e0'); g.addColorStop(0.75, '#8aa3b8'); g.addColorStop(1, '#6d879d'); a.fillStyle = g; a.fillRect(0, r*rh, w, rh); }
+    a.fillStyle = '#4c5b68'; for (let r = 0; r < rows; r++) a.fillRect(0, r*rh + rh - 7, w, 7);
+    a.fillStyle = '#c9d4dc'; for (let c = 0; c < cols; c++) a.fillRect(c*cw, 0, 1.5, h);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (rnd() < 0.32){ b.fillStyle = rnd() < 0.85 ? '#ffc778' : '#cfe0ff'; b.fillRect(c*cw + 2, r*rh + 4, cw - 4, rh - 13); } });
+  tg.d.uScale = tg.e.uScale = ringLen(rr(T.hx, T.hz, T.r, 0))/6; tg.d.vScale = tg.e.vScale = (H - PH)/(4*FLOOR_H);
+  const glassM = stdMat('htlGlassM', { dt: tg.d, et: tg.e, spec: new C3(.8,.84,.9), power: 140 }); glassM.emissiveColor = hex('#9fb6c9').scale(0.2); nightMats.push(glassM);
+  const lt = tex('htlLattice', 256, 128, (a, b, w, h) => { a.fillStyle = '#9da3a9'; a.fillRect(0, 0, w, h); a.strokeStyle = '#f7f5f0'; a.lineWidth = 7;
+    for (let i = -2; i < 10; i++){ a.beginPath(); a.moveTo(i*32, 0); a.lineTo(i*32 + 64, h); a.moveTo(i*32 + 64, 0); a.lineTo(i*32, h); a.stroke(); }
+    a.lineWidth = 3; for (let i = 0; i < 8; i++) for (let j = 0; j < 4; j++){ a.beginPath(); a.arc(i*32 + 16, j*32 + 16, 7, 0, 6.29); a.stroke(); }
+    b.fillStyle = '#ffd38a'; for (let i = 0; i < 8; i++) for (let j = 0; j < 4; j++) if ((i + j) % 2 === 0) b.fillRect(i*32 + 14, j*32 + 14, 4, 4); });
+  lt.d.uScale = lt.e.uScale = ringLen(podRing(0, 0.8))/10; lt.d.vScale = lt.e.vScale = (PH - G0)/5;
+  const latM = stdMat('htlLatM', { dt: lt.d, et: lt.e, spec: new C3(.2,.2,.2), power: 30 }); latM.emissiveColor = hex('#f1ede6').scale(0.15); nightMats.push(latM);
+  const sg = tex('htlShop', 256, 64, (a, b, w, h) => { const g = a.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#5f7487'); g.addColorStop(1, '#2b3946'); a.fillStyle = g; a.fillRect(0, 0, w, h);
+    a.fillStyle = '#c8cdd2'; for (let c = 0; c < 8; c++) a.fillRect(c*32, 0, 2, h); a.fillRect(0, 0, w, 3);
+    b.fillStyle = '#ffd28c'; b.fillRect(0, 6, w, h - 8); b.fillStyle = '#000'; for (let c = 0; c < 8; c++) b.fillRect(c*32, 0, 3, h); });
+  sg.d.uScale = sg.e.uScale = ringLen(podRing(0))/4;
+  const shopM = stdMat('htlShopM', { dt: sg.d, et: sg.e, spec: new C3(.7,.7,.7), power: 120 }); nightMats.push(shopM);
+  const whiteM = stdMat('htlWhite', { diffuse: hex('#efede8'), spec: new C3(.25,.25,.25), power: 40 });
+  const darkM = stdMat('htlDark', { diffuse: hex('#2c3238'), spec: new C3(.5,.5,.5), power: 80 });
+  const finM = stdMat('htlFin', { diffuse: hex('#d7dde2'), spec: new C3(1,1,1), power: 120 }); finM.emissiveColor = hex('#cfd9e3').scale(0.2);
+  const lg = tex('htlLed', 16, 16, (a, b) => { a.fillStyle = '#3b4d63'; a.fillRect(0, 0, 16, 16); b.fillStyle = '#4f7dff'; b.fillRect(0, 0, 16, 16); });
+  const ledM = stdMat('htlLedM', { dt: lg.d, et: lg.e, spec: new C3(.5,.5,.5), power: 60 }); nightMats.push(ledM);
+  // podium: glazed ground floor, white soffit, lattice screen, roof and parapet
+  add(wall(podRing(0), podRing(G0)), shopM);
+  add(wall(podRing(G0, 0.8), podRing(G0, 0)), whiteM);
+  add(wall(podRing(G0, 0.8), podRing(PH, 0.8)), latM);
+  add(cap(podRing(PH, 0.8)), whiteM);
+  add(wall(podRing(PH, 0.8), podRing(PH + 0.5, 0.8)), whiteM);
+  // entrance canopy on the bowed front, with three slim columns
+  { const out = [], inn = []; for (let i = 0; i <= 12; i++){ const t = 0.3 + 0.4*i/12, z = lerp(PD.zb, PD.za, t), x = PD.xa - PD.bulge*Math.sin(Math.PI*t); out.push(new V3(x - 3.5, G0 - 0.2, z)); inn.push(new V3(x, G0 - 0.2, z)); }
+    add(B.MeshBuilder.CreateRibbon('htlCan', { pathArray: [out, inn], sideOrientation: B.Mesh.DOUBLESIDE }, scene), whiteM);
+    const cols = []; for (const t of [0.34, 0.5, 0.66]) cols.push(box(0.25, G0 - 0.2, 0.25, PD.xa - PD.bulge*Math.sin(Math.PI*t) - 3.2, (G0 - 0.2)/2, lerp(PD.zb, PD.za, t)));
+    add(merge(cols), darkM); }
+  // tower: glass shaft, LED line, dark crown, roof, plant
+  add(wall(rr(T.hx, T.hz, T.r, PH), rr(T.hx, T.hz, T.r, H - 3)), glassM);
+  add(wall(rr(T.hx + 0.1, T.hz + 0.1, T.r, H - 3), rr(T.hx + 0.1, T.hz + 0.1, T.r, H - 2.6)), ledM);
+  add(wall(rr(T.hx + 0.2, T.hz + 0.2, T.r, H - 2.6), rr(T.hx + 0.2, T.hz + 0.2, T.r, H)), darkM);
+  add(merge([cap(rr(T.hx + 0.2, T.hz + 0.2, T.r, H)), box(6, 2, 10, T.x + 1.5, H + 1, T.z)]), darkM);
+  // the fins: leave the crown close together, bow out towards mid-height, meet the podium near the middle
+  const fins = [];
+  for (const [fi, x] of [[0, T.x - T.hx - 0.25], [1, T.x + T.hx + 0.25]]) for (const sd of [-1, 1]){
+    const path = []; for (let i = 0; i <= 32; i++){ const t = i/32, y = lerp(H - 3, PH + 0.3, t), w = 2 + 7.2*Math.pow(Math.sin(Math.PI*(0.12 + 0.82*t)), 1.1) - 3.4*t*t;
+      path.push(new V3(x + (fi ? 1 : -1)*0.4*Math.sin(Math.PI*t), y, T.z + sd*w)); }
+    fins.push(B.MeshBuilder.CreateTube('htlFin', { path, radius: 0.22, tessellation: 6, cap: B.Mesh.CAP_ALL }, scene));
+  }
+  add(merge(fins), finM);
+  // HOTEL signs: crown (front) and over the entrance
+  const signM = (() => { const t = new B.DynamicTexture('htlSign', { width: 512, height: 128 }, scene, true), g = t.getContext();
+    g.fillStyle = '#2c3238'; g.fillRect(0, 0, 512, 128); g.fillStyle = '#ffffff'; g.font = 'bold 84px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('HOTEL', 256, 70); t.update();
+    return stdMat('htlSignM', { diffuse: new C3(1,1,1), dt: t, emissive: new C3(.55,.55,.55) }); })();
+  const s1 = B.MeshBuilder.CreatePlane('htlS1', { width: 8, height: 2 }, scene); s1.position.set(T.x - T.hx - 0.25, H - 1.3, T.z); s1.rotation.y = Math.PI/2;
+  const s2 = B.MeshBuilder.CreatePlane('htlS2', { width: 6, height: 1.5 }, scene); s2.position.set(PD.xa - PD.bulge - 0.85, G0 + 2.2, 0); s2.rotation.y = Math.PI/2;
+  for (const m of [s1, s2]){ m.computeWorldMatrix(true); m.bakeCurrentTransformIntoVertices(); }
+  add(merge([s1, s2]), signM);
+  // a reflecting pool in front
+  add(box(5, 0.2, 18, PD.xa - 9, 0.1, 0), mats.water);
+  return { P, height: H + 2 };
 }
 
 // ---- variants: one set of thin-instanced meshes per (type, style, floors, roof) or per landmark ----
@@ -1614,7 +1702,6 @@ for (let i=0;i<1400;i++){
   if (Math.abs(x) > 2600 && rnd() < 0.6) continue;
   if (distToRiver(x, z) < 45) continue;
   if (x > DEALER.x0 - 8 && x < DEALER.x1 + 12 && z > DEALER.z0 - 12 && z < DEALER.z1 + 12) continue;   // the dealership lot
-  if (x > HOTEL.x0 - 8 && x < HOTEL.x1 + 14 && z > HOTEL.z0 - 14 && z < HOTEL.z1 + 14) continue;      // the hotel
   addTree(x, z, 0.9+rnd()*0.9, rnd() < 0.25 ? 'poplar' : rnd() < 0.2 ? 'pine' : 'broad');
 }
 flushTrees();
@@ -2308,112 +2395,6 @@ const CAR_MODELS = {
            specs: [['Dvigatel', '4.0 V8 biturbo'], ['Uzunligi', '4,73 m'], ['Klirens', '12 sm'], ['O‘rindiq', '2 ta']], snapR: 6.7,
            ready: () => !!GTP_TPL, load: () => gtProLoad(), make: dto => makeCar(dto, gtProTemplate) },
 };
-// ---------- the hotel: a 26-storey glass tower with rounded corners and two sweeping fins on each long face,
-// on a long podium clad in a white lattice screen, with a plaza, pool and trees towards the city ----------
-const HTL = (() => {
-  const { x0, x1, z0, z1 } = HOTEL, cz = (z0 + z1)/2;
-  const T = { x: x0 + 58, z: cz, hx: 13, hz: 21, r: 7, h: 96 };            // tower: 26 × 42 m, 96 m
-  const PD = { xa: x0 + 26, xb: x1 - 6, za: z0 + 8, zb: z1 - 8, h: 15, bulge: 7 };   // podium
-  const parts = [];
-  const rr = (cx, cz, hx, hz, r, y, n = 10) => {                           // rounded-rectangle outline
-    const pts = [], C = [[cx + hx - r, cz + hz - r], [cx - hx + r, cz + hz - r], [cx - hx + r, cz - hz + r], [cx + hx - r, cz - hz + r]];
-    C.forEach(([px, pz], k) => { for (let i = 0; i <= n; i++){ const a = (k + i/n) * Math.PI/2; pts.push(new V3(px + r*Math.cos(a), y, pz + r*Math.sin(a))); } });
-    return pts;
-  };
-  // a lofted wall between two outlines + a flat cap
-  const wall = (name, lo, hi, mat) => { const m = B.MeshBuilder.CreateRibbon(name, { pathArray: [lo, hi], closePath: true, sideOrientation: B.Mesh.DOUBLESIDE }, scene); m.material = mat; m.receiveShadows = true; m.isPickable = false; parts.push(m); return m; };
-  const cap = (name, ring, mat) => {
-    const c = ring.reduce((a, p) => a.addInPlace(p), new V3(0,0,0)).scale(1/ring.length), pos = [c.x, c.y, c.z], idx = [];
-    ring.forEach((p, i) => { pos.push(p.x, p.y, p.z); const j = 1 + (i + 1) % ring.length; idx.push(0, 1 + i, j); });   // wound to face up
-    const m = new B.Mesh(name, scene), vd = new B.VertexData(); vd.positions = pos; vd.indices = idx; vd.normals = []; B.VertexData.ComputeNormals(pos, idx, vd.normals); vd.applyToMesh(m);
-    m.material = mat; m.receiveShadows = true; m.isPickable = false; return m;
-  };
-  const tex = (name, w, h, draw) => { const d = new B.DynamicTexture(name + 'd', { width: w, height: h }, scene, true), e = new B.DynamicTexture(name + 'e', { width: w, height: h }, scene, true);
-    const a = d.getContext(), b = e.getContext(); b.fillStyle = '#000'; b.fillRect(0, 0, w, h); draw(a, b, w, h); d.update(true); e.update(true);
-    for (const t of [d, e]){ t.wrapU = t.wrapV = B.Texture.WRAP_ADDRESSMODE; t.anisotropicFilteringLevel = 8; } return { d, e }; };
-  // tower glass: blue-grey reflective curtain wall, thin spandrel at each floor, warm rooms lit at night
-  const tg = tex('htlGlass', 256, 256, (a, b, w, h) => {
-    const rows = 4, cols = 8, rh = h/rows, cw = w/cols;
-    for (let r = 0; r < rows; r++){ const g = a.createLinearGradient(0, r*rh, 0, (r + 1)*rh); g.addColorStop(0, '#c4d4e0'); g.addColorStop(0.75, '#8aa3b8'); g.addColorStop(1, '#6d879d'); a.fillStyle = g; a.fillRect(0, r*rh, w, rh); }
-    a.fillStyle = '#4c5b68'; for (let r = 0; r < rows; r++) a.fillRect(0, r*rh + rh - 7, w, 7);
-    a.fillStyle = '#c9d4dc'; for (let c = 0; c < cols; c++) a.fillRect(c*cw, 0, 1.5, h);
-    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (Math.random() < 0.32){ b.fillStyle = Math.random() < 0.85 ? '#ffc778' : '#cfe0ff'; b.fillRect(c*cw + 2, r*rh + 4, cw*(Math.random() < 0.5 ? 1 : 2) - 4, rh - 15); }
-  });
-  const perim = 2*(2*T.hx + 2*T.hz) - (8 - 2*Math.PI)*T.r;
-  tg.d.uScale = tg.e.uScale = perim/12; tg.d.vScale = tg.e.vScale = 26/4;
-  const glassM = stdMat('htlGlassM', { dt: tg.d, et: tg.e, spec: new C3(.8,.84,.9), power: 140 }); glassM.emissiveColor = hex('#9fb6c9').scale(0.2); nightMats.push(glassM);
-  const pod = { y0: 5.5, y1: PD.h };
-  // podium lattice: a white perforated screen with a repeating star/lozenge pattern, little warm lights behind it at night
-  const lt = tex('htlLattice', 256, 128, (a, b, w, h) => {
-    a.fillStyle = '#9da3a9'; a.fillRect(0, 0, w, h);
-    a.strokeStyle = '#f7f5f0'; a.lineWidth = 7;
-    for (let i = -2; i < 10; i++){ a.beginPath(); a.moveTo(i*32, 0); a.lineTo(i*32 + 64, h); a.moveTo(i*32 + 64, 0); a.lineTo(i*32, h); a.stroke(); }
-    a.lineWidth = 3; for (let i = 0; i < 8; i++) for (let j = 0; j < 4; j++){ a.beginPath(); a.arc(i*32 + 16, j*32 + 16, 7, 0, 6.29); a.stroke(); }
-    b.fillStyle = '#ffd38a'; for (let i = 0; i < 8; i++) for (let j = 0; j < 4; j++) if ((i + j) % 2 === 0) b.fillRect(i*32 + 14, j*32 + 14, 4, 4);
-  });
-  const latM = stdMat('htlLatM', { dt: lt.d, et: lt.e, spec: new C3(.2,.2,.2), power: 30 }); latM.emissiveColor = hex('#f1ede6').scale(0.15); nightMats.push(latM);
-  const gl = tex('htlShop', 256, 64, (a, b, w, h) => {
-    const g = a.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#5f7487'); g.addColorStop(1, '#2b3946'); a.fillStyle = g; a.fillRect(0, 0, w, h);
-    a.fillStyle = '#c8cdd2'; for (let c = 0; c < 8; c++) a.fillRect(c*32, 0, 2, h); a.fillRect(0, 0, w, 3);
-    b.fillStyle = '#ffd28c'; b.fillRect(0, 6, w, h - 8); b.fillStyle = '#000'; for (let c = 0; c < 8; c++) b.fillRect(c*32, 0, 3, h);
-  });
-  const shopM = stdMat('htlShopM', { dt: gl.d, et: gl.e, spec: new C3(.7,.7,.7), power: 120 }); nightMats.push(shopM);
-  const whiteM = stdMat('htlWhite', { diffuse: hex('#efede8'), spec: new C3(.25,.25,.25), power: 40 });
-  const darkM = stdMat('htlDark', { diffuse: hex('#2c3238'), spec: new C3(.5,.5,.5), power: 80 });
-  const finM = stdMat('htlFin', { diffuse: hex('#d7dde2'), spec: new C3(1,1,1), power: 120 }); finM.emissiveColor = hex('#cfd9e3').scale(0.2);
-  const ledT = tex('htlLed', 16, 16, (a, b, w, h) => { a.fillStyle = '#3b4d63'; a.fillRect(0, 0, w, h); b.fillStyle = '#4f7dff'; b.fillRect(0, 0, w, h); });
-  const ledM = stdMat('htlLedM', { dt: ledT.d, et: ledT.e, spec: new C3(.5,.5,.5), power: 60 }); nightMats.push(ledM);
-  // podium outline: a long rounded box whose west (city) side bows out in a shallow arc
-  const podRing = (y, grow = 0) => {
-    const pts = [], n = 28, xa = PD.xa - grow, xb = PD.xb + grow, za = PD.za - grow, zb = PD.zb + grow;
-    for (let i = 0; i <= n; i++){ const t = i/n, z = lerp(zb, za, t); pts.push(new V3(xa - PD.bulge*Math.sin(Math.PI*t), y, z)); }
-    for (const [x, z] of [[xb - 4, za], [xb, za + 4], [xb, zb - 4], [xb - 4, zb]]) pts.push(new V3(x, y, z));
-    return pts;
-  };
-  const glassBand = wall('htlPodGlass', podRing(0.1), podRing(pod.y0), shopM);
-  const ringLen = podRing(0).reduce((s, p, i, a) => s + V3.Distance(p, a[(i + 1) % a.length]), 0);
-  gl.d.uScale = gl.e.uScale = ringLen/24; 
-  wall('htlPodSoffit', podRing(pod.y0, 1.2), podRing(pod.y0, 0), whiteM);
-  wall('htlPodLat', podRing(pod.y0, 1.2), podRing(pod.y1, 1.2), latM);
-  lt.d.uScale = lt.e.uScale = ringLen/14; lt.d.vScale = lt.e.vScale = (pod.y1 - pod.y0)/7;
-  parts.push(cap('htlPodRoof', podRing(pod.y1, 1.2), whiteM));
-  wall('htlPodParapet', podRing(pod.y1, 1.2), podRing(pod.y1 + 0.8, 1.2), whiteM);
-  // entrance: a long white canopy along the bowed front and a glazed lobby box in front of it
-  const cy = 5.2, canopy = []; for (let i = 0; i <= 16; i++){ const t = 0.32 + 0.36*i/16, z = lerp(PD.zb, PD.za, t); canopy.push(new V3(PD.xa - PD.bulge*Math.sin(Math.PI*t) - 6, cy, z)); }
-  const canIn = canopy.map(p => new V3(p.x + 6, cy, p.z));
-  B.MeshBuilder.CreateRibbon('htlCanopy', { pathArray: [canopy, canIn], sideOrientation: B.Mesh.DOUBLESIDE }, scene).material = whiteM;
-  for (const t of [0.34, 0.5, 0.66]){ const z = lerp(PD.zb, PD.za, t), x = PD.xa - PD.bulge*Math.sin(Math.PI*t) - 5.5; const c = box(0.35, cy, 0.35, x, cy/2, z); c.material = darkM; }
-  // the tower: glass shaft from the podium roof, a recessed dark crown, LED edge line, roof plant
-  const H0 = pod.y1, H1 = T.h;
-  wall('htlTower', rr(T.x, T.z, T.hx, T.hz, T.r, H0), rr(T.x, T.z, T.hx, T.hz, T.r, H1 - 5), glassM);
-  wall('htlLed1', rr(T.x, T.z, T.hx + 0.12, T.hz + 0.12, T.r, H1 - 5), rr(T.x, T.z, T.hx + 0.12, T.hz + 0.12, T.r, H1 - 4.5), ledM);
-  wall('htlCrown', rr(T.x, T.z, T.hx + 0.25, T.hz + 0.25, T.r, H1 - 4.5), rr(T.x, T.z, T.hx + 0.25, T.hz + 0.25, T.r, H1), darkM);
-  parts.push(cap('htlRoof', rr(T.x, T.z, T.hx + 0.25, T.hz + 0.25, T.r, H1), darkM));
-  const plant = box(10, 3, 18, T.x + 3, H1 + 1.5, T.z); plant.material = darkM; parts.push(plant);
-  // sign on the crown (west face) and over the entrance
-  const sign = (name, w, h, text, k) => { const t = new B.DynamicTexture(name, { width: 1024, height: Math.round(1024*h/w) }, scene, true), g = t.getContext(), TH = Math.round(1024*h/w);
-    g.fillStyle = '#2c3238'; g.fillRect(0, 0, 1024, TH); g.fillStyle = '#ffffff'; g.font = `bold ${TH*k}px Georgia, serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 512, TH*0.55); t.update();
-    const m = stdMat(name + 'M', { diffuse: new C3(1,1,1), dt: t, emissive: new C3(.55,.55,.55) }); const p = B.MeshBuilder.CreatePlane(name + 'P', { width: w, height: h }, scene); p.material = m; p.isPickable = false; return p; };
-  const s1 = sign('htlSign', 16, 3.2, 'HOTEL', 0.7); s1.position.set(T.x - T.hx - 0.3, H1 - 2.3, T.z); s1.rotation.y = Math.PI/2;
-  const s2 = sign('htlSign2', 10, 1.4, 'HOTEL', 0.75); s2.position.set(PD.xa - PD.bulge - 1.25, pod.y0 + 3.2, cz); s2.rotation.y = Math.PI/2;
-  // the two sweeping fins on each long face: they leave the crown close together and bow outwards towards the base
-  const fx = [T.x - T.hx - 0.35, T.x + T.hx + 0.35];
-  for (const [fi, x] of fx.entries()) for (const sd of [-1, 1]){
-    const path = []; for (let i = 0; i <= 40; i++){ const t = i/40, y = lerp(H1 - 5, H0 + 0.5, t); const w = 3 + 10.5*Math.pow(Math.sin(Math.PI*(0.12 + 0.82*t)), 1.1) - 5*t*t; path.push(new V3(x + (fi ? 1 : -1)*0.6*Math.sin(Math.PI*t), y, T.z + sd*w)); }
-    const f = B.MeshBuilder.CreateTube('htlFin', { path, radius: 0.32, tessellation: 6, cap: B.Mesh.CAP_ALL }, scene); f.material = finM; f.isPickable = false; parts.push(f);
-  }
-  // plaza towards the city: paving, a long reflecting pool, a white tensile shade and trees
-  flatBox('htlPlaza', x0, x1, z0, z1, 0, 0.2, stdMat('htlPave', { dt: noiseTex('htlp', '#c9c4ba', 0.07, 128, 2) }));
-  const pool = box(12, 0.1, 44, x0 + 9, 0.24, cz - 26); pool.material = mats.water;
-  const rim = box(13, 0.1, 45, x0 + 9, 0.21, cz - 26); rim.material = whiteM;
-  const sail = B.MeshBuilder.CreateRibbon('htlSail', { pathArray: [[new V3(x0 + 6, 5.5, cz + 22), new V3(x0 + 11, 3.2, cz + 26), new V3(x0 + 16, 5.5, cz + 30)], [new V3(x0 + 6, 3.2, cz + 30), new V3(x0 + 11, 4.6, cz + 26), new V3(x0 + 16, 3.2, cz + 22)]], sideOrientation: B.Mesh.DOUBLESIDE }, scene);
-  sail.material = whiteM;
-  for (const [x, z] of [[x0 + 6, cz + 22], [x0 + 16, cz + 30], [x0 + 6, cz + 30], [x0 + 16, cz + 22]]){ const m = box(0.18, 5.6, 0.18, x, 2.8, z); m.material = darkM; }
-  for (let z = z0 + 6; z < z1 - 4; z += 9) addTree(x0 + 2.5, z, 0.7, 'broad');
-  for (let z = cz - 50; z < cz + 50; z += 12) if (Math.abs(z - cz) > 14) addTree(x0 + 20, z, 0.55, 'poplar');
-  flushTrees();
-  return { casters: () => parts, center: new V3(T.x, 0, T.z) };
-})();
 /** a model that streams in (a .glb): false until its template is loaded (and starts the load) */
 const modelReady = m => { const M = CAR_MODELS[m] || CAR_MODELS.tracker; if (!M.ready || M.ready()) return true; M.load(); return false; };
 const modelPrice = m => { const sv = API.on && API.city && API.city.economy && API.city.economy.car && API.city.economy.car.models; return (sv && sv[m] && sv[m].price) || CAR_MODELS[m].price; };
@@ -3528,8 +3509,8 @@ function populateDemo(){
   }
   { const p = plots.find(q => { if (q.zone!=='res' || q.state!=='empty' || (q.id % 16) % 4 !== 0 || Math.floor((q.id % 16)/4) !== 1) return false; const rz = blockZ(Math.floor((q.z - Z0)/PITCH)) - RD/2; return !onRiverRoad(q.x, rz) && !inPark(q.x, rz); });   // a house on a block's street side
     if (p){ Object.assign(p, { state:'owned', owner:'shohruh.97', tpl:'house', style:'modern', floors:2, roof:'gable', color:'#f1ece2', accent:'#9c4a32', rot:0, likes: 21 }); addBuilding(p, false); } }
-  // the 10 landmark copies around the park, owned by the city and for sale (same rule as the server's seed)
-  // the 10 skyscraper copies, each alone in a free block around the park (same rule as the server's landmarkBlocks)
+  // the landmark copies around the park, owned by the city and for sale (same rule as the server's seed)
+  // the skyscraper copies (and the Hilton), each alone in a free block around the park (same rule as the server's landmarkBlocks)
   const freeBlocks = [];
   for (let b = 0; b + 16 <= plots.length; b += 16){
     const ps = plots.slice(b, b+16);
@@ -3636,8 +3617,6 @@ const PLACES = [
     view:{ x:-450, z:COAST_Z+20, r:520, b:1.1, a:Math.PI/2.6 } },
   { key:'air', name:'Aeroport', icon:document.querySelector('#goAir svg').outerHTML, pos:new V3(0, 30, AIR.z+250),
     view:{ x:0, z:AIR.z+120, r:620, b:1.0, a:-Math.PI/2.6 } },
-  { key:'hotel', name:'Mehmonxona', icon:'<svg viewBox="0 0 24 24"><path d="M8 22V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v18"/><path d="M3 22h18M5 22v-6h3M19 22v-6h-3M12 3c-1 5-1 11 0 19"/></svg>', pos:new V3(HOTEL.x0 + 58, 112, (HOTEL.z0 + HOTEL.z1)/2),
-    view:{ x:HOTEL.x0 + 50, z:(HOTEL.z0 + HOTEL.z1)/2, r:230, b:1.2, a:Math.PI - 0.5 } },
   { key:'avto', name:'Avtosalon', icon:'<svg viewBox="0 0 24 24"><path d="M5 16h14l-1.5-5a2 2 0 0 0-1.9-1.4H8.4A2 2 0 0 0 6.5 11z"/><circle cx="8" cy="17" r="1.6"/><circle cx="16" cy="17" r="1.6"/></svg>', pos:new V3(X0 + W + RD + 40, 14, 0),
     view:{ x:X0 + W + RD + 30, z:0, r:95, b:1.15, a:Math.PI - 0.45 } },
   { key:'forest', name:'Bog‘ va o‘rmon', icon:document.querySelector('#goForest svg').outerHTML, pos:new V3((GARDEN.x0+GARDEN.x1)/2, 30, (GARDEN.z0+GARDEN.z1)/2),
@@ -3648,7 +3627,7 @@ function goPlace(pl){
   const v = pl.view, portrait = canvas.clientHeight > canvas.clientWidth; flyTo(v.x, v.z, v.r * (portrait ? 1.5 : 1), v.b);
   let a = v.a; while (a - camera.alpha > Math.PI) a -= 2*Math.PI; while (camera.alpha - a > Math.PI) a += 2*Math.PI;   // shortest turn
   fly.from.a = camera.alpha; fly.to.a = a;
-  toast({ port:'Port: konteyner terminali, kranlar va kemalar', air:'Aeroport: samolyotlar har daqiqada qo‘nadi va uchadi', forest:'Tog‘lar ortida: o‘rmon, gullagan bog‘lar va daryo boshlanadigan ko‘l', hotel:'Mehmonxona: 26 qavatli shisha minora va naqshli podium', avto:'Avtosalon: Susambil GT Pro, Susambil GT va Tracker ko‘rgazmada' }[pl.key]);
+  toast({ port:'Port: konteyner terminali, kranlar va kemalar', air:'Aeroport: samolyotlar har daqiqada qo‘nadi va uchadi', forest:'Tog‘lar ortida: o‘rmon, gullagan bog‘lar va daryo boshlanadigan ko‘l', avto:'Avtosalon: Susambil GT Pro, Susambil GT va Tracker ko‘rgazmada' }[pl.key]);
 }
 for (const pl of PLACES){
   const el = document.createElement('div'); el.className = 'plbl'; el.innerHTML = pl.icon + '<span>' + pl.name + '</span>';
@@ -4074,7 +4053,7 @@ function openSettings(){
 // ---------- quality ----------
 let shadowGen = null, pipeline = null, glow = null;
 const casters = () => {
-  const list = [...treeCasters(), ...poles.meshes(), basin, jet, ...[...CARS.values()].flatMap(c => c.node ? c.node.getChildMeshes() : []), ...DLR.casters(), ...HTL.casters()];
+  const list = [...treeCasters(), ...poles.meshes(), basin, jet, ...[...CARS.values()].flatMap(c => c.node ? c.node.getChildMeshes() : []), ...DLR.casters()];
   for (const t of Object.values(T)) for (const pt of t.parts) list.push(pt.mesh);
   return list;
 };

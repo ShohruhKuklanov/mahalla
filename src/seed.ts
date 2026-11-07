@@ -86,7 +86,7 @@ async function seedDemo(db: Db, log: (m: string) => void) {
 }
 
 /**
- * The 10 landmark copies stand around the central park from day one, owned by the city and for sale.
+ * The landmark copies (the 10 tallest buildings plus Hilton Tashkent City) stand around the central park from day one, owned by the city and for sale.
  * Idempotent: a landmark that already exists anywhere (city-owned or bought by a player) is skipped.
  * Placement: empty centre-zone plots nearest the park, at least 40 m apart (the 3D client uses the same rule offline).
  */
