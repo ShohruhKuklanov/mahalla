@@ -75,7 +75,7 @@ import fs from 'node:fs';
 import { rootPath } from './db.js';
 
 export interface TypeDef { name: string; zones: ZoneCode[]; floors: [number, number]; w: number; d: number; cost: [number, number]; income: [number, number]; build: [number, number]; roofs: string[] }
-export interface LandmarkDef { name: string; city: string; realHeight: number; cost: number; income: number; build: number }
+export interface LandmarkDef { name: string; city: string; realHeight: number; cost: number; income: number; build: number; spot?: [number, number] }
 export interface Catalog {
   floorHeight: number;
   styles: Record<string, { name: string; walls: string[] }>;

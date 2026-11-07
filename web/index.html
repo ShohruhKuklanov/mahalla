@@ -779,6 +779,8 @@
   "lm_hilton": {
    "name": "Hilton Tashkent City",
    "city": "Toshkent",
+   "_spot": "its own block nearest this point (x, z in metres): away from the centre, not at the edge",
+   "spot": [330, -260],
    "realHeight": 95,
    "cost": 30000,
    "income": 1500,
@@ -787,6 +789,7 @@
   "lm_chorsu": {
    "name": "Chorsu bozori",
    "city": "Toshkent",
+   "spot": [-340, 140],
    "realHeight": 30,
    "cost": 20000,
    "income": 1200,
@@ -3600,9 +3603,18 @@ function populateDemo(){
   }
   const zr = z => z==='cen' ? 0 : z==='com' ? 1 : 2;
   freeBlocks.sort((a,b) => zr(a.z) - zr(b.z) || a.d - b.d);
-  const byHeight = [...LM_KEYS].sort((a,b) => CAT.landmarks[b].realHeight - CAT.landmarks[a].realHeight);
-  byHeight.forEach((k, i) => {
-    const blk = freeBlocks[i]; if (!blk) return;
+  // copies with a "spot" take the free block nearest that point; the rest fill the blocks nearest the centre
+  const spotted = LM_KEYS.filter(k => CAT.landmarks[k].spot);
+  const byHeight = [...LM_KEYS].filter(k => !spotted.includes(k)).sort((a,b) => CAT.landmarks[b].realHeight - CAT.landmarks[a].realHeight);
+  const pick = new Map(byHeight.map((k, i) => [k, freeBlocks[i]]));
+  const usedB = new Set(pick.values());
+  for (const k of spotted){
+    const [sx, sz] = CAT.landmarks[k].spot;
+    const blk = freeBlocks.filter(b => !usedB.has(b)).sort((a, b) => Math.hypot((a.ps[0].x+a.ps[15].x)/2 - sx, (a.ps[0].z+a.ps[15].z)/2 - sz) - Math.hypot((b.ps[0].x+b.ps[15].x)/2 - sx, (b.ps[0].z+b.ps[15].z)/2 - sz))[0];
+    if (blk){ pick.set(k, blk); usedB.add(blk); }
+  }
+  [...byHeight, ...spotted].forEach(k => {
+    const blk = pick.get(k); if (!blk) return;
     const p = blk.ps[5];
     for (const q of blk.ps) if (q !== p) Object.assign(q, { state:'owned', owner:'Shahar hokimligi' });
     Object.assign(p, { state:'sale', owner:'Shahar hokimligi', tpl:k, style:'hitech', floors:1, roof:'none', color:'#cfe3ee', accent:'#2a9d8f', rot:0, likes: 40 });

@@ -286,10 +286,11 @@ test('styles, floors and roofs: validated, priced by floors', async () => {
   assert.deepEqual(await ledgerMismatches(db), []);
 });
 
-test('landmark copies: all 12 stand in the centre from the start, for sale, one of each', async () => {
+test('landmark copies: all 12 stand from the start (skyscrapers in the centre), for sale, one of each', async () => {
   const lm = (await city()).plots.filter((x: any) => x.building && x.building.template.startsWith('lm_'));
   assert.equal(lm.length, 12);
-  assert.ok(lm.every((x: any) => x.zone === 'cen' && x.state === 'sale' && x.owner.nickname === 'Shahar hokimligi'));
+  assert.ok(lm.every((x: any) => x.state === 'sale' && x.owner.nickname === 'Shahar hokimligi'));
+  assert.ok(lm.filter((x: any) => !['lm_hilton', 'lm_chorsu'].includes(x.building.template)).every((x: any) => x.zone === 'cen'), 'the skyscrapers stand in the centre');
   const richify = async (nick: string) => {
     await db.query("update wallets set balance = balance + 300000 where user_id = (select id from users where nickname=$1)", [nick]);
     await db.query("insert into transactions(user_id,amount,type,balance_after) select u.id, 300000, 'admin_adjust', w.balance from users u join wallets w on w.user_id = u.id where u.nickname=$1", [nick]);
@@ -319,6 +320,12 @@ test('skyscraper copies: each alone in its own block, the rest of the block is c
     const lm = all.filter((x: any) => x.building && x.building.template.startsWith('lm_'));
     assert.equal(lm.length, 12);
     assert.equal(new Set(lm.map((x: any) => blockOf(x.id))).size, 12, 'one block each');
+    for (const [key, spot] of [['lm_hilton', [330, -260]], ['lm_chorsu', [-340, 140]]] as [string, number[]][]) {
+      const l = lm.find((x: any) => x.building.template === key);
+      const ps = all.filter((y: any) => blockOf(y.id) === blockOf(l.id));
+      const cx = ps.reduce((s: number, p: any) => s + p.x, 0) / ps.length, cz = ps.reduce((s: number, p: any) => s + p.z, 0) / ps.length;
+      assert.ok(Math.hypot(cx - spot[0], cz - spot[1]) < 80, `${key} stands near its spot`);
+    }
     for (const l of lm) for (const q of all.filter((y: any) => blockOf(y.id) === blockOf(l.id) && y.id !== l.id)) {
       assert.ok(!q.building, 'no other building in a skyscraper block');
     }

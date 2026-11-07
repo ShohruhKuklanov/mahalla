@@ -142,9 +142,15 @@ export async function landmarkBlocks(db: Db, log: (m: string) => void = () => {}
     const used = new Set<number>();
     const freeForCity = (p: typeof plots[0]) => (p.status === 'empty' && p.owner_id === null) || (p.owner_id === city && !p.template && p.status === 'owned');
     let moved = 0, claimed = 0;
+    const centreOf = (b: number) => { const ps = blockPlots(b); return { cx: ps.reduce((s, p) => s + p.x, 0) / ps.length, cz: ps.reduce((s, p) => s + p.z, 0) / ps.length }; };
+    // copies with a catalog "spot" go after the others, each to the free block nearest its spot
+    const spotOf = (t: string) => CATALOG.landmarks[t]?.spot;
+    lms.sort((a, b) => Number(!!spotOf(a.template!)) - Number(!!spotOf(b.template!)));
     for (const lm of lms) {
       let blk = blockOf(lm.id);
-      const ok = !used.has(blk) && blockPlots(blk).every((q) => q.id === lm.id || freeForCity(q));
+      const spot = spotOf(lm.template!);
+      const nearSpot = (b: number) => { if (!spot) return true; const c = centreOf(b); return Math.hypot(c.cx - spot[0], c.cz - spot[1]) < 80; };
+      const ok = !used.has(blk) && nearSpot(blk) && blockPlots(blk).every((q) => q.id === lm.id || freeForCity(q));
       if (!ok) {
         const cand = new Map<number, typeof plots>();
         for (const p of plots) { const b = blockOf(p.id); if (!cand.has(b)) cand.set(b, []); cand.get(b)!.push(p); }
@@ -152,7 +158,8 @@ export async function landmarkBlocks(db: Db, log: (m: string) => void = () => {}
         const choices = [...cand.entries()]
           .filter(([b, ps]) => !used.has(b) && ps.length === 16 && ps.every(freeForCity))
           .map(([b, ps]) => ({ b, ps, cx: ps.reduce((s, p) => s + p.x, 0) / 16, cz: ps.reduce((s, p) => s + p.z, 0) / 16 }))
-          .sort((a, b) => zoneRank(a.ps[0].zone) - zoneRank(b.ps[0].zone) || Math.hypot(a.cx, a.cz) - Math.hypot(b.cx, b.cz));
+          .sort((a, b) => spot ? Math.hypot(a.cx - spot[0], a.cz - spot[1]) - Math.hypot(b.cx - spot[0], b.cz - spot[1])
+            : zoneRank(a.ps[0].zone) - zoneRank(b.ps[0].zone) || Math.hypot(a.cx, a.cz) - Math.hypot(b.cx, b.cz));
         if (!choices.length) { log(`landmark ${lm.template}: no free block`); used.add(blk); continue; }
         const target = choices[0], anchor = target.ps[5];             // an inner plot of the block
         const old = (await c.query('select owner_id, status, purchased_at from plots where id = $1', [lm.id])).rows[0];
@@ -161,6 +168,11 @@ export async function landmarkBlocks(db: Db, log: (m: string) => void = () => {}
         await c.query("update listings set plot_id = $1 where plot_id = $2 and status = 'active'", [anchor.id, lm.id]);
         await c.query('update likes set plot_id = $1 where plot_id = $2', [anchor.id, lm.id]);
         await c.query("update plots set owner_id = null, status = 'empty', purchased_at = null where id = $1", [lm.id]);
+        // the land the city held around it in the old block goes back on the market (players' plots untouched)
+        for (const q of blockPlots(blk)) if (q.id !== lm.id && q.owner_id === city && !q.template && q.status === 'owned') {
+          await c.query("update plots set owner_id = null, status = 'empty', purchased_at = null where id = $1 and owner_id = $2", [q.id, city]);
+          q.owner_id = null; q.status = 'empty';
+        }
         Object.assign(byId.get(anchor.id)!, { owner_id: old.owner_id, status: old.status, template: lm.template });
         Object.assign(byId.get(lm.id)!, { owner_id: null, status: 'empty', template: null });
         blk = target.b; moved++;
