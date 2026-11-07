@@ -2706,14 +2706,16 @@ function coupeTemplate(){
   root.setEnabled(false);
   return GT_TPL = root;
 }
-// ---------- Mahalla GT Pro: the detailed Blender coupe, streamed in as a .glb (cars/gt-pro.glb) ----------
+// ---------- Mahalla GT Pro: the detailed Blender coupe, streamed in as a binary glTF (cars/gt-pro.js: the .glb as base64) ----------
 // Loaded once; its PBR materials become the city's standard materials, small parts are merged by material,
 // each wheel gets a 'trkWheel' node at its hub (so it turns and steers like the other cars), plates are added.
 let GTP_TPL = null, GTP_LOAD = null;
 const gtProTemplate = () => { if (!GTP_TPL) throw new Error('GT Pro not loaded'); return GTP_TPL; };
 function gtProLoad(){
   if (GTP_LOAD) return GTP_LOAD;
-  GTP_LOAD = B.SceneLoader.ImportMeshAsync('', 'cars/', 'gt-pro.glb', scene).then(res => {
+  // the .glb ships as base64 in a small script (cars/gt-pro.js), so any static host serves it
+  const fetchGlb = () => window.GTP_GLB ? Promise.resolve() : new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'cars/gt-pro.js'; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+  GTP_LOAD = fetchGlb().then(() => B.SceneLoader.ImportMeshAsync('', '', 'data:;base64,' + window.GTP_GLB, scene, null, '.glb')).then(res => {
     const root = new B.TransformNode('gtpTpl', scene); root.metadata = { wheels: [] };
     const bodyM = stdMat('gtpBodyM', { diffuse: new C3(1,1,1), spec: new C3(.85,.85,.85), power: 160 });
     const MATS = new Map(), matFor = pm => {
