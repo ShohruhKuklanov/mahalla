@@ -350,7 +350,6 @@
   <button class="tool" id="goPort" title="Port" aria-label="Portga borish"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v14"/><path d="M5 13a7 7 0 0 0 14 0"/><path d="M8 11h8"/></svg></button>
   <button class="tool" id="goAir" title="Aeroport" aria-label="Aeroportga borish"><svg viewBox="0 0 24 24"><path d="M10.5 3.5c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5V9l7 4v2l-7-2v5l2 1.5V21l-3.5-1-3.5 1v-1.5l2-1.5v-5l-7 2v-2l7-4z"/></svg></button>
   <button class="tool" id="goForest" title="Bog‘ va o‘rmon" aria-label="Bog‘ va o‘rmonga borish"><svg viewBox="0 0 24 24"><path d="M12 2 6 10h3l-4 6h5v6h4v-6h5l-4-6h3z"/></svg></button>
-  <button class="tool" id="goCar" title="shohruh.97 ning mashinasi" aria-label="shohruh.97 ning mashinasiga borish"><svg viewBox="0 0 24 24"><path d="M3 15v-3l2-5h14l2 5v3z"/><circle cx="7" cy="16" r="2"/><circle cx="17" cy="16" r="2"/><path d="M5 12h14"/></svg></button>
   <button class="tool" id="home" title="Mening yerim" aria-label="Mening yerim"><svg viewBox="0 0 24 24"><path d="M4 11l8-6 8 6"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/></svg></button>
 </div>
 
@@ -2268,7 +2267,7 @@ const carLights = CAR_KINDS.flatMap(c => [c.k.parts[3], c.k.parts[4]]);
 // 4.27 m long, 1.79 m wide, 1.63 m high, 2.57 m wheelbase, 215/55 R17 wheels. Faces +z, ground at y = 0.
 const MY_CAR = { owner: 'shohruh.97', plate: ['90', 'Y 095 AB'] };
 function trackerModel(){
-  const root = new B.TransformNode('tracker', scene);
+  const root = new B.TransformNode('tracker', scene); root.metadata = { wheels: [] };
   const bodyM  = stdMat('trkBodyM',  { diffuse: new C3(1,1,1), spec: new C3(.7,.7,.7), power: 120 });
   const black  = stdMat('trkBlack',  { diffuse: hex('#16171a'), spec: new C3(.1,.1,.1), power: 20 });
   const gloss  = stdMat('trkGloss',  { diffuse: hex('#0c0d0f'), spec: new C3(.8,.8,.8), power: 160 });
@@ -2349,7 +2348,7 @@ function trackerModel(){
   const body = new B.Mesh('trkBody', scene), vd = new B.VertexData(), nr = [];
   vd.positions = pos; vd.indices = idx; vd.colors = col; B.VertexData.ComputeNormals(pos, idx, nr); vd.normals = nr;
   { const uv = []; for (let i = 0; i < pos.length; i += 3) uv.push(pos[i+2], pos[i+1]); vd.uvs = uv; }
-  vd.applyToMesh(body); add(body, bodyM); body.computeWorldMatrix(true);
+  vd.applyToMesh(body); add(body, bodyM); body.computeWorldMatrix(true); body.isPickable = true; root.metadata.body = body;
 
   // ---- painted details: decals projected onto the skin (front fascia, rear, both sides) ----
   const plate = (g, cx, cy, S) => {
@@ -2456,6 +2455,7 @@ function trackerModel(){
   const dishShape = [[0.0,0.088],[0.04,0.09],[0.06,0.084],[0.19,0.062],[0.21,0.07],[0.214,0.088],[0.214,-0.08]].map(([r, a]) => new V3(r, a, 0));
   for (const za of [ZF, ZR]) for (const sd of [-1, 1]){
     const w = new B.TransformNode('trkWheel', scene); w.parent = root; w.position.set(sd*0.773, RW, za); w.rotation.y = sd*Math.PI/2;
+    root.metadata.wheels.push({ w, sd, front: za > 0 });
     const tl = add(B.MeshBuilder.CreateLathe('trkTyre', { shape: tyreShape, tessellation: 48, sideOrientation: B.Mesh.DOUBLESIDE }, scene), tyreM, w); tl.rotation.x = Math.PI/2;
     const dl = add(B.MeshBuilder.CreateLathe('trkDish', { shape: dishShape, tessellation: 40, sideOrientation: B.Mesh.DOUBLESIDE }, scene), gunm, w); dl.rotation.x = Math.PI/2;
     const disc = add(B.MeshBuilder.CreateCylinder('trkDisc', { diameter: 0.3, height: 0.02, tessellation: 24 }, scene), gunm, w); disc.rotation.x = Math.PI/2; disc.position.z = 0.0;
@@ -2480,14 +2480,56 @@ function placeMyCar(){
   // the road side nearest the house; park at the kerb, facing the lane's direction (right-hand traffic)
   const gx = Math.floor((p.x - X0)/PITCH), gz = Math.floor((p.z - Z0)/PITCH), x0 = blockX(gx), z0 = blockZ(gz), K = RD/2 - 0.9 - 0.02;
   const sides = [
-    { d: p.x - x0,         x: x0 - RD/2 + K,       z: p.z, ry: Math.PI },
-    { d: x0 + BLK - p.x,   x: x0 + BLK + RD/2 - K, z: p.z, ry: 0 },
-    { d: p.z - z0,         x: p.x, z: z0 - RD/2 + K,       ry: Math.PI/2 },
-    { d: z0 + BLK - p.z,   x: p.x, z: z0 + BLK + RD/2 - K, ry: -Math.PI/2 },
+    { d: p.x - x0,         x: x0 - RD/2 + K,       z: p.z, ry: Math.PI,    e: 3, a: z0 + BLK - p.z },
+    { d: x0 + BLK - p.x,   x: x0 + BLK + RD/2 - K, z: p.z, ry: 0,          e: 1, a: p.z - z0 },
+    { d: p.z - z0,         x: p.x, z: z0 - RD/2 + K,       ry: Math.PI/2,  e: 0, a: p.x - x0 },
+    { d: z0 + BLK - p.z,   x: p.x, z: z0 + BLK + RD/2 - K, ry: -Math.PI/2, e: 2, a: x0 + BLK - p.x },
   ].sort((a, b) => a.d - b.d);
   const s = sides.find(s => !onRiverRoad(s.x, s.z) && !inPark(s.x, s.z)) || sides[0];
+  myCarPark = { x0, z0, e: s.e, a: s.a, dPark: RD/2 - K };
+  if (myDrive) return { p, x: s.x, z: s.z };                           // out for a drive: it parks there when it comes back
   myCar.position.set(s.x, 0.02, s.z); myCar.rotation.y = s.ry;
   return { p, x: s.x, z: s.z };
+}
+// ---- tap the car: it pulls out, drives a lap round its block in the traffic lane and parks again ----
+let myCarPark = null, myDrive = null;
+const LAP_D = RD/2 - 2.6, LAP_R = LAP_D;                                 // the lane, out from the block edge
+function lapPoint(pk, s, d){
+  // the block's edges in driving order: north (+x), east (+z), south (−x), west (−z); left turns at each corner
+  const C = [[pk.x0, pk.z0], [pk.x0 + BLK, pk.z0], [pk.x0 + BLK, pk.z0 + BLK], [pk.x0, pk.z0 + BLK]];
+  const DIR = [[1,0],[0,1],[-1,0],[0,-1]], OUT = [[0,-1],[1,0],[0,1],[-1,0]], arc = LAP_R*Math.PI/2, seg = BLK + arc, tot = 4*seg;
+  let u = ((s + pk.e*seg + pk.a) % tot + tot) % tot, i = Math.floor(u/seg); u -= i*seg;
+  if (u < BLK){ const [cx, cz] = C[i]; return [cx + DIR[i][0]*u + OUT[i][0]*d, cz + DIR[i][1]*u + OUT[i][1]*d]; }
+  const j = (i + 1) % 4, f = (u - BLK)/arc*Math.PI/2, [cx, cz] = C[j];
+  return [cx + (OUT[i][0]*Math.cos(f) + OUT[j][0]*Math.sin(f))*d, cz + (OUT[i][1]*Math.cos(f) + OUT[j][1]*Math.sin(f))*d];
+}
+function startMyDrive(){
+  if (!myCar || !myCarPark){ return; }
+  if (myDrive){ toast('Mashina hozir aylanyapti'); return; }
+  const tot = 4*(BLK + LAP_R*Math.PI/2);
+  for (let s = 0; s < tot; s += 4){ const [x, z] = lapPoint(myCarPark, s, LAP_D); if (onRiverRoad(x, z) || inPark(x, z)){ toast('Bu kvartal atrofida yo‘l yo‘q: daryo yoki bog‘ to‘sib turibdi'); return; } }
+  myDrive = { s: 0, v: 0, tot, follow: Math.hypot(camera.target.x - myCar.position.x, camera.target.z - myCar.position.z) < 120, roll: 0 };
+  toast(MY_CAR.owner + ' ning Tracker’i mahallani aylanib keladi');
+}
+function updateMyCar(dt){
+  if (!myDrive || !myCar) return;
+  const D = myDrive, pk = myCarPark, ease = t => { t = clamp(t, 0, 1); return t*t*(3 - 2*t); };
+  const dAt = s => lerp(pk.dPark, LAP_D, ease(s/9) * (1 - ease((s - (D.tot - 11))/9)));
+  // slow down for the corners and for parking at the end
+  const seg = BLK + LAP_R*Math.PI/2, u = ((D.s + pk.e*seg + pk.a) % (4*seg) + 4*seg) % (4*seg), toCorner = (BLK - (u % seg) + 4*seg) % seg;
+  let vt = toCorner < 9 || u % seg > BLK ? 4.5 : 11;
+  vt = Math.min(vt, Math.sqrt(2*2.2*Math.max(0, D.tot - D.s)) + 0.2, 2 + D.s*1.2);
+  D.v += clamp(vt - D.v, -4*dt, 2.8*dt);
+  const step = D.v*dt; D.s = Math.min(D.tot, D.s + step);
+  const at = s => lapPoint(pk, s, dAt(s)), [x, z] = at(D.s), [x2, z2] = at(D.s + 0.6), [x3, z3] = at(D.s + 1.2);
+  const head = Math.atan2(x2 - x, z2 - z);
+  let dh = Math.atan2(x3 - x2, z3 - z2) - head; while (dh > Math.PI) dh -= 2*Math.PI; while (dh < -Math.PI) dh += 2*Math.PI;
+  const steer = clamp(Math.atan(2.57*dh/0.6), -0.6, 0.6);
+  myCar.position.set(x, 0.02, z); myCar.rotation.y = head;
+  D.roll += step/0.333;
+  for (const wh of myCar.metadata.wheels){ wh.w.rotation.z = wh.sd*D.roll; wh.w.rotation.y = wh.sd*Math.PI/2 + (wh.front ? steer : 0); }
+  if (D.follow){ const k = Math.min(1, dt*3); camera.target.x += (x - camera.target.x)*k; camera.target.z += (z - camera.target.z)*k; }
+  if (D.s >= D.tot - 1e-3){ myDrive = null; for (const wh of myCar.metadata.wheels) wh.w.rotation.y = wh.sd*Math.PI/2; placeMyCar(); }
 }
 // ---------- traffic lights at every intersection ----------
 // 4 signal heads per crossing (one per approach, on the far-right corner). Phases are offset between neighbouring
@@ -2983,16 +3025,6 @@ for (const pl of PLACES){
 document.getElementById('goPort').onclick = () => goPlace(PLACES[0]);
 document.getElementById('goAir').onclick = () => goPlace(PLACES[1]);
 document.getElementById('goForest').onclick = () => goPlace(PLACES[2]);
-document.getElementById('goCar').onclick = () => {
-  const c = myCar && myCar.isEnabled() ? myCar : null;
-  if (!c){ toast(MY_CAR.owner + ' ning mashinasi hali shaharda yo‘q'); return; }
-  stopAuto(); select(null); closeSheet(); flyTo(c.position.x, c.position.z, 11, 1.22);
-  const ry = c.rotation.y, lx = 0.75, lz = 0.66;                       // front three-quarter view
-  let a = Math.atan2(-lx*Math.sin(ry) + lz*Math.cos(ry), lx*Math.cos(ry) + lz*Math.sin(ry));
-  while (a - camera.alpha > Math.PI) a -= 2*Math.PI; while (camera.alpha - a > Math.PI) a += 2*Math.PI;
-  fly.from.a = camera.alpha; fly.to.a = a;
-  toast('Oq Chevrolet Tracker — ' + MY_CAR.owner + ' ning uyi oldida');
-};
 function updatePlaces(){
   const k = engine.getHardwareScalingLevel(), vp = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()), W = canvas.clientWidth, H = canvas.clientHeight;
   for (const pl of PLACES){
@@ -3447,7 +3479,7 @@ function stopAuto(){ fly = null; S.autoOrbit = false; S.orbitAnim = 0; const b=$
 canvas.addEventListener('pointerdown', e=>{
   try { canvas.setPointerCapture(e.pointerId); } catch(_){}
   const p = rel(e); ptrs.set(e.pointerId, p);
-  stopAuto(); vel.x = vel.z = 0; S.tour = null; S.cinePause = performance.now() + 4000;
+  stopAuto(); vel.x = vel.z = 0; S.tour = null; S.cinePause = performance.now() + 4000; if (myDrive) myDrive.follow = false;
   if (ptrs.size === 1){
     tapStart = { x:p.x, y:p.y, t:performance.now() };
     const orbit = e.pointerType==='mouse' && (e.button===2 || e.button===1 || e.ctrlKey || e.altKey);
@@ -3528,6 +3560,7 @@ function keyboard(dt){
 }
 
 function handleTap(x, y){
+  if (myCar && myCar.isEnabled()){ const ch = scene.pick(x, y, m => m === myCar.metadata.body); if (ch && ch.hit){ startMyDrive(); return; } }
   const hit = scene.pick(x, y, m => m.hasThinInstances && m.isEnabled() && m.name!=='ghost' && Object.values(T).some(t=>t.parts.some(pt=>pt.mesh===m)));
   let p = null;
   if (!hit || !hit.hit){
@@ -3616,7 +3649,7 @@ scene.onBeforeRenderObservable.add(()=>{
   // water shimmer + traffic
   jet.scaling.y = 1 + Math.sin(now/160)*0.06;
   lakeTex.uOffset += dt*0.004; lakeTex.vOffset += dt*0.002; updateSea();
-  updateSignals(dt); updateCars(dt); updatePeople(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
+  updateSignals(dt); updateCars(dt); updateMyCar(dt); updatePeople(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
   // fps + auto quality
   fpsAcc += engine.getFps(); fpsN++; fpsT += dt;
   if (fpsT > 0.5){
@@ -3894,7 +3927,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { placeMyCar, getMyCar: () => myCar, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { placeMyCar, startMyDrive, updateMyCarStep: updateMyCar, getDrive: () => myDrive, getMyCar: () => myCar, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
