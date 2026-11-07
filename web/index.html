@@ -2118,6 +2118,44 @@ const rwl = B.MeshBuilder.CreateBox('rwl',{width:0.8,height:0.5,depth:0.8},scene
 for (let x = RW.x0; x <= RW.x1; x += 40) for (const k of [-1,1]) rwl.thinInstanceAdd(B.Matrix.Translation(x, 0.4, RW.z + k*(RW.w/2+2)), false);
 for (let x = RW.x1+30; x < RW.x1+300; x += 30) rwl.thinInstanceAdd(B.Matrix.Translation(x, 0.4, RW.z), false);   // approach lights (east)
 rwl.thinInstanceBufferUpdated('matrix'); rwl.alwaysSelectAsActiveMesh = true;
+// ---- airport night lighting: lights that glow with the night (their colours scale with it in updateSky) ----
+const AIR_GLOW = [], AIR_LIGHTS = [rwl];
+const nightLight = (name, col, k) => { const m = stdMat(name, { diffuse: hex(col).scale(0.4), emissive: new C3(0,0,0) }); AIR_GLOW.push([m, hex(col), k]); return m; };
+rwl.scaling.set(1.5, 1.4, 1.5);
+const lightSet = (name, mat, w, h) => { const m = B.MeshBuilder.CreateBox(name, { width: w, height: h, depth: w }, scene); m.material = mat; m.isPickable = false; AIR_LIGHTS.push(m); return m; };
+{ // taxiway edge lights (blue), threshold (green) and runway-end (red) bars
+  const blue = lightSet('twyL', nightLight('twyLM', '#3d7bff', 2.6), 0.7, 0.45), green = lightSet('thrL', nightLight('thrLM', '#37ff7a', 2.6), 0.9, 0.5), red = lightSet('endL', nightLight('endLM', '#ff3b30', 2.6), 0.9, 0.5);
+  for (let x = RW.x0 + 60; x < RW.x1 - 60; x += 30) for (const k of [-1, 1]) blue.thinInstanceAdd(B.Matrix.Translation(x, 0.4, TWY_Z + k*6), false);
+  for (let k = -9; k <= 9; k++){ green.thinInstanceAdd(B.Matrix.Translation(RW.x0 + 2, 0.45, RW.z + k*2.5), false); red.thinInstanceAdd(B.Matrix.Translation(RW.x1 - 2, 0.45, RW.z + k*2.5), false); }
+  for (const m of [blue, green, red]){ m.thinInstanceBufferUpdated('matrix'); m.alwaysSelectAsActiveMesh = true; }
+}
+{ // floodlight masts round the apron and along the terminal kerb, each with a bright head and a pool of light below
+  const poleM = stdMat('mastM', { diffuse: hex('#8a9097'), spec: new C3(.3,.3,.3) });
+  const head = lightSet('mastHead', nightLight('mastHeadM', '#fff6e0', 3.2), 1, 1);
+  const pt = new B.DynamicTexture('poolT', { width: 128, height: 128 }, scene, true), g = pt.getContext(), gr = g.createRadialGradient(64, 64, 2, 64, 64, 64);
+  gr.addColorStop(0, '#9c8a68'); gr.addColorStop(0.45, '#5a4e3a'); gr.addColorStop(0.8, '#1a1610'); gr.addColorStop(1, '#000000'); g.fillStyle = '#000'; g.fillRect(0, 0, 128, 128); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); pt.update(true);   // additive: black adds nothing
+  const poolM = new B.StandardMaterial('poolM', scene); poolM.diffuseColor = new C3(0,0,0); poolM.specularColor = new C3(0,0,0);
+  poolM.emissiveTexture = pt; poolM.alphaMode = B.Engine.ALPHA_ADD; poolM.alpha = 0.999; poolM.disableDepthWrite = true; nightMats.push(poolM);
+  const pool = B.MeshBuilder.CreateGround('pool', { width: 1, height: 1 }, scene); pool.material = poolM; pool.isPickable = false;
+  const poles = [];
+  const mast = (x, z, h, r) => {
+    const p = box(0.7, h, 0.7, x, h/2, z); poles.push(p);
+    for (const dx of [-1.2, 0, 1.2]) head.thinInstanceAdd(B.Matrix.Compose(new V3(2.2, 0.6, 1.4), B.Quaternion.Identity(), new V3(x + dx*0.9, h + 0.4, z)), false);
+    pool.thinInstanceAdd(B.Matrix.Compose(new V3(r, 1, r), B.Quaternion.Identity(), new V3(x, 0.3, z)), false);
+  };
+  for (let x = APRON.x0 + 20; x <= APRON.x1 - 20; x += 95){ mast(x, APRON.z0 + 4, 32, 120); mast(x + 47, APRON.z1 - 30, 28, 105); }
+  for (let x = -300; x <= 300; x += 60) mast(x, APRON.z1 + 60, 14, 46);                                      // terminal kerb and car park road
+  for (let z = APRON.z1 + 90; z < CITY_N - 10; z += 40) mast(16, z, 12, 38);                                // the road to the city
+  for (const hx of [-650, -560, -470]) mast(hx, APRON.z0 + 4, 24, 80);                                       // hangar fronts
+  const pm = merge(poles); pm.material = poleM; pm.isPickable = false;
+  for (const m of [head, pool]){ m.thinInstanceBufferUpdated('matrix'); m.alwaysSelectAsActiveMesh = true; }
+}
+{ // red obstruction lights on the control tower and hangar roofs
+  const obs = lightSet('obsL', nightLight('obsLM', '#ff2a1f', 3), 1.2, 1.2);
+  obs.thinInstanceAdd(B.Matrix.Translation(470, 71, APRON.z0 + 60), false);
+  for (const hx of [-650, -560, -470]) for (const dx of [-36, 36]) obs.thinInstanceAdd(B.Matrix.Translation(hx + dx, 18.8, APRON.z0 + 12), false);
+  obs.thinInstanceBufferUpdated('matrix'); obs.alwaysSelectAsActiveMesh = true;
+}
 // terminal: long glass hall with a white wave roof, jet bridges
 const termGlass = stdMat('termGlass',{dt:facadeTile('hitech','shop',0.7).dif, et:facadeTile('hitech','shop',0.7).emi, spec:new C3(.7,.7,.75), power:110});
 termGlass.diffuseTexture.uScale = 40; termGlass.emissiveTexture.uScale = 40; nightMats.push(termGlass);
@@ -4229,7 +4267,7 @@ function applyQuality(q){
       pipeline.imageProcessing.vignetteEnabled = true; pipeline.imageProcessing.vignetteWeight = 1.4;
       glow = new B.GlowLayer('glow', scene, { blurKernelSize: 32, mainTextureRatio: 0.5 });
       glow.intensity = 0.6;
-      for (const m of [...bulbs.meshes(), ...dots.meshes(), ...sigLamps.flatMap(l => l.meshes()), ...carLights]) glow.addIncludedOnlyMesh(m);
+      for (const m of [...bulbs.meshes(), ...dots.meshes(), ...sigLamps.flatMap(l => l.meshes()), ...carLights, ...AIR_LIGHTS]) glow.addIncludedOnlyMesh(m);
     }
   }
   scene.fogDensity = q==='low' ? 0.00034 : 0.00028;
@@ -4277,13 +4315,14 @@ function updateSky(){
   scene.clearColor = new C4(hor.r, hor.g, hor.b, 1);
   scene.fogColor = C3.Lerp(hor, sky, 0.35);
   { const sk = C3.Lerp(top, hor, 0.6); for (const m of [mats.lake, mats.sea, riverM]) m.emissiveColor = sk.scale(m.waterEmissiveK); }
-  mats.dot.emissiveColor = hex('#ffcf73').scale(0.15 + night*1.3);
+  mats.dot.emissiveColor = hex('#ffcf73').scale(0.15 + night*2.1);
   if (mats.snow) mats.snow.diffuseColor = C3.Lerp(hex('#3a4160'), hex('#f4f1f6'), Math.max(day, dk*0.8)).add(hex('#3a1e10').scale(dk*0.5));
   // windows & lamps
-  const ei = night*1.05;
+  const ei = night*1.7;                              // windows: brighter at night
   for (const m of nightMats) m.emissiveTexture.level = ei;
-  mats.bulb.emissiveColor = WARM.scale(night*1.4);
-  if (glow) glow.intensity = 0.65*night;
+  mats.bulb.emissiveColor = WARM.scale(night*2.4);
+  for (const [m, c, k] of AIR_GLOW) m.emissiveColor = c.scale(night*k);
+  if (glow) glow.intensity = 1.15*night;
   mats.mountain.diffuseColor = C3.Lerp(hex('#1c2034'), hex('#6b6f86'), day).add(hex('#4a2a3a').scale(dk*0.5));
   $('#clock').textContent = clockStr();
   $('#clockIcon').textContent = elev>0.05 ? '☀' : elev>-0.12 ? '◐' : '☾';
