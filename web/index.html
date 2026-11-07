@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Mahalla — 3D shahar sinov namunasi</title>
+<title>Susambil — 3D shahar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet">
 <style>
@@ -340,11 +340,11 @@
 <body>
 <canvas id="c"></canvas>
 
-<div id="loader"><div class="box"><div class="logo"></div><b class="ld-name">MAHALLA</b><p id="loadMsg">3D shahar yuklanmoqda…</p><div id="err"></div></div></div>
+<div id="loader"><div class="box"><div class="logo"></div><b class="ld-name">SUSAMBIL</b><p id="loadMsg">3D shahar yuklanmoqda…</p><div id="err"></div></div></div>
 
 <div id="top">
   <div class="cap" id="topCap">
-    <span class="brand"><i></i><span>Mahalla</span></span>
+    <span class="brand"><i></i><span>Susambil</span></span>
     <span class="vsep"></span>
     <span class="chip coins" title="Tanga"><span class="coin"></span><b id="coins">10 000</b></span>
     <span class="vsep"></span>
@@ -387,13 +387,13 @@
 
 <div id="hero" aria-label="Xush kelibsiz">
   <div class="h-top">
-    <div class="h-brand"><i></i>MAHALLA</div>
+    <div class="h-brand"><i></i>SUSAMBIL</div>
     <div class="h-pop"><small data-i18n="pop">AHOLI</small><b id="popN">0</b></div>
   </div>
   <div class="h-mid">
     <div class="h-langs" id="hLangs"><button data-l="uz">O‘zbekcha</button><button data-l="ru">Русский</button><button data-l="en">English</button></div>
     <div><span class="h-badge" data-i18n="badge">1 Telegram = 1 hovli</span></div>
-    <h1 data-i18n="title">Mahallaga xush kelibsiz</h1>
+    <h1 data-i18n="title">Susambil</h1>
     <p class="h-sub" data-i18n="sub"></p>
     <form id="findForm" autocomplete="off">
       <label class="h-in"><span>@</span><input id="tgIn" maxlength="40" autocapitalize="off" spellcheck="false"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#2AABEE"/><path d="M5.5 11.8l11-4.3c.5-.2 1 .1.8.9l-1.9 8.8c-.1.6-.5.8-1 .5l-2.8-2.1-1.4 1.3c-.2.2-.3.3-.6.3l.2-2.9 5.3-4.8c.2-.2 0-.3-.3-.1l-6.6 4.1-2.8-.9c-.6-.2-.6-.6.1-.8z" fill="#fff"/></svg></label>
@@ -2298,9 +2298,9 @@ const CAR_DEF = { price: 5000, repaint: 300, plate: { random: 0, standard: 500, 
 const CAR_MODELS = {
   tracker: { name: 'Chevrolet Tracker', price: 5000, kind: 'Krossover', about: 'Ixcham shahar krossoveri: baland o‘rindiq, keng salon, tejamkor turbo dvigatel.',
              specs: [['Dvigatel', '1.2 turbo'], ['Uzunligi', '4,27 m'], ['Klirens', '18 sm'], ['O‘rindiq', '5 ta']], make: dto => makeCar(dto) },
-  coupe: { name: 'Mahalla GT', price: 15000, kind: 'Sport kupe', about: 'Past va keng ikki eshikli sport kupe: uzun kapot, vertikal panjara, ingichka LED faralar, qora 10 parrakli disklar.',
+  coupe: { name: 'Susambil GT', price: 15000, kind: 'Sport kupe', about: 'Past va keng ikki eshikli sport kupe: uzun kapot, vertikal panjara, ingichka LED faralar, qora 10 parrakli disklar.',
            specs: [['Dvigatel', '4.0 V8'], ['Uzunligi', '4,73 m'], ['Klirens', '12 sm'], ['O‘rindiq', '2 ta']], snapR: 6.7, make: dto => makeCar(dto, coupeTemplate) },
-  gtpro: { name: 'Mahalla GT Pro', price: 25000, kind: 'Sport kupe', about: 'Blenderda yaratilgan batafsil model: bo‘rtiq kapot, orqaga tortilgan proyektorli faralar, vertikal panjara, orqa qanot va to‘rtta chiqindi trubasi.',
+  gtpro: { name: 'Susambil GT Pro', price: 25000, kind: 'Sport kupe', about: 'Blenderda yaratilgan batafsil model: bo‘rtiq kapot, orqaga tortilgan proyektorli faralar, vertikal panjara, orqa qanot va to‘rtta chiqindi trubasi.',
            specs: [['Dvigatel', '4.0 V8 biturbo'], ['Uzunligi', '4,73 m'], ['Klirens', '12 sm'], ['O‘rindiq', '2 ta']], snapR: 6.7,
            ready: () => !!GTP_TPL, load: () => gtProLoad(), make: dto => makeCar(dto, gtProTemplate) },
 };
@@ -2816,7 +2816,7 @@ function coupeTemplate(){
   root.setEnabled(false);
   return GT_TPL = root;
 }
-// ---------- Mahalla GT Pro: the detailed Blender coupe, streamed in as a binary glTF (cars/gt-pro.js: the .glb as base64) ----------
+// ---------- Susambil GT Pro: the detailed Blender coupe, streamed in as a binary glTF (cars/gt-pro.js: the .glb as base64) ----------
 // Loaded once; its PBR materials become the city's standard materials, small parts are merged by material,
 // each wheel gets a 'trkWheel' node at its hub (so it turns and steers like the other cars), plates are added.
 let GTP_TPL = null, GTP_LOAD = null;
@@ -2933,7 +2933,7 @@ const DLR = (() => {
   add(box(0.08, 4.2, 30, SX1 - 0.55, 3.6, cz), darkM);                                                // dark feature panel on it
   const roof = add(box(SX1 - SX0 + 5, 0.7, SZ1 - SZ0 + 1.2, (SX0 + SX1)/2 - 2.5, H + 0.35, cz), whiteM);
   add(box(0.9, 1.6, SZ1 - SZ0 + 1.2, SX0 - 5, H + 0.2, cz), darkM, true);                              // fascia
-  const fascia = sign('dlrSign', 38, 1.4, [['MAHALLA AVTOSALON', 0.62, 0.55]], '#1d2025', '#ffffff');
+  const fascia = sign('dlrSign', 38, 1.4, [['SUSAMBIL AVTOSALON', 0.62, 0.55]], '#1d2025', '#ffffff');
   const fs = B.MeshBuilder.CreatePlane('dlrSignP', { width: 38, height: 1.3 }, scene); fs.position.set(SX0 - 5.47, H + 0.2, cz); fs.rotation.y = Math.PI/2; add(fs, fascia);
   for (const z of [SZ0 + 1, SZ1 - 1]) add(box(0.5, H, 0.5, SX0 - 4.2, H/2, z), steelM, true);           // canopy columns
   const gw = (w, d, x, z) => add(box(w, H - 0.3, d, x, 0.3 + (H - 0.3)/2, z), glassM);
@@ -2949,7 +2949,7 @@ const DLR = (() => {
   const ring = add(B.MeshBuilder.CreateTorus('dlrTTr', { diameter: 7.4, thickness: 0.1, tessellation: 64 }, scene), lightM); ring.position.set(TT.x, 0.5, TT.z);
   const spin = new B.TransformNode('dlrSpin', scene); spin.position.set(TT.x, 0.54, TT.z);
   add(box(1.2, 1.1, 6.5, SX1 - 4.5, 0.85, SZ1 - 7), whiteM); add(box(1.4, 0.08, 6.7, SX1 - 4.5, 1.44, SZ1 - 7), woodM);
-  const logo = sign('dlrWall', 12, 2, [['MAHALLA', 0.42, 0.36], ['AVTOSALON', 0.26, 0.76]], '#24272c', '#f2f2f2');
+  const logo = sign('dlrWall', 12, 2, [['SUSAMBIL', 0.42, 0.36], ['AVTOSALON', 0.26, 0.76]], '#24272c', '#f2f2f2');
   const lp = B.MeshBuilder.CreatePlane('dlrWallP', { width: 12, height: 2 }, scene); lp.position.set(SX1 - 0.6, 4.4, cz); lp.rotation.y = Math.PI/2; add(lp, logo);
   for (const [x, z] of [[SX0 + 1.5, SZ0 + 1.5], [SX0 + 1.5, SZ1 - 1.5], [SX1 - 1.5, SZ0 + 1.5], [SX1 - 1.5, SZ1 - 1.5]]){
     add(B.MeshBuilder.CreateCylinder('dlrPot', { diameter: 0.9, height: 0.8, tessellation: 16 }, scene), darkM).position.set(x, 0.7, z);
@@ -2957,7 +2957,7 @@ const DLR = (() => {
   }
   // a tall sign pylon at the road and two lamp posts on the forecourt
   add(box(1.4, 11, 3.2, x0 + 2.5, 5.5, z0 + 3), darkM, true);
-  const py = sign('dlrPylon', 3, 4.2, [['MAHALLA', 0.13, 0.25], ['AVTO', 0.2, 0.52], ['SALON', 0.13, 0.77]], '#1d2025', '#ffffff');
+  const py = sign('dlrPylon', 3, 4.2, [['SUSAMBIL', 0.12, 0.25], ['AVTO', 0.2, 0.52], ['SALON', 0.13, 0.77]], '#1d2025', '#ffffff');
   for (const sd of [-1, 1]){ const pp = B.MeshBuilder.CreatePlane('dlrPyP', { width: 3, height: 4.2 }, scene); pp.position.set(x0 + 2.5 - sd*0.72, 8.2, z0 + 3); pp.rotation.y = sd*Math.PI/2; add(pp, py); }
   for (const z of [z0 + 6, z1 - 6]){ add(box(0.2, 7, 0.2, x0 + 6, 3.5, z), darkM, true); add(box(1.4, 0.25, 0.5, x0 + 6.5, 7, z), lightM); }
   // the cars on show (built only when the camera is near): models × colours, inside and outside
@@ -3644,7 +3644,7 @@ function goPlace(pl){
   const v = pl.view, portrait = canvas.clientHeight > canvas.clientWidth; flyTo(v.x, v.z, v.r * (portrait ? 1.5 : 1), v.b);
   let a = v.a; while (a - camera.alpha > Math.PI) a -= 2*Math.PI; while (camera.alpha - a > Math.PI) a += 2*Math.PI;   // shortest turn
   fly.from.a = camera.alpha; fly.to.a = a;
-  toast({ port:'Port: konteyner terminali, kranlar va kemalar', air:'Aeroport: samolyotlar har daqiqada qo‘nadi va uchadi', forest:'Tog‘lar ortida: o‘rmon, gullagan bog‘lar va daryo boshlanadigan ko‘l', hotel:'Mehmonxona: 26 qavatli shisha minora va naqshli podium', avto:'Avtosalon: Mahalla GT Pro, Mahalla GT va Tracker ko‘rgazmada' }[pl.key]);
+  toast({ port:'Port: konteyner terminali, kranlar va kemalar', air:'Aeroport: samolyotlar har daqiqada qo‘nadi va uchadi', forest:'Tog‘lar ortida: o‘rmon, gullagan bog‘lar va daryo boshlanadigan ko‘l', hotel:'Mehmonxona: 26 qavatli shisha minora va naqshli podium', avto:'Avtosalon: Susambil GT Pro, Susambil GT va Tracker ko‘rgazmada' }[pl.key]);
 }
 for (const pl of PLACES){
   const el = document.createElement('div'); el.className = 'plbl'; el.innerHTML = pl.icon + '<span>' + pl.name + '</span>';
@@ -3943,7 +3943,7 @@ function openCarShop(edit, model){
   const randomPreview = () => { const L = 'ABCDEFGHIJKLMNOPQRSTUVXYZ', l = () => L[Math.floor(Math.random()*L.length)]; return l() + String(Math.floor(Math.random()*1000)).padStart(3, '0') + l() + l(); };
   let sample = randomPreview();
   const norm = t => String(t || '').toUpperCase().replace(/[\s-]/g, '');
-  const plateNow = () => st.kind === 'keep' ? cur.plate : st.kind === 'random' ? { region: st.region, text: sample, kind: 'standard' } : { region: st.region, text: norm(st.text) || (st.kind === 'standard' ? 'A000AA' : 'MAHALLA'), kind: st.kind };
+  const plateNow = () => st.kind === 'keep' ? cur.plate : st.kind === 'random' ? { region: st.region, text: sample, kind: 'standard' } : { region: st.region, text: norm(st.text) || (st.kind === 'standard' ? 'A000AA' : 'SUSAMBIL'), kind: st.kind };
   const valid = () => {
     if (st.kind === 'keep' || st.kind === 'random') return null;
     const t = norm(st.text);
@@ -4355,7 +4355,7 @@ function carSnapshot(model, color){
   const job = (async () => {
     if (CAR_MODELS[model].load) await CAR_MODELS[model].load();
     const W = 640, H = 360, Y = -600;
-    const node = CAR_MODELS[model].make({ owner: { id: 'snap', nickname: '' }, model, color, plate: { region: '01', text: 'MAHALLA', kind: 'custom' } });
+    const node = CAR_MODELS[model].make({ owner: { id: 'snap', nickname: '' }, model, color, plate: { region: '01', text: 'SUSAMBIL', kind: 'custom' } });
     node.position.set(0, Y, 0); node.rotation.y = 0;
     const meshes = node.getChildMeshes(); for (const m of meshes){ m.receiveShadows = false; m.isPickable = false; if (shadowGen) shadowGen.removeShadowCaster(m); }
     const light = new B.HemisphericLight('snapL', new V3(0.3, 1, -0.4), scene); light.intensity = 0.4; light.groundColor = new C3(0.2, 0.21, 0.24); light.includedOnlyMeshes = meshes;
@@ -4505,7 +4505,7 @@ async function api(method, url, body, idemKey){
 async function refreshMe(){
   const me = await api('GET','/api/me');
   API.me = me; S.coins = me.balance; S.pending = me.pending; S.daily = me.dailyIncome; S.limit = me.plotLimit;
-  updateCoins(); $('.brand span').textContent = me.nickname || 'Mahalla';
+  updateCoins(); $('.brand span').textContent = me.nickname || 'Susambil';
   return me;
 }
 let carPlaceT = 0; const placeCarsSoon = () => { clearTimeout(carPlaceT); carPlaceT = setTimeout(placeCars, 400); };
@@ -4528,7 +4528,7 @@ function authCard(html){
 function closeAuth(){ const el=$('#auth'); if (el) el.remove(); }
 function showLogin(opts){
   return new Promise(resolve=>{
-    authCard(`<div class="logo"></div><h2>Mahalla</h2><p class="lead">Umumiy shahar. Yer oling, quring, qo‘shnilar bilan yashang.</p>
+    authCard(`<div class="logo"></div><h2>Susambil</h2><p class="lead">Ertaklardagi farovonlik va osoyishtalik maskani — endi o‘zimiz bunyod etamiz.</p>
       ${opts.telegramBot ? '<div id="tgBox" style="display:flex;justify-content:center;margin:14px 0"></div>' : ''}
       ${opts.guest ? `<button class="btn primary" id="guestGo" style="width:100%;margin-top:6px">Mehmon sifatida kirish</button><p class="note">Hisob shu brauzerga bog‘lanadi. Brauzer tozalansa, mulk yo‘qoladi.</p>` : ''}
       ${opts.dev ? `<div class="sep">${opts.telegramBot?'yoki ':''}sinov uchun kirish</div><div class="row"><input id="devName" placeholder="Ismingiz (test)" maxlength="40"><button class="btn primary" id="devGo" style="flex:0 0 auto">Kirish</button></div>` : ''}
@@ -4579,16 +4579,16 @@ function showNickname(){
 
 // ---------- welcome screen ----------
 const I18N = {
-  uz: { pop:'AHOLI', badge:'1 Telegram = 1 hovli', title:'Mahallaga xush kelibsiz',
-        sub:'Har bir o‘yinchining o‘z hovlisi bor — tepasida Telegram niki yonib turadi. Yer oling, uslubini tanlang, qavat qo‘shing va dunyoning eng baland binolariga ega bo‘ling.',
+  uz: { pop:'AHOLI', badge:'1 Telegram = 1 hovli', title:'Susambil',
+        sub:'Ertaklardagi farovonlik va osoyishtalik maskani — endi o‘zimiz bunyod etamiz. Uy quring, baland imoratlar qad rostlating va Susambilni orzularingizdagi shaharga aylantiring.',
         ph:'Telegram nikingiz', find:'Hovlimni top', tour:'Dunyo osmono‘parlari bo‘ylab sayohat ›', get:'Hovli olish', browse:'Shunchaki aylanib chiqish', popLine:'Aholi',
         notFound:'Bu nik bilan hovli topilmadi. “Hovli olish” ni bosing — Telegram orqali kirib, o‘zingizga yer oling.', tourEnd:'Sayohat tugadi', choyxona:'Milliy choyxona' },
-  ru: { pop:'ЖИТЕЛИ', badge:'1 Telegram = 1 двор', title:'Добро пожаловать в Махаллю',
-        sub:'У каждого игрока свой двор — над ним светится ник в Telegram. Купите землю, выберите стиль, добавьте этажи и станьте владельцем копий самых высоких зданий мира.',
+  ru: { pop:'ЖИТЕЛИ', badge:'1 Telegram = 1 двор', title:'Сусамбиль',
+        sub:'Сказочный край достатка и покоя — теперь мы строим его сами. Возводите дома и высотки и превратите Сусамбиль в город своей мечты.',
         ph:'Ваш ник в Telegram', find:'Найти мой двор', tour:'Тур по небоскрёбам мира ›', get:'Получить двор', browse:'Просто посмотреть', popLine:'Жители',
         notFound:'Двор с таким ником не найден. Нажмите «Получить двор» — войдите через Telegram и выберите участок.', tourEnd:'Тур завершён', choyxona:'Национальная чайхана' },
-  en: { pop:'RESIDENTS', badge:'1 Telegram = 1 home', title:'Welcome to Mahalla',
-        sub:'Every player has their own home — their Telegram name glows above it. Buy land, pick a style, add floors and own copies of the world’s tallest buildings.',
+  en: { pop:'RESIDENTS', badge:'1 Telegram = 1 home', title:'Susambil',
+        sub:'The fairy-tale land of plenty and peace — now we build it ourselves. Raise homes and towers, and turn Susambil into the city of your dreams.',
         ph:'Your Telegram username', find:'Find my home', tour:'Tour the world’s skyscrapers ›', get:'Get a home', browse:'Just look around', popLine:'Residents',
         notFound:'No home found for that name. Tap “Get a home” to sign in with Telegram and claim a plot.', tourEnd:'Tour finished', choyxona:'National teahouse' },
 };

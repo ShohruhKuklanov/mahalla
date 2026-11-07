@@ -1,5 +1,5 @@
 // Nickname rules: 3–20 letters/digits/_/. ; no reserved or offensive words.
-const RESERVED = ['admin', 'administrator', 'moderator', 'mahalla', 'support', 'system', 'claude'];
+const RESERVED = ['admin', 'administrator', 'moderator', 'mahalla', 'susambil', 'support', 'system', 'claude'];
 // Short starter list (uz/ru/en). Extend from a file in production; matching is substring-based on a normalized form.
 const BLOCKED = ['axmoq', 'ahmoq', 'jalab', 'qotoq', 'suka', 'blyat', 'blya', 'pidor', 'xuy', 'huy', 'fuck', 'shit', 'bitch', 'nigger', 'hitler'];
 
