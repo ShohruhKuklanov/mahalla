@@ -129,7 +129,7 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
       throw e;
     }
     if (chk.lower === 'shohruh.97') await game.grantFounderCar(db);
-    if (chk.lower === 'shaxzamee_5400' || chk.lower === 'shaxzoda') for (const id of await game.giftShaxzodaHouse(db)) await pushPlot(id);
+    if (['shaxzamee_5400', 'shaxzomee_5400', 'shaxzoda'].includes(chk.lower)) for (const id of await game.giftShaxzodaHouse(db)) await pushPlot(id);
     return { nickname: chk.nick };
   });
 
@@ -289,6 +289,11 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
     if (b.plotId != null) await pushPlot(b.plotId);
     return { ok: true };
   });
+
+  // the one-off house gift (see game.giftShaxzodaHouse): checked every 2 minutes too, so it happens whichever way the
+  // receiving account signs in, and open clients see the building change hands at once
+  const giftTimer = setInterval(async () => { try { for (const id of await game.giftShaxzodaHouse(db)) await pushPlot(id); } catch (_) {} }, 120_000);
+  giftTimer.unref(); app.addHook('onClose', async () => clearInterval(giftTimer));
 
   app.get('/api/health', async () => { await db.query('select 1'); return { ok: true }; });
 

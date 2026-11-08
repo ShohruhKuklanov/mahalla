@@ -396,10 +396,18 @@ export async function grantFounderCar(db: Db) {
  * is cancelled; no coins change hands. Idempotent: once "Shaxzoda" owns no building, it does nothing. Runs at start
  * and when the nickname shaxzamee_5400 is taken (the account may not exist yet). Returns the plot ids moved.
  */
+let GIFT_LOG: ((m: string) => void) | null = null;
+export function setGiftLog(f: ((m: string) => void) | null) { GIFT_LOG = f; }
 export async function giftShaxzodaHouse(db: Db): Promise<number[]> {
   return tx(db, async (c) => {
-    const from = (await c.query("select id from users where nickname_lower = 'shaxzoda'")).rows[0]?.id;
-    const to = (await c.query("select id from users where nickname_lower = 'shaxzamee_5400' and status = 'active'")).rows[0]?.id;
+    // the giving account shows as "Shaxzoda" (its nickname, or its Telegram @username); the receiving one is
+    // shaxzamee_5400 / shaxzomee_5400 (both spellings were given), as a nickname or a Telegram @username
+    const from = (await c.query(
+      "select id from users where nickname_lower = 'shaxzoda' or lower(telegram_username) = 'shaxzoda' order by (nickname_lower = 'shaxzoda') desc limit 1")).rows[0]?.id;
+    const to = (await c.query(
+      `select id from users where status = 'active' and (nickname_lower in ('shaxzamee_5400','shaxzomee_5400') or lower(telegram_username) in ('shaxzamee_5400','shaxzomee_5400'))
+        order by (nickname_lower in ('shaxzamee_5400','shaxzomee_5400')) desc, id limit 1`)).rows[0]?.id;
+    if (GIFT_LOG) GIFT_LOG(`gift check: Shaxzoda=${from ?? 'not found'}, shaxzamee/shaxzomee_5400=${to ?? 'not found'}`);
     if (!from || !to || from === to) return [];
     const ids = (await c.query(
       'select p.id from plots p join buildings b on b.plot_id = p.id where p.owner_id = $1 for update of p', [from])).rows.map((r) => Number(r.id));
