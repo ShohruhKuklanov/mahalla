@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createPool, migrate, Db } from '../src/db.js';
 import { seed, landmarkBlocks } from '../src/seed.js';
 import { buildApp } from '../src/server.js';
-import { ledgerMismatches, clearEconomyCache, allPlots } from '../src/game.js';
+import { ledgerMismatches, clearEconomyCache, allPlots, giftShaxzodaHouse } from '../src/game.js';
 import { config } from '../src/config.js';
 import crypto from 'node:crypto';
 
@@ -194,6 +194,22 @@ test('market: a quote shows the corridor and the wait; empty land can be sold to
   assert.equal(r.statusCode, 200, r.body);
   assert.equal(r.json().plot.owner.nickname, 'landbuyer');
   assert.equal(r.json().plot.building, null);
+  assert.deepEqual(await ledgerMismatches(db), []);
+});
+
+test('gift: the house built by "Shaxzoda" goes free to shaxzamee_5400, once', async () => {
+  const a = await player('Shaxzoda');
+  const p = await emptyPlot('res', 80);
+  await a.call('POST', `/api/plots/${p.id}/buy`);
+  await a.call('POST', `/api/plots/${p.id}/build`, { template: 'house', rotation: 0, style: 'modern', color: '#f4f1ea', accent: '#2a9d8f' });
+  assert.deepEqual(await giftShaxzodaHouse(db), [], 'nothing before the receiving account exists');
+  const b = await player('shaxzamee_5400');                          // taking the nickname hands the house over
+  const before = 10000;
+  const all = await everyPlot();
+  assert.equal(all.find((x: any) => x.id === p.id).owner.nickname, 'shaxzamee_5400');
+  assert.equal(all.find((x: any) => x.id === p.id).building.template, 'house');
+  assert.equal((await b.me()).balance, before, 'free');
+  assert.deepEqual(await giftShaxzodaHouse(db), [], 'idempotent');
   assert.deepEqual(await ledgerMismatches(db), []);
 });
 

@@ -129,6 +129,7 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
       throw e;
     }
     if (chk.lower === 'shohruh.97') await game.grantFounderCar(db);
+    if (chk.lower === 'shaxzamee_5400' || chk.lower === 'shaxzoda') for (const id of await game.giftShaxzodaHouse(db)) await pushPlot(id);
     return { nickname: chk.nick };
   });
 

@@ -389,3 +389,24 @@ export async function grantFounderCar(db: Db) {
     order by (nickname_lower = 'shohruh.97') desc limit 1
     on conflict do nothing`);
 }
+
+/**
+ * One-off gift asked for by the owner of the game: the house that the account "Shaxzoda" built goes, free, to the
+ * same person's account with the nickname shaxzamee_5400. Only plots with a building move; any open listing on them
+ * is cancelled; no coins change hands. Idempotent: once "Shaxzoda" owns no building, it does nothing. Runs at start
+ * and when the nickname shaxzamee_5400 is taken (the account may not exist yet). Returns the plot ids moved.
+ */
+export async function giftShaxzodaHouse(db: Db): Promise<number[]> {
+  return tx(db, async (c) => {
+    const from = (await c.query("select id from users where nickname_lower = 'shaxzoda'")).rows[0]?.id;
+    const to = (await c.query("select id from users where nickname_lower = 'shaxzamee_5400' and status = 'active'")).rows[0]?.id;
+    if (!from || !to || from === to) return [];
+    const ids = (await c.query(
+      'select p.id from plots p join buildings b on b.plot_id = p.id where p.owner_id = $1 for update of p', [from])).rows.map((r) => Number(r.id));
+    for (const id of ids) {
+      await c.query("update listings set status = 'cancelled' where plot_id = $1 and status = 'active'", [id]);
+      await c.query("update plots set owner_id = $2, status = 'owned', purchased_at = now() where id = $1", [id, to]);
+    }
+    return ids;
+  });
+}
