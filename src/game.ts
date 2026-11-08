@@ -234,7 +234,7 @@ export async function listForSale(db: Db, user: SessionUser | null, plotId: numb
     const eco = await economy(c);
     const ageH = (Date.now() - new Date(u.created_at).getTime()) / 3600_000;
     if (ageH < eco.min_account_age_to_sell_hours) {
-      throw E.conflict('account_too_new', `Yangi hisoblar ${Math.ceil(eco.min_account_age_to_sell_hours / 24)} kundan keyin sota oladi.`);
+      throw E.conflict('account_too_new', `Yangi hisob ${Math.max(1, Math.ceil((eco.min_account_age_to_sell_hours - ageH) * 60))} daqiqadan keyin sota oladi.`);
     }
     if ((await c.query("select 1 from listings where plot_id = $1 and status = 'active'", [plotId])).rows.length) {
       throw E.conflict('already_listed', 'Bu uchastka allaqachon sotuvda.');
@@ -249,6 +249,22 @@ export async function listForSale(db: Db, user: SessionUser | null, plotId: numb
     await c.query('insert into listings(plot_id,seller_id,price) values ($1,$2,$3)', [plotId, u.id, price]);
     return { price, estimate: est };
   });
+}
+/** What the owner may ask for a plot: the price corridor around the estimate, and whether they can sell yet. */
+export async function saleQuote(db: Db, user: SessionUser | null, plotId: number) {
+  const u = requirePlayer(user);
+  const p = (await db.query('select * from plots where id = $1', [plotId])).rows[0];
+  if (!p) throw E.notFound('Uchastka topilmadi');
+  if (p.owner_id !== u.id) throw E.forbidden();
+  const eco = await economy(db);
+  const b = (await db.query('select template, floors from buildings where plot_id = $1', [plotId])).rows[0];
+  const land = landPrice(p.zone, p.location_factor, (await occupancy(db)).get(p.district_id) || 0, eco);
+  const est = estimate(land, b ? costOf(b.template, b.floors) : 0);
+  const ageH = (Date.now() - new Date(u.created_at).getTime()) / 3600_000;
+  const waitMin = Math.max(0, Math.ceil((eco.min_account_age_to_sell_hours - ageH) * 60));
+  const listed = (await db.query("select price from listings where plot_id = $1 and status = 'active'", [plotId])).rows[0];
+  return { estimate: est, min: Math.ceil(est * eco.sale_min_ratio), max: Math.floor(est * eco.sale_max_ratio),
+           fee: eco.sale_fee, canSell: waitMin === 0, waitMinutes: waitMin, listedPrice: listed ? Number(listed.price) : null };
 }
 export async function unlist(db: Db, user: SessionUser | null, plotId: number) {
   const u = requirePlayer(user);

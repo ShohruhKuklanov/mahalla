@@ -202,6 +202,7 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
     await pushPlot(id);
     return r;
   });
+  app.get('/api/plots/:id/quote', async (req) => game.saleQuote(db, req.user, plotId(req)));
   app.delete('/api/plots/:id/list', async (req) => {
     const id = plotId(req); const r = await game.unlist(db, req.user, id); await pushPlot(id); return r;
   });

@@ -176,6 +176,27 @@ test('market: price corridor, new-account rule, sale moves coins and building', 
   assert.deepEqual(await ledgerMismatches(db), []);
 });
 
+test('market: a quote shows the corridor and the wait; empty land can be sold too', async () => {
+  const s1 = await player('landseller');
+  const p = await emptyPlot('res', 60);
+  await s1.call('POST', `/api/plots/${p.id}/buy`);
+  const q0 = (await s1.call('GET', `/api/plots/${p.id}/quote`)).json();
+  assert.equal(q0.canSell, false); assert.ok(q0.waitMinutes > 0 && q0.waitMinutes <= 60);
+  assert.ok(q0.min <= q0.estimate && q0.estimate <= q0.max);
+  await db.query("update users set created_at = now() - interval '2 hours' where nickname = 'landseller'");
+  const q = (await s1.call('GET', `/api/plots/${p.id}/quote`)).json();
+  assert.equal(q.canSell, true);
+  assert.equal((await s1.call('POST', `/api/plots/${p.id}/list`, { price: q.estimate })).statusCode, 200);
+  assert.equal((await s1.call('GET', `/api/plots/${p.id}/quote`)).json().listedPrice, q.estimate);
+  const other = await player('landbuyer');
+  assert.equal((await other.call('GET', `/api/plots/${p.id}/quote`)).statusCode, 403, 'only the owner gets a quote');
+  const r = await other.call('POST', `/api/plots/${p.id}/buy`);
+  assert.equal(r.statusCode, 200, r.body);
+  assert.equal(r.json().plot.owner.nickname, 'landbuyer');
+  assert.equal(r.json().plot.building, null);
+  assert.deepEqual(await ledgerMismatches(db), []);
+});
+
 test('buying a demo neighbour’s listing works and pays the bot', async () => {
   const b = await player('shopper');
   const listing = (await city()).plots.find((p: any) => p.state === 'sale' && p.price <= 10000);

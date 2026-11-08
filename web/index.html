@@ -918,7 +918,7 @@ const specBuildS = s => { const t = TPL[s.tpl]; return t.landmark ? t.build  : t
 const minCost = k => specCost({ tpl:k, floors: TPL[k].floors[0] });
 const lmHeight = k => Math.round(CAT.landmarks[k].realHeight * CAT.landmarkScale);
 function buildingName(p){
-  const t = TPL[p.tpl]; if (!t) return 'Bino';
+  const t = TPL[p.tpl]; if (!t) return p.tpl ? 'Bino' : `Bo‘sh yer · uchastka #${p.id+1}`;
   if (t.landmark) return `${t.name} nusxasi`;
   return `${t.name} · ${p.floors||t.floors[0]} qavat`;
 }
@@ -3968,9 +3968,9 @@ function showPlot(p){
     $('#buyBtn').onclick = ()=>buy(p, price);
   } else if (p.state==='sale'){
     const price = salePrice(p), mine = myPlots().length, can = S.coins>=price && mine<S.limit;
-    openSheet(`<h3>${esc(buildingName(p))}</h3><div class="sub">${sub} · sotuvchi: ${ownerHtml(p)}</div>${kv([...base,['Narx',fmt(price)+' tanga'],['Kunlik daromad',fmt(specIncome(p))+' tanga']])}
+    openSheet(`<h3>${esc(buildingName(p))}</h3><div class="sub">${sub} · sotuvchi: ${ownerHtml(p)}</div>${kv([...base,['Narx',fmt(price)+' tanga'], ...(p.tpl ? [['Kunlik daromad',fmt(specIncome(p))+' tanga']] : [])])}
       <div class="row"><button class="btn gold" id="buyBtn" ${can?'':'disabled'}>Sotib olish · ${fmt(price)}</button></div>
-      ${S.coins<price?`<div class="note warn">Tanga yetmaydi: yana ${fmt(price-S.coins)} kerak.</div>`:mine>=S.limit?`<div class="note warn">Uchastkalar limiti: ${S.limit} ta.</div>`:'<div class="note">Bino bilan birga o‘tadi va darhol daromad beradi.</div>'}${orbitRow()}`, 'plot'); bindOrbit();
+      ${S.coins<price?`<div class="note warn">Tanga yetmaydi: yana ${fmt(price-S.coins)} kerak.</div>`:mine>=S.limit?`<div class="note warn">Uchastkalar limiti: ${S.limit} ta.</div>`:(p.tpl ? '<div class="note">Bino bilan birga o‘tadi va darhol daromad beradi.</div>' : '<div class="note">Sotib olgach, darhol qurishni boshlashingiz mumkin.</div>')}${orbitRow()}`, 'plot'); bindOrbit();
     $('#buyBtn').onclick = ()=>buy(p, price);
   } else if (p.state==='owned'){
     openSheet(`<h3>${esc(buildingName(p))}</h3><div class="sub">${sub} · egasi: ${ownerHtml(p)}</div>${kv([...base,['Yoqdi',`<span id="lk">${p.likes}</span> ♥`],['Bino',esc(buildingSub(p))]])}
@@ -3985,22 +3985,49 @@ function showPlot(p){
       if (API.on){ try { await api('POST','/api/reports',{ targetType:'plot', targetId:p.id, reason:'Nomaqbul bino yoki nik' }); } catch(e){ toast(e.message); return; } }
       toast('Shikoyat moderatorga yuborildi. Rahmat!'); };
   } else if (p.state==='mine'){
-    if (!p.tpl){ openBuild(p); return; }
+    if (!p.tpl){
+      if (!API.on){ openBuild(p); return; }
+      // own empty land: build on it, or put it up for sale
+      openSheet(`<h3>${title}</h3><div class="sub">${sub} · sizning yeringiz</div>${kv([...base])}
+        ${p.listed ? '' : '<div class="row"><button class="btn primary" id="buildBtn">Qurish</button></div>'}${sellHtml(p)}${orbitRow()}`, 'plot'); bindOrbit();
+      if ($('#buildBtn')) $('#buildBtn').onclick = () => openBuild(p);
+      bindSell(p); return;
+    }
     openSheet(`<h3>${esc(buildingName(p))}</h3><div class="sub">${sub} · sizniki</div>${kv([...base,['Kunlik daromad',fmt(specIncome(p))+' tanga'],['Holat',p.building?'Qurilmoqda…':'Ishlamoqda'],['Bino',esc(buildingSub(p))]])}
       <div class="row"><button class="btn" disabled>Yaxshilash (keyinroq)</button><button class="btn" id="streetBtn">Ko‘cha ko‘rinishi</button></div>${orbitRow()}
-      ${API.on ? (p.listed
-        ? `<div class="row" style="margin-top:8px"><button class="btn" id="unlistBtn">Sotuvdan olish (${fmt(p.price)})</button></div>`
-        : `<div class="row" style="margin-top:8px"><input id="sellPrice" type="number" inputmode="numeric" placeholder="Narx, tanga" style="flex:1;min-width:0;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);padding:0 14px;font:inherit;font-size:15px"><button class="btn gold" id="sellBtn" style="flex:0 0 auto">Sotuvga qo‘yish</button></div>`) : ''}`, 'plot'); bindOrbit();
+      ${API.on ? sellHtml(p) : ''}`, 'plot'); bindOrbit();
     $('#streetBtn').onclick = ()=>flyTo(p.x,p.z,40,1.38);
-    if ($('#sellBtn')) $('#sellBtn').onclick = async ()=>{
-      const price = Math.round(+$('#sellPrice').value || 0);
-      try { await api('POST',`/api/plots/${p.id}/list`,{ price }); toast('Sotuvga qo‘yildi'); await refreshPlot(p.id); showPlot(p); }
-      catch(e){ toast(e.data && e.data.min ? `${e.message}` : e.message); }
-    };
-    if ($('#unlistBtn')) $('#unlistBtn').onclick = async ()=>{
-      try { await api('DELETE',`/api/plots/${p.id}/list`); await refreshPlot(p.id); showPlot(p); } catch(e){ toast(e.message); }
-    };
+    bindSell(p);
   }
+}
+// ---------- selling your own plot (with or without a building) ----------
+// The server sets the corridor: 50 %–300 % of the estimate (land + building cost); a 5 % fee is kept on sale.
+function sellHtml(p){
+  if (p.listed) return `<div class="note" style="margin-top:10px">Sotuvda: <b>${fmt(p.price)} tanga</b>. Kimdir sotib olsa, tanga hisobingizga tushadi.</div>
+    <div class="row"><button class="btn" id="unlistBtn">Sotuvdan olish</button></div>`;
+  return `<div class="sellbox" style="margin-top:10px"><div class="note" id="sellNote">Narx oralig‘i hisoblanmoqda…</div>
+    <div class="row"><input id="sellPrice" type="number" inputmode="numeric" placeholder="Narx, tanga" aria-label="Sotish narxi" style="flex:1;min-width:0;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);padding:0 14px;font:inherit;font-size:15px"><button class="btn gold" id="sellBtn" style="flex:0 0 auto" disabled>Sotuvga qo‘yish</button></div></div>`;
+}
+async function bindSell(p){
+  if ($('#unlistBtn')) $('#unlistBtn').onclick = async ()=>{
+    try { await api('DELETE',`/api/plots/${p.id}/list`); toast('Sotuvdan olindi'); await refreshPlot(p.id); showPlot(p); } catch(e){ toast(e.message); }
+  };
+  if (!$('#sellBtn')) return;
+  let q = null;
+  try { q = await api('GET', `/api/plots/${p.id}/quote`); } catch(e){ if ($('#sellNote')) $('#sellNote').textContent = e.message; return; }
+  if (!$('#sellBtn') || S.selected !== p) return;
+  const inp = $('#sellPrice'), note = $('#sellNote'), btn = $('#sellBtn');
+  inp.value = q.estimate; inp.min = q.min; inp.max = q.max;
+  const upd = () => { const v = Math.round(+inp.value || 0), ok = q.canSell && v >= q.min && v <= q.max;
+    btn.disabled = !ok;
+    note.innerHTML = !q.canSell ? `Yangi hisob: <b>${q.waitMinutes} daqiqadan</b> keyin sotish mumkin.`
+      : `Bahosi: <b>${fmt(q.estimate)}</b> · narx ${fmt(q.min)} – ${fmt(q.max)} tanga oralig‘ida. Sotilganda ${Math.round(q.fee*100)}% komissiya: qo‘lingizga ${fmt(Math.max(0, v - Math.round(v*q.fee)))} tanga tegadi.`; };
+  inp.oninput = upd; upd();
+  btn.onclick = async ()=>{
+    const price = Math.round(+inp.value || 0); btn.disabled = true;
+    try { await api('POST',`/api/plots/${p.id}/list`,{ price }); toast('Sotuvga qo‘yildi: ' + fmt(price) + ' tanga'); await refreshPlot(p.id); showPlot(p); }
+    catch(e){ toast(e.message); btn.disabled = false; }
+  };
 }
 async function buy(p, price){
   if (API.on && !(API.me && API.me.nickname)){ if (!(await ensureLogin())) return; showPlot(p); return; }
@@ -4744,7 +4771,7 @@ async function refreshPlot(id){ try { applyDTO(plots[id], await api('GET',`/api/
 function connectWs(){
   try {
     const ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://') + location.host + '/ws');
-    ws.onmessage = ev => { try { const m = JSON.parse(ev.data); if (m.type==='plot' && plots[m.plot.id]){ const p = plots[m.plot.id]; applyDTO(p, m.plot, true); if (S.selected===p && S.sheet==='plot') showPlot(p); placeCarsSoon(); } if (m.type==='car' && m.car){ setCar(m.car); placeCars(); if (API.me && m.car.owner.id === API.me.id) API.me.car = m.car; } } catch(_){} };
+    ws.onmessage = ev => { try { const m = JSON.parse(ev.data); if (m.type==='plot' && plots[m.plot.id]){ const p = plots[m.plot.id], wasMine = p.state==='mine' && p.listed, price = p.price; applyDTO(p, m.plot, true); if (wasMine && p.state!=='mine'){ toast(`${buildingName(p)} sotildi: +${fmt(Math.round(price*0.95))} tanga`); refreshMe(); } if (S.selected===p && S.sheet==='plot') showPlot(p); placeCarsSoon(); } if (m.type==='car' && m.car){ setCar(m.car); placeCars(); if (API.me && m.car.owner.id === API.me.id) API.me.car = m.car; } } catch(_){} };
     ws.onclose = () => setTimeout(connectWs, 3000);
   } catch(_){}
 }
@@ -4978,7 +5005,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>

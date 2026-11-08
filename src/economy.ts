@@ -138,7 +138,7 @@ export const ECONOMY_DEFAULTS = {
   sale_fee: 0.05,
   sale_min_ratio: 0.5,
   sale_max_ratio: 3.0,
-  min_account_age_to_sell_hours: 24 * 7,
+  min_account_age_to_sell_hours: 1,               // a brand-new account waits an hour before it can sell (anti coin-farming)
   income_cap_days: 1,
   demand_weight: 0.5,
   demolish_refund: 0.5,
