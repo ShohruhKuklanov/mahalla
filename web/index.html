@@ -2661,6 +2661,9 @@ const CAR_MODELS = {
   roadster: { name: 'Susambil Shamol', price: 30000, kind: 'Roadster', about: 'Yumshoq tomli ikki o‘rindiqli roadster: uzun kapot, gorizontal panjarali keng og‘iz, uch linzali ingichka faralar va orqada butun eni bo‘ylab yonuvchi chiroq.',
            specs: [['Dvigatel', '4.0 V8 biturbo'], ['Uzunligi', '4,73 m'], ['Tomi', 'yumshoq, ochiladi'], ['O‘rindiq', '2 ta']], snapR: 6.7,
            ready: () => RDS.ready(), load: () => RDS.start(), make: dto => makeCar(dto, RDS.template) },
+  kometa: { name: 'Susambil Kometa', price: 40000, kind: 'Elektr konsept', about: 'Kelajak mashinasi: ingichka tomchi kuzov ustida yaxlit shisha gumbaz, suzib turgan qanot-qanotli ochiq old g‘ildiraklar, ko‘prik-qanotli orqa podlar va ko‘k nur sochuvchi turbina disklari.',
+           specs: [['Dvigatel', '4 ta elektr motor'], ['Uzunligi', '4,6 m'], ['Kabina', 'shisha gumbaz'], ['O‘rindiq', '2 ta']], snapR: 7.2,
+           ready: () => KMT.ready(), load: () => KMT.start(), make: dto => makeCar(dto, KMT.template) },
 };
 /** a model that streams in (a .glb): false until its template is loaded (and starts the load) */
 const modelReady = m => { const M = CAR_MODELS[m] || CAR_MODELS.tracker; if (!M.ready || M.ready()) return true; M.load(); return false; };
@@ -3092,7 +3095,7 @@ function glbCar(cfg){
       if (metal > 0.5) m.diffuseColor = a.scale(0.85);
       if (/Glass_Tinted|Mirror_Glass/.test(n)){ m.diffuseColor = hex('#1b2128'); m.alpha = /Mirror/.test(n) ? 1 : 0.62; m.specularPower = 260; m.specularColor = new C3(1,1,1); m.backFaceCulling = false; }
       if (/Lens_Clear/.test(n)){ m.diffuseColor = hex('#d8e2ea'); m.alpha = 0.22; m.specularColor = new C3(1,1,1); m.specularPower = 300; }
-      if (/LED/.test(n)) m.emissiveColor = hex('#e9f3ff');
+      if (/LED/.test(n)) m.emissiveColor = /Glow/.test(n) ? hex('#3fd8ff') : hex('#e9f3ff');
       if (/Taillight/.test(n)) m.emissiveColor = hex('#6a0508');
       if (/Opening_Cavity|Interior/.test(n)) m.backFaceCulling = false;
       MATS.set(n, m); return m;
@@ -3140,6 +3143,7 @@ function glbCar(cfg){
 }
 const GTP = glbCar({ file: 'gt-pro', global: 'GTP_GLB', tag: 'gtp' });
 const RDS = glbCar({ file: 'roadster', global: 'RDS_GLB', tag: 'rds' });
+const KMT = glbCar({ file: 'kometa', global: 'KMT_GLB', tag: 'kmt' });
 const gtProTemplate = GTP.template, gtProLoad = GTP.start;
 
 /** A player's car: a clone of its model's template (shared geometry) with its own paint and plates. */
@@ -3264,10 +3268,10 @@ const DLR = (() => {
     { m: 'gtpro',   c: '#16181c', x: SX0 + 7, z: SZ0 + 7.5, ry: -Math.PI/2 + 0.55 },
     { m: 'tracker', c: '#a8202a', x: SX0 + 7, z: SZ1 - 7.5, ry: -Math.PI/2 - 0.55 },
     { m: 'roadster', c: '#1d2a44', x: SX1 - 8, z: SZ0 + 6, ry: -Math.PI/2 + 0.2 },
-    { m: 'coupe',   c: '#f2f3f1', x: x0 + 11.5, z: cz - 18, ry: -Math.PI/2 + 0.35 },          // outside, nose to the road
+    { m: 'kometa',  c: '#e9ecef', x: x0 + 11.5, z: cz - 18, ry: -Math.PI/2 + 0.35 },          // outside, nose to the road: the concept
     { m: 'roadster', c: '#f2f3f1', x: x0 + 11.5, z: cz - 6,  ry: -Math.PI/2 + 0.35 },
     { m: 'gtpro',   c: '#a8202a', x: x0 + 11.5, z: cz + 6,  ry: -Math.PI/2 - 0.35 },
-    { m: 'tracker', c: '#16181c', x: x0 + 11.5, z: cz + 18, ry: -Math.PI/2 - 0.35 },
+    { m: 'kometa',  c: '#16181c', x: x0 + 11.5, z: cz + 18, ry: -Math.PI/2 - 0.35 },
   ];
   const cars = SHOW.map(() => null);
   function lod(force){
@@ -3276,7 +3280,7 @@ const DLR = (() => {
     SHOW.forEach((c, i) => {
       if (!near){ if (cars[i]) cars[i].setEnabled(false); return; }
       if (!cars[i]){
-        if ((!force && built >= 1) || !modelReady(c.m)) return;
+        if (!modelReady(c.m) || (!force && built >= 1)) return;          // every model starts loading at once
         const n = CAR_MODELS[c.m].make({ owner: { id: 'dlr' + i, nickname: '' }, model: c.m, color: c.c, plate: { region: '01', text: 'SALON', kind: 'custom' } });
         n.metadata.body.isPickable = false; built++;
         if (c.spin){ n.parent = spin; n.position.set(0, 0, 0); } else { n.position.set(c.x, 0.3 * (c.x > SX0 ? 1 : 0) + 0.1, c.z); n.rotation.y = c.ry; }
@@ -5378,7 +5382,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
