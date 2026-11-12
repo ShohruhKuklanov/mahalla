@@ -2657,7 +2657,10 @@ const CAR_MODELS = {
            specs: [['Dvigatel', '4.0 V8'], ['Uzunligi', '4,73 m'], ['Klirens', '12 sm'], ['O‘rindiq', '2 ta']], snapR: 6.7, make: dto => makeCar(dto, coupeTemplate) },
   gtpro: { name: 'Susambil GT Pro', price: 25000, kind: 'Sport kupe', about: 'Blenderda yaratilgan batafsil model: bo‘rtiq kapot, orqaga tortilgan proyektorli faralar, vertikal panjara, orqa qanot va to‘rtta chiqindi trubasi.',
            specs: [['Dvigatel', '4.0 V8 biturbo'], ['Uzunligi', '4,73 m'], ['Klirens', '12 sm'], ['O‘rindiq', '2 ta']], snapR: 6.7,
-           ready: () => !!GTP_TPL, load: () => gtProLoad(), make: dto => makeCar(dto, gtProTemplate) },
+           ready: () => GTP.ready(), load: () => GTP.start(), make: dto => makeCar(dto, GTP.template) },
+  roadster: { name: 'Susambil Shamol', price: 30000, kind: 'Roadster', about: 'Yumshoq tomli ikki o‘rindiqli roadster: uzun kapot, gorizontal panjarali keng og‘iz, uch linzali ingichka faralar va orqada butun eni bo‘ylab yonuvchi chiroq.',
+           specs: [['Dvigatel', '4.0 V8 biturbo'], ['Uzunligi', '4,73 m'], ['Tomi', 'yumshoq, ochiladi'], ['O‘rindiq', '2 ta']], snapR: 6.7,
+           ready: () => RDS.ready(), load: () => RDS.start(), make: dto => makeCar(dto, RDS.template) },
 };
 /** a model that streams in (a .glb): false until its template is loaded (and starts the load) */
 const modelReady = m => { const M = CAR_MODELS[m] || CAR_MODELS.tracker; if (!M.ready || M.ready()) return true; M.load(); return false; };
@@ -3068,21 +3071,24 @@ function coupeTemplate(){
 // ---------- Susambil GT Pro: the detailed Blender coupe, streamed in as a binary glTF (cars/gt-pro.js: the .glb as base64) ----------
 // Loaded once; its PBR materials become the city's standard materials, small parts are merged by material,
 // each wheel gets a 'trkWheel' node at its hub (so it turns and steers like the other cars), plates are added.
-let GTP_TPL = null, GTP_LOAD = null;
-const gtProTemplate = () => { if (!GTP_TPL) throw new Error('GT Pro not loaded'); return GTP_TPL; };
-function gtProLoad(){
-  if (GTP_LOAD) return GTP_LOAD;
+// The same loader serves every Blender car: cfg = { file, global, tag } (the .glb as base64 in cars/<file>.js → window[global])
+function glbCar(cfg){
+  const C = { tpl: null, load: null };
+  C.template = () => { if (!C.tpl) throw new Error(cfg.tag + ' not loaded'); return C.tpl; };
+  C.ready = () => !!C.tpl;
+  C.start = () => {
+  if (C.load) return C.load;
   // the .glb ships as base64 in a small script (cars/gt-pro.js), so any static host serves it
-  const fetchGlb = () => window.GTP_GLB ? Promise.resolve() : new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'cars/gt-pro.js'; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
-  GTP_LOAD = fetchGlb().then(() => B.SceneLoader.ImportMeshAsync('', '', 'data:;base64,' + window.GTP_GLB, scene, null, '.glb')).then(res => {
-    const root = new B.TransformNode('gtpTpl', scene); root.metadata = { wheels: [] };
-    const bodyM = stdMat('gtpBodyM', { diffuse: new C3(1,1,1), spec: new C3(.85,.85,.85), power: 160 });
+  const fetchGlb = () => window[cfg.global] ? Promise.resolve() : new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'cars/' + cfg.file + '.js'; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+  C.load = fetchGlb().then(() => B.SceneLoader.ImportMeshAsync('', '', 'data:;base64,' + window[cfg.global], scene, null, '.glb')).then(res => {
+    const root = new B.TransformNode(cfg.tag + 'Tpl', scene); root.metadata = { wheels: [] };
+    const bodyM = stdMat(cfg.tag + 'BodyM', { diffuse: new C3(1,1,1), spec: new C3(.85,.85,.85), power: 160 });
     const MATS = new Map(), matFor = pm => {
       const n = pm ? pm.name : '';
       if (/^Paint/.test(n)) return bodyM;
       if (MATS.has(n)) return MATS.get(n);
       const a = pm && pm.albedoColor ? pm.albedoColor.toGammaSpace() : new C3(.5,.5,.5), metal = pm && pm.metallic != null ? pm.metallic : 0, rough = pm && pm.roughness != null ? pm.roughness : 0.5;
-      const m = stdMat('gtp' + n, { diffuse: a, spec: new C3(1,1,1).scale(0.15 + 0.75*(1 - rough)), power: 20 + 220*(1 - rough) });
+      const m = stdMat(cfg.tag + n, { diffuse: a, spec: new C3(1,1,1).scale(0.15 + 0.75*(1 - rough)), power: 20 + 220*(1 - rough) });
       if (metal > 0.5) m.diffuseColor = a.scale(0.85);
       if (/Glass_Tinted|Mirror_Glass/.test(n)){ m.diffuseColor = hex('#1b2128'); m.alpha = /Mirror/.test(n) ? 1 : 0.62; m.specularPower = 260; m.specularColor = new C3(1,1,1); m.backFaceCulling = false; }
       if (/Lens_Clear/.test(n)){ m.diffuseColor = hex('#d8e2ea'); m.alpha = 0.22; m.specularColor = new C3(1,1,1); m.specularPower = 300; }
@@ -3106,7 +3112,7 @@ function gtProLoad(){
       for (const [mat, ms] of by){ const mm = ms.length > 1 ? B.Mesh.MergeMeshes(ms, true, true) : ms[0]; mm.material = mat; mm.isPickable = false; mm.receiveShadows = true; out.push(mm); }
       return out;
     };
-    for (const m of merge(parts)){ m.name = m.material === bodyM ? 'gtpBody' : 'gtpPart'; m.parent = root; }
+    for (const m of merge(parts)){ m.name = m.material === bodyM ? cfg.tag + 'Body' : cfg.tag + 'Part'; m.parent = root; }
     for (const [nm, { hub, list }] of wheelParts){
       const sd = Math.sign(hub.x) || 1, w = new B.TransformNode('trkWheel' + nm.slice(6), scene);
       w.parent = root; w.position.copyFrom(hub); w.rotation.y = sd*Math.PI/2; w.computeWorldMatrix(true);
@@ -3124,11 +3130,18 @@ function gtProLoad(){
     for (const t of res.transformNodes) t.dispose(); for (const m of res.meshes) if (!m.isDisposed() && !m.getTotalVertices()) m.dispose();
     root.metadata.mats = { bodyM, paint: bodyM };
     root.setEnabled(false);
-    return (GTP_TPL = root);
+    delete window[cfg.global];
+    return (C.tpl = root);
   });
-  GTP_LOAD.catch(e => { console.warn('GT Pro', e); GTP_LOAD = null; });
-  return GTP_LOAD;
+  C.load.catch(e => { console.warn(cfg.tag, e); C.load = null; });
+  return C.load;
+  };
+  return C;
 }
+const GTP = glbCar({ file: 'gt-pro', global: 'GTP_GLB', tag: 'gtp' });
+const RDS = glbCar({ file: 'roadster', global: 'RDS_GLB', tag: 'rds' });
+const gtProTemplate = GTP.template, gtProLoad = GTP.start;
+
 /** A player's car: a clone of its model's template (shared geometry) with its own paint and plates. */
 // ---- realistic car materials: every car template's standard materials become PBR (metal, clear-coated paint, rubber,
 // chrome, glass) lit by the sky probe; chosen from the material's role (its name), colours kept ----
@@ -3247,12 +3260,12 @@ const DLR = (() => {
   for (const z of [z0 + 6, z1 - 6]){ add(box(0.2, 7, 0.2, x0 + 6, 3.5, z), darkM, true); add(box(1.4, 0.25, 0.5, x0 + 6.5, 7, z), lightM); }
   // the cars on show (built only when the camera is near): models × colours, inside and outside
   const SHOW = [
-    { m: 'gtpro',   c: '#b9bec4', x: 0, z: 0, ry: 0, spin: true },                              // inside, on the turntable
+    { m: 'roadster', c: '#8f1622', x: 0, z: 0, ry: 0, spin: true },                             // inside, on the turntable: the new roadster
     { m: 'gtpro',   c: '#16181c', x: SX0 + 7, z: SZ0 + 7.5, ry: -Math.PI/2 + 0.55 },
     { m: 'tracker', c: '#a8202a', x: SX0 + 7, z: SZ1 - 7.5, ry: -Math.PI/2 - 0.55 },
-    { m: 'tracker', c: '#1f4f9a', x: SX1 - 8, z: SZ0 + 6, ry: -Math.PI/2 + 0.2 },
+    { m: 'roadster', c: '#1d2a44', x: SX1 - 8, z: SZ0 + 6, ry: -Math.PI/2 + 0.2 },
     { m: 'coupe',   c: '#f2f3f1', x: x0 + 11.5, z: cz - 18, ry: -Math.PI/2 + 0.35 },          // outside, nose to the road
-    { m: 'tracker', c: '#f2f3f1', x: x0 + 11.5, z: cz - 6,  ry: -Math.PI/2 + 0.35 },
+    { m: 'roadster', c: '#f2f3f1', x: x0 + 11.5, z: cz - 6,  ry: -Math.PI/2 + 0.35 },
     { m: 'gtpro',   c: '#a8202a', x: x0 + 11.5, z: cz + 6,  ry: -Math.PI/2 - 0.35 },
     { m: 'tracker', c: '#16181c', x: x0 + 11.5, z: cz + 18, ry: -Math.PI/2 - 0.35 },
   ];
@@ -5365,7 +5378,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
