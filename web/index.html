@@ -143,6 +143,18 @@
   #tut p{margin:0;font-size:14px;line-height:1.4;flex:1}
   #tut button{color:var(--muted);font-size:12.5px;font-weight:700;padding:4px}
 
+  /* ---------- walking: one person you steer, the camera behind them ---------- */
+  #walkHud{position:fixed;inset:0;z-index:7;pointer-events:none;display:none}
+  body.walking #walkHud{display:block}
+  body.walking #tools, body.walking #nav, body.walking #legend, body.walking #tut, body.walking #fab{display:none}
+  .wk-bar{position:absolute;top:70px;right:12px;display:flex;flex-direction:column;gap:8px;pointer-events:auto}
+  .wk-bar button{min-width:46px;height:46px;border-radius:14px;padding:0 12px;font:800 13px/1 var(--display, system-ui);color:#fff;background:rgba(18,20,40,.72);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(8px)}
+  .wk-bar button.on{background:#e9a63b;color:#1b1407}
+  #walkHint{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);padding:8px 14px;border-radius:12px;background:rgba(18,20,40,.62);color:#e9ecf6;font-size:12.5px;white-space:nowrap;transition:opacity 1s}
+  #joy{position:absolute;left:22px;bottom:34px;width:132px;height:132px;border-radius:50%;background:rgba(18,20,40,.35);border:2px solid rgba(255,255,255,.28);pointer-events:auto;touch-action:none;display:none}
+  #joy i{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:rgba(255,255,255,.82);box-shadow:0 4px 14px rgba(0,0,0,.35)}
+  body.touch #joy{display:block} body.touch #walkHint{display:none}
+
   /* ---------- welcome screen over the living city ---------- */
   body.hero #labels{opacity:0} body.hero .plbl{pointer-events:none}
   #labels{transition:opacity .6s}
@@ -376,6 +388,12 @@
   <button class="tool" id="goAir" title="Aeroport" aria-label="Aeroportga borish"><svg viewBox="0 0 24 24"><path d="M10.5 3.5c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5V9l7 4v2l-7-2v5l2 1.5V21l-3.5-1-3.5 1v-1.5l2-1.5v-5l-7 2v-2l7-4z"/></svg></button>
   <button class="tool" id="goForest" title="Bog‘ va o‘rmon" aria-label="Bog‘ va o‘rmonga borish"><svg viewBox="0 0 24 24"><path d="M12 2 6 10h3l-4 6h5v6h4v-6h5l-4-6h3z"/></svg></button>
   <button class="tool" id="home" title="Mening yerim" aria-label="Mening yerim"><svg viewBox="0 0 24 24"><path d="M4 11l8-6 8 6"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/></svg></button>
+  <button class="tool" id="walkBtn" title="Piyoda yurish" aria-label="Piyoda yurish"><svg viewBox="0 0 24 24"><circle cx="13" cy="4" r="2"/><path d="M9 21l2.5-6.5L14 17v4"/><path d="M11.5 14.5 12 9l-3.5 2.5V15"/><path d="M12 9l3 3 3 1"/></svg></button>
+</div>
+<div id="walkHud">
+  <div class="wk-bar"><button id="walkExit" title="Piyoda rejimdan chiqish">✕ Chiqish</button><button id="walkSwap" title="Obrazni almashtirish">👤 Obraz</button><button id="walkRun" title="Yugurish">🏃</button></div>
+  <div id="walkHint">W / ↑ — oldinga · S / ↓ — orqaga · A D — burilish · Shift — yugurish · sichqoncha bilan suring — kamera</div>
+  <div id="joy"><i></i></div>
 </div>
 
 <nav id="nav" aria-label="Asosiy menyu">
@@ -3602,6 +3620,7 @@ function dressPerson(p){
   colAt(PP.torso, p.i, shirt); colAt(PP.arm, p.i*2, shirt); colAt(PP.arm, p.i*2+1, shirt);
   colAt(PP.leg, p.i*2, pants); colAt(PP.leg, p.i*2+1, pants); colAt(PP.head, p.i, skin); colAt(PP.hair, p.i, hair); colAt(PP.bag, p.i, bag);
   p.v = 1.15 + rnd()*0.45; p.scale = 0.92 + rnd()*0.14;
+  p.fem = rnd() < 0.48; realLook(p, shirt, pants, skin);
 }
 
 // ---- routes on the sidewalk network ----
@@ -3728,6 +3747,8 @@ function updatePeople(dt){
     if (dist <= 0.05) p.k++;
     if (Math.hypot(p.x - cx, p.z - cz) > far + 300){ p.on = false; hidePerson(p); continue; }   // left the view: the trip ends
     // pose: walking cycle (legs and arms swing opposite), a slight bob
+    p.moving = moving;
+    if (p.real){ hidePerson(p); continue; }
     if (moving) p.ph += dt*p.v*4.2;
     const sw = moving ? Math.sin(p.ph)*0.5 : 0, bob = moving ? Math.abs(Math.cos(p.ph))*0.04 : 0, sc = p.scale;
     _s.set(sc, sc, sc); B.Quaternion.RotationYawPitchRollToRef(p.yaw, 0, 0, _q); _t.set(p.x, p.y + bob, p.z);
@@ -3741,7 +3762,260 @@ function updatePeople(dt){
     if (p.bag) put(PP.bag, p.i, 0.42, 0.04, -0.42, 0); else PP.bag.pbuf.set(ZERO16, p.i*16);
   }
   for (const m of Object.values(PP)) m.thinInstanceBufferUpdated('matrix');
+  updateRealPeople(dt);
 }
+
+// =================== REAL PEOPLE ===================
+// MakeHuman (CC0) bodies built in Blender — a man and a woman, with clothes, hair, a skin texture and idle / walk / run.
+// Near the camera the simple box people are swapped for them: one thin-instanced mesh per material, animated on the GPU
+// from a baked bone texture, so dozens of walkers cost a few draw calls. The same bodies give the person you steer.
+const HUMAN = { kinds: {}, ready: false, loading: null, SLOTS: 40, time: 0 };
+const HUMAN_ANIMS = ['walk', 'run', 'idle'];
+const HUMAN_WALK_MS = 1.26, HUMAN_RUN_MS = 3.3;            // ground speed of the walk / run cycles at their own pace
+const HAIR_REAL = ['#16110e','#1c1714','#2b1d14','#3b2a1e','#55391f','#6e4e30','#2a2a2a','#8d8d8d'];
+const SKIN_BASE = { m: [197, 146, 112], f: [214, 165, 132] };   // the tone baked into each body's skin texture
+function humanStdMat(pm, tag){
+  const n = pm ? pm.name : '', m = new B.StandardMaterial('hum' + tag + n, scene);
+  m.specularColor = new C3(.06, .06, .06); m.specularPower = 24;
+  if (n === 'Skin'){ m.diffuseTexture = pm.albedoTexture; m.specularColor = new C3(.12, .1, .09); m.specularPower = 18; }
+  else if (n === 'Eyes'){ m.diffuseColor = hex('#2b1d14'); m.specularColor = new C3(.8, .8, .8); m.specularPower = 120; }
+  else if (n === 'Sclera'){ m.diffuseColor = hex('#e8e2da'); m.specularColor = new C3(.5, .5, .5); m.specularPower = 90; }
+  else if (n === 'Shoes'){ m.diffuseColor = hex('#1c1c1e'); m.specularColor = new C3(.3, .3, .3); m.specularPower = 60; }
+  else if (n === 'Hair'){ m.diffuseColor = new C3(1, 1, 1); m.specularColor = new C3(.16, .14, .12); m.specularPower = 40; }
+  else m.diffuseColor = new C3(1, 1, 1);
+  m.backFaceCulling = n !== 'Hair';
+  return m;
+}
+function humanLoad(){
+  if (HUMAN.loading) return HUMAN.loading;
+  const fetchJs = k => window['HUMAN_' + k] ? Promise.resolve() : new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = `people/human-${k}.js`; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+  HUMAN.loading = (async () => {
+    for (const k of ['m', 'f']){
+      await fetchJs(k);
+      const c = await B.SceneLoader.LoadAssetContainerAsync('', 'data:;base64,' + window['HUMAN_' + k], scene, null, '.glb');
+      HUMAN.kinds[k] = humanCrowd(k, c);
+      delete window['HUMAN_' + k];
+    }
+    HUMAN.ready = true;
+    if (shadowGen) for (const m of humanCasters()) shadowGen.addShadowCaster(m, false);
+  })();
+  HUMAN.loading.catch(e => { console.warn('people', e); HUMAN.loading = null; });
+  return HUMAN.loading;
+}
+function humanCrowd(k, c){
+  const H = { k, avatar: null, meshes: [], ranges: {} };
+  // the person you steer: its own skeleton and animations (cloned before the crowd copy is turned into instances)
+  {
+    const inst = c.instantiateModelsToScene(n => 'av' + k + n, false, { doNotInstantiate: true });
+    const node = new B.TransformNode('avatar' + k, scene), root = inst.rootNodes[0]; root.parent = node;
+    const meshes = node.getChildMeshes().filter(m => m.getTotalVertices() > 0);
+    const look = k === 'm' ? { Shirt: '#ece9e2', Pants: '#2c3e5c', Hair: '#1c1714' } : { Shirt: '#b8404f', Pants: '#273042', Hair: '#2b1d14' };
+    for (const m of meshes){ const pm = m.material, nm = humanStdMat(pm, 'av' + k); if (look[pm.name]) nm.diffuseColor = hex(look[pm.name]); m.material = nm; m.receiveShadows = true; m.isPickable = false; m.alwaysSelectAsActiveMesh = true; }
+    const groups = {}; for (const g of inst.animationGroups){ g.stop(); const n = HUMAN_ANIMS.find(x => g.name === x || g.name.endsWith(x)); if (n) groups[n] = g; }
+    node.setEnabled(false);
+    H.avatar = { node, meshes, groups };
+  }
+  // the crowd: bake every frame of every animation into a bone-matrix texture
+  c.addAllToScene();
+  const skel = c.skeletons[0], meshes = c.meshes.filter(m => m.getTotalVertices() > 0), nb = skel.bones.length;
+  let total = 0; const lens = {};
+  for (const name of HUMAN_ANIMS){ const g = c.animationGroups.find(a => a.name === name); lens[name] = Math.round(g.to - g.from); total += lens[name] + 1; }
+  const data = new Float32Array(16*(nb + 1)*total); let row = 0;
+  for (const name of HUMAN_ANIMS){
+    const g = c.animationGroups.find(a => a.name === name);
+    g.start(true); g.pause();
+    H.ranges[name] = { from: row, to: row + lens[name], n: lens[name] + 1 };
+    for (let f = 0; f <= lens[name]; f++){
+      g.goToFrame(g.from + f);
+      skel.prepare(true);
+      data.set(skel.getTransformMatrices(meshes[0]), row*16*(nb + 1)); row++;
+    }
+    g.stop();
+  }
+  for (const g of c.animationGroups) g.dispose();
+  skel.returnToRest();
+  const vat = new B.BakedVertexAnimationManager(scene);
+  vat.texture = new B.VertexAnimationBaker(scene, meshes[0]).textureFromBakedVertexData(data);
+  H.vat = vat;
+  // instance matrices are applied before the glTF root's handedness flip: I = M·W·M⁻¹
+  H.M = meshes[0].computeWorldMatrix(true).clone(); H.Mi = H.M.clone().invert();
+  const S = HUMAN.SLOTS;
+  for (const m of meshes){
+    const pm = m.material; m.material = humanStdMat(pm, 'cr' + k);
+    m.bakedVertexAnimationManager = vat;
+    m.thinInstanceSetBuffer('matrix', new Float32Array(S*16), 16, false);
+    m.thinInstanceSetBuffer('bakedVertexAnimationSettingsInstanced', new Float32Array(S*4), 4, false);
+    const tint = ['Skin', 'Shirt', 'Pants', 'Hair'].includes(pm.name);
+    if (tint){ m.thinInstanceRegisterAttribute('color', 4); m.thinInstanceSetBuffer('color', new Float32Array(S*4).fill(1), 4, false); }
+    m.metadata = { part: pm.name, tint };
+    m.alwaysSelectAsActiveMesh = true; m.isPickable = false; m.receiveShadows = true; m.doNotSyncBoundingInfo = true;
+    H.meshes.push(m);
+  }
+  return H;
+}
+const humanCasters = () => HUMAN.ready ? Object.values(HUMAN.kinds).flatMap(H => [...H.meshes, ...H.avatar.meshes]) : [];
+const realSlots = () => !HUMAN.ready ? 0 : S.qActive === 'ultra' ? 40 : S.qActive === 'high' ? 28 : S.qActive === 'medium' ? (isMobile ? 10 : 16) : (WALK.on ? 6 : 0);
+const _hm = new B.Matrix(), _hw = new B.Matrix(), _hq = new B.Quaternion(), _hs = new V3(), _ht = new V3(), _hC = [];
+// choose the people nearest to the camera, give them real bodies (their box bodies hide), fill the instance buffers
+function updateRealPeople(dt){
+  for (const p of people) p.real = false;
+  if (!HUMAN.ready) return;
+  HUMAN.time += dt; for (const H of Object.values(HUMAN.kinds)) H.vat.time = HUMAN.time;
+  const N = realSlots(), cp = camera.position, R = 85;
+  _hC.length = 0;
+  if (N) for (const p of people){ if (!p.on) continue; const d = (p.x - cp.x)**2 + (p.z - cp.z)**2 + (p.y - cp.y)**2; if (d < R*R){ p._d = d; _hC.push(p); } }
+  _hC.sort((a, b) => a._d - b._d);
+  for (const H of Object.values(HUMAN.kinds)){
+    const want = H.k === 'f', used = [];
+    for (const p of _hC){ if (used.length >= N) break; if (!!p.fem === want) used.push(p); }
+    for (const m of H.meshes){
+      const mb = m._thinInstanceDataStorage.matrixData, vb = m._userThinInstanceBuffersStorage.data.bakedVertexAnimationSettingsInstanced;
+      const ub = m._userThinInstanceBuffersStorage.data, cb = m.metadata.tint ? (ub.instanceColor || ub.color) : null;
+      for (let i = 0; i < HUMAN.SLOTS; i++){
+        const p = used[i];
+        if (!p){ mb.fill(0, i*16, i*16 + 16); continue; }
+        if (m === H.meshes[0]) p.real = true;
+        _hs.set(p.scale, p.scale, p.scale); B.Quaternion.RotationYawPitchRollToRef(p.yaw, 0, 0, _hq); _ht.set(p.x, p.y - 0.01, p.z);
+        B.Matrix.ComposeToRef(_hs, _hq, _ht, _hw); H.M.multiplyToRef(_hw, _hm); _hm.multiplyToRef(H.Mi, _hw); _hw.copyToArray(mb, i*16);
+        const r = H.ranges[p.moving ? 'walk' : 'idle'];
+        vb[i*4] = r.from; vb[i*4 + 1] = r.to; vb[i*4 + 2] = (p.i*7.31) % r.n; vb[i*4 + 3] = p.moving ? 30*p.v/HUMAN_WALK_MS : 30;
+        if (cb){ const c = p.real3[m.metadata.part]; cb[i*4] = c[0]; cb[i*4 + 1] = c[1]; cb[i*4 + 2] = c[2]; cb[i*4 + 3] = 1; }
+      }
+      m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('bakedVertexAnimationSettingsInstanced'); if (cb) m.thinInstanceBufferUpdated(ub.instanceColor ? 'instanceColor' : 'color');
+    }
+  }
+}
+// the colours a person wears, as instance tints (skin relative to the tone baked into the texture)
+function realLook(p, shirt, pants, skin){
+  const base = SKIN_BASE[p.fem ? 'f' : 'm'], sk = [skin.r*255/base[0], skin.g*255/base[1], skin.b*255/base[2]].map(v => clamp(v, 0.55, 1.3));
+  const hc = hex(HAIR_REAL[Math.floor(rnd()*(rnd() < 0.08 ? HAIR_REAL.length : HAIR_REAL.length - 1))]);
+  p.real3 = { Skin: sk, Shirt: [shirt.r, shirt.g, shirt.b], Pants: [pants.r, pants.g, pants.b], Hair: [hc.r, hc.g, hc.b] };
+}
+
+// =================== WALKING ===================
+// "Piyoda yurish": a person appears where you look; W/S (or the joystick) walks, A/D turns, Shift runs; the camera
+// follows from behind and can be swung round by dragging. Buildings and water stop you; you step up kerbs.
+const WALK = { on: false, k: 'm', av: null, x: 0, z: 0, y: 0.3, yaw: 0, speed: 0, run: false, camT: 0, joy: { x: 0, y: 0, id: null }, saved: null, w: { idle: 1, walk: 0, run: 0 } };
+function walkGround(x, z){
+  const gx = Math.floor((x - X0)/PITCH), gz = Math.floor((z - Z0)/PITCH);
+  if (gx >= 0 && gz >= 0 && gx < GX && gz < GZ){
+    const lx = x - blockX(gx), lz = z - blockZ(gz);
+    if (lx < BLK && lz < BLK) return (lx > SW && lx < BLK - SW && lz > SW && lz < BLK - SW) ? 0.42 : 0.3;
+  }
+  return 0.07;
+}
+const onBridge = (x, z) => {
+  const kx = Math.round((x - (X0 - RD/2))/PITCH), kz = Math.round((z - (Z0 - RD/2))/PITCH);
+  return (Math.abs(z - RIVER_Z) < RD/2 && Math.abs(x - (X0 - RD/2 + kx*PITCH)) < RD/2 - 0.5) || (Math.abs(x - RIVER_X) < RD/2 && Math.abs(z - (Z0 - RD/2 + kz*PITCH)) < RD/2 - 0.5);
+};
+function walkBlocked(x, z){
+  if (z > COAST_Z - 3) return true;                                        // the sea
+  if (onRiverRoad(x, z) && !onBridge(x, z)) return true;                   // the river, except on the bridges
+  const p = plotAtPoint(x, z);
+  if (p){
+    if (!p.tpl && p.owner === 'Shahar hokimligi' && landmarkOfBlock(p)) return true;   // a landmark fills its block
+    if (p.tpl) return Math.max(Math.abs(x - p.x), Math.abs(z - p.z)) < P/2 - 0.7;       // a house: walk round it
+  }
+  return false;
+}
+function walkSpawnPoint(x, z){
+  for (let r = 0; r < 140; r += 1.5) for (let a = 0; a < 6.28; a += r ? 1.2/r + 0.2 : 7){
+    const px = x + Math.cos(a)*r, pz = z + Math.sin(a)*r;
+    if (!walkBlocked(px, pz)) return { x: px, z: pz };
+  }
+  return { x: blockX(GX/2) - RD/2, z: blockZ(GZ/2) + 6 };
+}
+async function walkEnter(){
+  if (WALK.on) return;
+  toast('Piyoda rejim tayyorlanmoqda…');
+  try { await humanLoad(); } catch(e){ toast('Odam modelini yuklab bo‘lmadi'); return; }
+  closeSheet && closeSheet(); select(null); stopAuto(); fly = null; S.tour = null; vel.x = vel.z = 0;
+  const t = camera.target, sp = walkSpawnPoint(t.x, t.z);
+  WALK.saved = { a: camera.alpha, b: camera.beta, r: camera.radius, x: t.x, z: t.z, lims: [camera.lowerRadiusLimit, camera.upperRadiusLimit, camera.lowerBetaLimit, camera.upperBetaLimit] };
+  WALK.on = true; WALK.x = sp.x; WALK.z = sp.z; WALK.y = walkGround(sp.x, sp.z); WALK.speed = 0;
+  WALK.yaw = Math.atan2(-Math.cos(camera.alpha), -Math.sin(camera.alpha));   // facing away from the camera
+  walkSetKind(WALK.k);
+  camera.lowerRadiusLimit = 1.6; camera.upperRadiusLimit = 18; camera.lowerBetaLimit = 0.3; camera.upperBetaLimit = 1.66;
+  camera.radius = 4.6; camera.beta = 1.28; camera.alpha = Math.atan2(-Math.cos(WALK.yaw), -Math.sin(WALK.yaw));
+  document.body.classList.add('walking'); if (isMobile) document.body.classList.add('touch');
+  $('#walkHint').style.opacity = 1; setTimeout(() => { const h = $('#walkHint'); if (h) h.style.opacity = 0; }, 9000);
+}
+function walkSetKind(k){
+  if (WALK.av) WALK.av.node.setEnabled(false);
+  WALK.k = k; WALK.av = HUMAN.kinds[k].avatar; WALK.av.node.setEnabled(true);
+  for (const [n, g] of Object.entries(WALK.av.groups)){ g.start(true, 1); g.weight = WALK.w[n] ?? 0; }
+}
+function walkExit(){
+  if (!WALK.on) return;
+  WALK.on = false; document.body.classList.remove('walking');
+  if (WALK.av){ WALK.av.node.setEnabled(false); for (const g of Object.values(WALK.av.groups)) g.stop(); }
+  const s = WALK.saved;
+  [camera.lowerRadiusLimit, camera.upperRadiusLimit, camera.lowerBetaLimit, camera.upperBetaLimit] = s.lims;
+  camera.target.set(WALK.x, 0, WALK.z); camera.alpha = s.a;
+  flyTo(WALK.x, WALK.z, Math.max(60, Math.min(s.r, 160)), Math.min(s.b, 1.1));
+}
+function walkUpdate(dt){
+  let f = 0, turn = 0, jx = 0, jz = 0;
+  if (keys.has('w') || keys.has('arrowup')) f += 1; if (keys.has('s') || keys.has('arrowdown')) f -= 1;
+  if (keys.has('a') || keys.has('arrowleft')) turn += 1; if (keys.has('d') || keys.has('arrowright')) turn -= 1;
+  const run = WALK.run || keys.has('shift');
+  let want = 0, dirx = Math.sin(WALK.yaw), dirz = Math.cos(WALK.yaw), back = false;
+  const jm = Math.hypot(WALK.joy.x, WALK.joy.y);
+  if (jm > 0.12){
+    // the joystick steers relative to the camera
+    const a = camera.alpha, fx = -Math.cos(a), fz = -Math.sin(a), rx = Math.sin(a), rz = -Math.cos(a);
+    jx = fx*(-WALK.joy.y) + rx*WALK.joy.x; jz = fz*(-WALK.joy.y) + rz*WALK.joy.x;
+    const L = Math.hypot(jx, jz); dirx = jx/L; dirz = jz/L;
+    want = (run || jm > 0.92 ? 4.2 : 1.6)*Math.min(1, jm);
+    let dy = Math.atan2(dirx, dirz) - WALK.yaw; while (dy > Math.PI) dy -= 2*Math.PI; while (dy < -Math.PI) dy += 2*Math.PI;
+    WALK.yaw += dy*Math.min(1, dt*9);
+  } else {
+    WALK.yaw += turn*dt*(run ? 2.2 : 2.6);
+    dirx = Math.sin(WALK.yaw); dirz = Math.cos(WALK.yaw);
+    if (f > 0) want = run ? 4.2 : 1.6; else if (f < 0){ want = 1.0; back = true; }
+  }
+  WALK.speed += (want - WALK.speed)*Math.min(1, dt*(want > WALK.speed ? 5 : 8));
+  if (WALK.speed > 0.02){
+    const st = WALK.speed*dt*(back ? -1 : 1), nx = WALK.x + dirx*st, nz = WALK.z + dirz*st;
+    if (!walkBlocked(nx, nz)){ WALK.x = nx; WALK.z = nz; }
+    else if (!walkBlocked(nx, WALK.z)) WALK.x = nx;                           // slide along walls
+    else if (!walkBlocked(WALK.x, nz)) WALK.z = nz;
+    else WALK.speed *= 0.5;
+  }
+  WALK.y += (walkGround(WALK.x, WALK.z) - WALK.y)*Math.min(1, dt*14);
+  // the body: place, turn, blend idle → walk → run, step rate matched to the ground speed
+  const av = WALK.av, sp = WALK.speed;
+  av.node.position.set(WALK.x, WALK.y, WALK.z); av.node.rotation.y = WALK.yaw;
+  const wr = clamp((sp - 1.7)/2.2, 0, 1), wi = clamp(1 - sp/0.9, 0, 1);
+  const tgt = { idle: wi, walk: (1 - wi)*(1 - wr), run: (1 - wi)*wr };
+  for (const [n, g] of Object.entries(av.groups)){ WALK.w[n] += (tgt[n] - WALK.w[n])*Math.min(1, dt*10); g.weight = WALK.w[n]; }
+  av.groups.walk.speedRatio = clamp(sp/HUMAN_WALK_MS, 0.6, 1.5)*(back ? -1 : 1);
+  av.groups.run.speedRatio = clamp(sp/HUMAN_RUN_MS, 0.8, 1.4);
+  // the camera: behind the head; it swings back behind you a moment after you stop dragging it
+  camera.target.set(WALK.x, WALK.y + 1.5, WALK.z);
+  if (!gest && performance.now() > WALK.camT && (sp > 0.3 || turn)){
+    const want = Math.atan2(-Math.cos(WALK.yaw), -Math.sin(WALK.yaw));
+    let d = want - camera.alpha; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
+    camera.alpha += d*Math.min(1, dt*(jm > 0.12 ? 1.6 : 3.2));
+    camera.beta += (1.3 - camera.beta)*Math.min(1, dt*0.8);
+  }
+}
+$('#walkBtn').onclick = () => walkEnter();
+// real people come in a few seconds after the city (not on the lowest quality)
+setTimeout(() => { if (S.qActive !== 'low') humanLoad(); }, 5000);
+$('#walkExit').onclick = () => walkExit();
+$('#walkSwap').onclick = () => { if (WALK.on) walkSetKind(WALK.k === 'm' ? 'f' : 'm'); };
+$('#walkRun').onclick = () => { WALK.run = !WALK.run; $('#walkRun').classList.toggle('on', WALK.run); };
+window.addEventListener('keydown', e => { if (WALK.on && e.key === 'Escape') walkExit(); });
+// the on-screen joystick (touch screens)
+(function joystick(){
+  const pad = $('#joy'), knob = pad.querySelector('i');
+  const set = e => { const r = pad.getBoundingClientRect(), R = r.width/2; let x = (e.clientX - r.left - R)/R, y = (e.clientY - r.top - R)/R; const L = Math.hypot(x, y); if (L > 1){ x /= L; y /= L; } WALK.joy.x = x; WALK.joy.y = y; knob.style.transform = `translate(${x*R*0.62}px,${y*R*0.62}px)`; };
+  pad.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); WALK.joy.id = e.pointerId; try { pad.setPointerCapture(e.pointerId); } catch(_){} set(e); });
+  pad.addEventListener('pointermove', e => { if (e.pointerId === WALK.joy.id) set(e); });
+  const end = e => { if (e.pointerId !== WALK.joy.id) return; WALK.joy.id = null; WALK.joy.x = WALK.joy.y = 0; knob.style.transform = ''; };
+  pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
+})();
 
 // ---------- populate others ----------
 function hexArr(h){ const c=hex(h); return [c.r,c.g,c.b,1]; }
@@ -3986,6 +4260,7 @@ $('#tutSkip').onclick = ()=>tut(0);
 // ---------- camera fly ----------
 let fly = null;
 function flyTo(x,z,radius,beta){
+  if (WALK.on) walkExit();
   fly = { t:0, from:{x:camera.target.x,z:camera.target.z,r:camera.radius,b:camera.beta}, to:{x,z,r:radius??camera.radius,b:beta??camera.beta} };
 }
 
@@ -4371,7 +4646,7 @@ function openSettings(){
 // ---------- quality ----------
 let shadowGen = null, pipeline = null, glow = null, ssao = null;
 const casters = () => {
-  const list = [...treeCasters(), ...poles.meshes(), basin, jet, ...[...CARS.values()].flatMap(c => c.node ? c.node.getChildMeshes() : []), ...DLR.casters()];
+  const list = [...humanCasters(), ...treeCasters(), ...poles.meshes(), basin, jet, ...[...CARS.values()].flatMap(c => c.node ? c.node.getChildMeshes() : []), ...DLR.casters()];
   for (const t of Object.values(T)) for (const pt of t.parts) list.push(pt.mesh);
   return list;
 };
@@ -4562,7 +4837,7 @@ canvas.addEventListener('pointerdown', e=>{
   stopAuto(); vel.x = vel.z = 0; S.tour = null; S.cinePause = performance.now() + 4000; for (const c of CARS.values()) if (c.drive) c.drive.follow = false;
   if (ptrs.size === 1){
     tapStart = { x:p.x, y:p.y, t:performance.now() };
-    const orbit = e.pointerType==='mouse' && (e.button===2 || e.button===1 || e.ctrlKey || e.altKey);
+    const orbit = WALK.on || (e.pointerType==='mouse' && (e.button===2 || e.button===1 || e.ctrlKey || e.altKey));
     gest = orbit ? { type:'orbit', x:p.x, y:p.y } : { type:'pan', anchor: groundAt(p.x,p.y), t: performance.now() };
   } else if (ptrs.size === 2){
     tapStart = null;
@@ -4587,8 +4862,12 @@ canvas.addEventListener('pointermove', e=>{
     }
   } else if (gest.type==='orbit'){
     const dx = p.x-gest.x, dy = p.y-gest.y; gest.x=p.x; gest.y=p.y;
-    orbitBy(-dx*0.006);
+    if (WALK.on){ camera.alpha -= dx*0.006; WALK.camT = performance.now() + 2500; } else orbitBy(-dx*0.006);
     camera.beta = clamp(camera.beta - dy*0.005, camera.lowerBetaLimit, camera.upperBetaLimit);
+  } else if (gest.type==='multi' && ptrs.size===2 && WALK.on){
+    const i = twoInfo(), pr = gest.prev;
+    if (pr.dist > 10 && i.dist > 10) camera.radius = clamp(camera.radius*pr.dist/i.dist, camera.lowerRadiusLimit, camera.upperRadiusLimit);
+    gest.prev = i;
   } else if (gest.type==='multi' && ptrs.size===2){
     const i = twoInfo(), pr = gest.prev;
     let dAng = i.ang - pr.ang; if (dAng>Math.PI) dAng-=2*Math.PI; if (dAng<-Math.PI) dAng+=2*Math.PI;
@@ -4616,16 +4895,17 @@ function endPtr(e){
     const moved = Math.hypot(p.x-tapStart.x, p.y-tapStart.y), dur = performance.now()-tapStart.t;
     if (moved < 8 && dur < 450 && e.button===0) { vel.x = vel.z = 0; handleTap(p.x, p.y); }
   }
-  if (ptrs.size === 1){ const q = [...ptrs.values()][0]; gest = { type:'pan', anchor: groundAt(q.x,q.y), t: performance.now() }; tapStart = null; }
+  if (ptrs.size === 1){ const q = [...ptrs.values()][0]; gest = WALK.on ? { type:'orbit', x:q.x, y:q.y } : { type:'pan', anchor: groundAt(q.x,q.y), t: performance.now() }; tapStart = null; }
   else if (ptrs.size === 0){ if (gest && gest.type!=='pan') { vel.x = vel.z = 0; } else if (performance.now() - (gest?gest.t:0) > 80) { vel.x = vel.z = 0; } gest = null; }
 }
 canvas.addEventListener('pointerup', endPtr);
 canvas.addEventListener('pointercancel', endPtr);
-canvas.addEventListener('wheel', e=>{ e.preventDefault(); stopAuto(); const p=rel(e); zoomAt(Math.exp(e.deltaY*0.0012), p.x, p.y); }, { passive:false });
+canvas.addEventListener('wheel', e=>{ e.preventDefault(); if (WALK.on){ camera.radius = clamp(camera.radius*Math.exp(e.deltaY*0.0012), camera.lowerRadiusLimit, camera.upperRadiusLimit); return; } stopAuto(); const p=rel(e); zoomAt(Math.exp(e.deltaY*0.0012), p.x, p.y); }, { passive:false });
 const keys = new Set();
 window.addEventListener('keydown', e=>{ if (e.target.tagName==='INPUT') return; keys.add(e.key.toLowerCase()); });
 window.addEventListener('keyup', e=>keys.delete(e.key.toLowerCase()));
 function keyboard(dt){
+  if (WALK.on){ walkUpdate(dt); return; }
   if (!keys.size) return;
   const sp = camera.radius*1.2*dt, a = camera.alpha;
   const fx = -Math.cos(a), fz = -Math.sin(a), rx = Math.sin(a), rz = -Math.cos(a);
@@ -4762,8 +5042,8 @@ scene.onBeforeRenderObservable.add(()=>{
   if (S.orbitAnim){ const st = S.orbitAnim*Math.min(1, dt*7); orbitBy(st); S.orbitAnim -= st; if (Math.abs(S.orbitAnim)<1e-3) S.orbitAnim = 0; }
   if (S.autoOrbit) orbitBy(dt*0.35);
   keyboard(dt);
-  camera.target.y = 0;
-  camera.minZ = clamp(camera.radius*0.015, 0.5, 30);   // depth precision: no flicker of road marks far away
+  if (!WALK.on) camera.target.y = 0;
+  camera.minZ = WALK.on ? 0.08 : clamp(camera.radius*0.015, 0.5, 30);   // depth precision: no flicker of road marks far away
   updateLabels(dt); updatePlaces();
   // selector pulse
   if (selector.isEnabled()){ const s = 1 + Math.sin(now/220)*0.03; selector.scaling.set(s,1,s); mats.sel.emissiveColor = hex('#2fb5a3').scale(0.6+0.4*Math.sin(now/220)); }
@@ -5085,7 +5365,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
