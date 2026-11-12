@@ -1226,7 +1226,7 @@ for (const bl of blocks){
 }
 // pads
 const padBase = B.MeshBuilder.CreateGround('pad',{width:P-0.6,height:P-0.6},scene); padBase.position.y = 0.06; padBase.bakeCurrentTransformIntoVertices();
-const padMat = stdMat('padM',{dt:noiseTex('padT','#ffffff',0.12,64,2)});
+const padMat = stdMat('padM',{dt:noiseTex('padT','#ffffff',0.2,128,3)});
 padBase.material = padMat; padBase.receiveShadows = true;
 const pads = chunkSet(padBase, 0, ['color']);
 for (const p of plots){ const r = pads.add(B.Matrix.Translation(p.x,0.36,p.z), p.x, p.z); p.padC = r.c; p.padI = r.i; }
@@ -1239,7 +1239,7 @@ function plotAtPoint(x, z){
   const lx = x-blockX(gx)-SW, lz = z-blockZ(gz)-SW; if (lx<0||lz<0||lx>=PB*P||lz>=PB*P) return null;
   const id = PLOT_AT[((gx*GZ+gz)*PB+Math.floor(lx/P))*PB+Math.floor(lz/P)]; return id >= 0 ? plots[id] : null;
 }
-const PAD_COL = { empty:[.43,.68,.30,1], owned:[.86,.83,.78,1], sale:[1,.80,.30,1], mine:[.42,.64,1,1] };
+const PAD_COL = { empty:[.37,.56,.27,1], owned:[.86,.83,.78,1], sale:[1,.80,.30,1], mine:[.42,.64,1,1] };
 function paintPad(p, refresh=true){
   occCache = null; mineCache = null;
   p.padC.mesh.thinInstanceSetAttributeAt('color', p.padI, PAD_COL[p.state], refresh);
@@ -2567,6 +2567,14 @@ const skyMat = new B.ShaderMaterial('sky', scene, { vertex:'sky', fragment:'sky'
 skyMat.backFaceCulling = false; skyMat.disableDepthWrite = true;
 const skyDome = B.MeshBuilder.CreateSphere('skyDome',{diameter:16000, segments:24, sideOrientation:B.Mesh.BACKSIDE},scene);
 skyDome.material = skyMat; skyDome.infiniteDistance = true; skyDome.isPickable = false; skyDome.applyFog = false;
+// image-based light: the sky (and the plain below it) captured into a cube map that PBR cars and glass facades reflect;
+// re-captured only when the time of day has moved on (see updateSky)
+const envProbe = new B.ReflectionProbe('envProbe', 128, scene, true, true);
+envProbe.renderList.push(skyDome, ground); envProbe.position.set(0, 40, 0);
+envProbe.refreshRate = B.RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
+scene.environmentTexture = envProbe.cubeTexture; scene.environmentIntensity = 1.0;
+let envHours = -99;
+function refreshEnv(){ envProbe.refreshRate = B.RenderTargetTexture.REFRESHRATE_RENDER_ONCE; }
 camera.maxZ = 20000;
 
 // a glowing marker on every free plot (lights up at dusk: "1 Telegram = 1 hovli")
@@ -3104,10 +3112,46 @@ function gtProLoad(){
   return GTP_LOAD;
 }
 /** A player's car: a clone of its model's template (shared geometry) with its own paint and plates. */
+// ---- realistic car materials: every car template's standard materials become PBR (metal, clear-coated paint, rubber,
+// chrome, glass) lit by the sky probe; chosen from the material's role (its name), colours kept ----
+const CAR_PBR = new Map();
+function carRole(n){
+  if (/Body|Paint/.test(n)) return 'paint';
+  if (/Silver|Chrome|Mirror(?!_Glass)|Reflect|Bezel|Exhaust|Tip/.test(n)) return 'chrome';
+  if (/Disc|Rotor|Hat/.test(n)) return 'iron';
+  if (/Tyre|Tire|Rubber/.test(n)) return 'rubber';
+  if (/Glass|Lens|Window/.test(n)) return 'glass';
+  if (/Gloss|Black|Grille|Trim/.test(n)) return 'gloss';
+  if (/Wheel|Rim|Gunm|Satin|Caliper/.test(n)) return 'alloy';
+  return 'plastic';
+}
+function toCarPBR(m){
+  if (!m || m instanceof B.PBRMaterial) return m;
+  if (CAR_PBR.has(m)) return CAR_PBR.get(m);
+  const r = carRole(m.name), p = new B.PBRMaterial(m.name + '_pbr', scene);
+  p.albedoColor = (m.diffuseColor || new C3(1,1,1)).toLinearSpace();
+  if (m.diffuseTexture){ p.albedoTexture = m.diffuseTexture; }
+  if (m.emissiveTexture) p.emissiveTexture = m.emissiveTexture;
+  p.emissiveColor = (m.emissiveColor || new C3(0,0,0)).clone();
+  p.alpha = m.alpha; p.backFaceCulling = m.backFaceCulling; p.zOffset = m.zOffset;
+  const R = { paint:[0.45,0.34], chrome:[1,0.12], iron:[0.9,0.45], rubber:[0,0.93], glass:[0,0.04], gloss:[0.1,0.22], alloy:[0.85,0.32], plastic:[0,0.55] }[r];
+  p.metallic = R[0]; p.roughness = R[1];
+  if (r === 'paint' || r === 'gloss' || r === 'glass'){ p.clearCoat.isEnabled = true; p.clearCoat.intensity = r === 'paint' ? 1 : 0.6; p.clearCoat.roughness = 0.04; }
+  if (r === 'rubber' && !m.diffuseTexture) p.albedoColor = hex('#161719').toLinearSpace();
+  if (m.diffuseTexture && r !== 'paint'){ p.metallic = 0; p.roughness = 0.4; }       // decals/plates: printed, not metal
+  CAR_PBR.set(m, p); return p;
+}
+function carTemplatePBR(tpl){
+  if (tpl.metadata.pbr) return tpl;
+  for (const mesh of tpl.getChildMeshes(false)) if (mesh.material) mesh.material = toCarPBR(mesh.material);
+  tpl.metadata.mats = { bodyM: toCarPBR(tpl.metadata.mats.bodyM), paint: toCarPBR(tpl.metadata.mats.paint) };
+  tpl.metadata.pbr = true; return tpl;
+}
+const paintCol = (m, col) => { if (m instanceof B.PBRMaterial) m.albedoColor = col.toLinearSpace(); else m.diffuseColor = col; };
 function makeCar(dto, tplFn = trackerTemplate){
-  const tpl = tplFn(), col = hex(dto.color), key = dto.owner.id;
-  const bodyM = tpl.metadata.mats.bodyM.clone('carBody' + key); bodyM.diffuseColor = col;
-  const paintM = tpl.metadata.mats.paint.clone('carPaint' + key); paintM.diffuseColor = col;
+  const tpl = carTemplatePBR(tplFn()), col = hex(dto.color), key = dto.owner.id;
+  const bodyM = tpl.metadata.mats.bodyM.clone('carBody' + key); paintCol(bodyM, col);
+  const paintM = tpl.metadata.mats.paint.clone('carPaint' + key); paintCol(paintM, col);
   const tex = new B.DynamicTexture('plate' + key, { width: 520, height: 112 }, scene, true);
   drawPlate(tex.getContext(), 260, 56, 1000, dto.plate); tex.update(); tex.wrapU = tex.wrapV = B.Texture.CLAMP_ADDRESSMODE;
   const plateM = stdMat('plateM' + key, { diffuse: new C3(1,1,1), dt: tex, spec: new C3(.25,.25,.25) }); plateM.zOffset = -4;
@@ -4300,12 +4344,12 @@ function findLand(){
 }
 
 // ---------- settings ----------
-const QNAMES = {auto:'Avto', low:'Past', medium:'O‘rta', high:'Yuqori'};
+const QNAMES = {auto:'Avto', low:'Past', medium:'O‘rta', high:'Yuqori', ultra:'Real'};
 function openSettings(){
   const sp = S.speed;
   openSheet(`<h3>Sozlamalar</h3><div class="sub">Grafika telefon kuchiga qarab tanlanadi. Hozir: <b>${QNAMES[S.qActive]}</b></div>
     <div class="lbl2" style="margin-bottom:6px">Grafika sifati</div>
-    <div class="seg" id="qseg">${['auto','low','medium','high'].map(q=>`<button data-q="${q}" class="${S.quality===q?'on':''}">${QNAMES[q]}</button>`).join('')}</div>
+    <div class="seg" id="qseg">${['auto','low','medium','high','ultra'].map(q=>`<button data-q="${q}" class="${S.quality===q?'on':''}">${QNAMES[q]}</button>`).join('')}</div>
     <div class="lbl2" style="margin-bottom:6px">Vaqt: <span id="hrs">${clockStr()}</span></div>
     <input type="range" id="timeR" min="0" max="23.99" step="0.05" value="${S.hours}">
     <label class="chk" style="margin:0 0 10px"><input type="checkbox" id="lblToggle" ${LBL.on?'checked':''}> Bino ustida egalarning nomlari</label>
@@ -4325,7 +4369,7 @@ function openSettings(){
 }
 
 // ---------- quality ----------
-let shadowGen = null, pipeline = null, glow = null;
+let shadowGen = null, pipeline = null, glow = null, ssao = null;
 const casters = () => {
   const list = [...treeCasters(), ...poles.meshes(), basin, jet, ...[...CARS.values()].flatMap(c => c.node ? c.node.getChildMeshes() : []), ...DLR.casters()];
   for (const t of Object.values(T)) for (const pt of t.parts) list.push(pt.mesh);
@@ -4333,14 +4377,28 @@ const casters = () => {
 };
 const isMobile = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
 if (isMobile){ LBL.max = 45; }
-function autoStart(){ return isMobile ? 'low' : 'medium'; }
+function autoStart(){ return isMobile ? 'low' : 'ultra'; }      // computers start at full realism; slow ones step down
+// glass towers and shop fronts reflect the sky (Fresnel: strong at grazing angles), on the high and ultra settings
+const GLASS_RX = /^(lm_|htlGlassM|termGlass|glassDarkM|dlrGlass|tvLatM)/;
+function glassReflections(on){
+  for (const m of scene.materials){
+    if (!(m instanceof B.StandardMaterial) || !GLASS_RX.test(m.name) || m.specularPower < 60) continue;
+    if (on){
+      m.reflectionTexture = envProbe.cubeTexture;
+      if (!m.reflectionFresnelParameters){ const f = new B.FresnelParameters(); f.bias = 0.04; f.power = 2.6; f.leftColor = new C3(0.55,0.57,0.6); f.rightColor = new C3(0.05,0.05,0.06); m.reflectionFresnelParameters = f; }
+    } else m.reflectionTexture = null;
+  }
+}
 function applyQuality(q){
   S.qActive = q;
   if (shadowGen){ shadowGen.dispose(); shadowGen = null; }
   if (pipeline){ pipeline.dispose(); pipeline = null; }
   if (glow){ glow.dispose(); glow = null; }
+  if (ssao){ ssao.dispose(); ssao = null; }
+  const hi = q==='high' || q==='ultra';
   const dpr = window.devicePixelRatio || 1;
   const cap = q==='low' ? 1 : q==='medium' ? 1.5 : 2;
+  glassReflections(hi);
   engine.setHardwareScalingLevel(1 / Math.min(dpr, cap) * (q==='low' && dpr<1.2 ? 1.15 : 1));
   const webgl2 = engine.webGLVersion >= 2;
   if (q==='medium'){
@@ -4348,7 +4406,14 @@ function applyQuality(q){
     if (webgl2){ shadowGen.usePercentageCloserFiltering = true; shadowGen.filteringQuality = B.ShadowGenerator.QUALITY_LOW; }
     else shadowGen.useBlurExponentialShadowMap = true;
     shadowGen.bias = 0.0008; shadowGen.normalBias = 0.02; shadowGen.darkness = 0.25;
-  } else if (q==='high'){
+  } else if (q==='ultra' && webgl2){
+    // soft contact-hardening shadows over a wide range, four cascades
+    shadowGen = new B.CascadedShadowGenerator(4096, sun);
+    shadowGen.numCascades = 4; shadowGen.lambda = 0.88; shadowGen.shadowMaxZ = 1100;
+    shadowGen.stabilizeCascades = true; shadowGen.autoCalcDepthBounds = false;
+    shadowGen.useContactHardeningShadow = true; shadowGen.contactHardeningLightSizeUVRatio = 0.035; shadowGen.filteringQuality = B.ShadowGenerator.QUALITY_HIGH;
+    shadowGen.bias = 0.0015; shadowGen.normalBias = 0.025; shadowGen.darkness = 0.12;
+  } else if (hi){
     if (webgl2){
       shadowGen = new B.CascadedShadowGenerator(2048, sun);
       shadowGen.numCascades = 4; shadowGen.lambda = 0.85; shadowGen.shadowMaxZ = 700;
@@ -4368,7 +4433,7 @@ function applyQuality(q){
     pipeline.imageProcessing.toneMappingType = B.ImageProcessingConfiguration.TONEMAPPING_ACES;
     pipeline.imageProcessing.exposure = 1.15;
     pipeline.imageProcessing.contrast = 1.18;
-    if (q==='high'){
+    if (hi){
       pipeline.samples = 4;
       pipeline.bloomEnabled = true; pipeline.bloomThreshold = 0.75; pipeline.bloomWeight = 0.35; pipeline.bloomKernel = 48; pipeline.bloomScale = 0.5;
       pipeline.imageProcessing.vignetteEnabled = true; pipeline.imageProcessing.vignetteWeight = 1.4;
@@ -4376,10 +4441,24 @@ function applyQuality(q){
       glow.intensity = 0.6;
       for (const m of [...bulbs.meshes(), ...dots.meshes(), ...sigLamps.flatMap(l => l.meshes()), ...carLights, ...AIR_LIGHTS]) glow.addIncludedOnlyMesh(m);
     }
+    if (q==='ultra'){
+      // filmic look: gentler contrast, warm highlights, a touch of sharpening and grain; ambient occlusion in corners
+      pipeline.imageProcessing.exposure = 1.1; pipeline.imageProcessing.contrast = 1.12;
+      pipeline.imageProcessing.colorCurvesEnabled = true;
+      const cc = new B.ColorCurves(); cc.globalSaturation = -8; cc.highlightsHue = 40; cc.highlightsDensity = 18; cc.highlightsSaturation = 20; cc.shadowsHue = 220; cc.shadowsDensity = 14; cc.shadowsSaturation = 12;
+      pipeline.imageProcessing.colorCurves = cc;
+      pipeline.bloomThreshold = 0.86; pipeline.bloomWeight = 0.22; pipeline.bloomKernel = 64;
+      pipeline.sharpenEnabled = true; pipeline.sharpen.edgeAmount = 0.22;
+      pipeline.grainEnabled = true; pipeline.grain.intensity = 2.5; pipeline.grain.animated = true;
+      if (webgl2 && B.SSAO2RenderingPipeline && B.SSAO2RenderingPipeline.IsSupported){
+        ssao = new B.SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.6, blurRatio: 0.6 }, [camera], true);
+        ssao.radius = 3.2; ssao.totalStrength = 1.15; ssao.base = 0.18; ssao.samples = 16; ssao.maxZ = 600; ssao.minZAspect = 0.4; ssao.expensiveBlur = true;
+      }
+    }
   }
   scene.fogDensity = q==='low' ? 0.00034 : 0.00028;
   carsVisible = q==='low' ? 140 : q==='medium' ? 280 : CAR_N;
-  LOD.k = q==='low' ? 0.7 : q==='medium' ? 1 : 1.35; lodT = 0;
+  LOD.k = q==='low' ? 0.7 : q==='medium' ? 1 : q==='high' ? 1.35 : 1.6; lodT = 0;
   // weakest phones: no moving swell grid, the flat sea (still rippled, with glints) comes up to the waterline
   seaGrid.setEnabled(q !== 'low'); lake.position.y = q === 'low' ? SEA_Y : -2.6;
 }
@@ -4419,6 +4498,7 @@ function updateSky(){
   skyMat.setVector3('sunDir', new V3(-sx, Math.max(sy, -0.2), -0.45));
   skyMat.setColor3('sunC', C3.Lerp(hex('#ff9a4a'), hex('#fff4d6'), smooth(0, 0.5, elev)).scale(elev > -0.1 ? 1 : 0));
   skyMat.setFloat('glow', 0.4 + dk*1.6); skyMat.setFloat('stars', night);
+  if (Math.abs(S.hours - envHours) > 0.2){ envHours = S.hours; refreshEnv(); scene.environmentIntensity = 0.25 + 0.85*day; }
   scene.clearColor = new C4(hor.r, hor.g, hor.b, 1);
   scene.fogColor = C3.Lerp(hor, sky, 0.35);
   { const sk = C3.Lerp(top, hor, 0.6); for (const m of [mats.lake, mats.sea, riverM]) m.emissiveColor = sk.scale(m.waterEmissiveK); }
@@ -4702,10 +4782,10 @@ scene.onBeforeRenderObservable.add(()=>{
     autoT += dt;
     if (autoT > 4 && fpsHist.length>=6){
       const avg = fpsHist.reduce((a,b)=>a+b,0)/fpsHist.length;
-      const order = ['low','medium','high'], i = order.indexOf(S.qActive);
+      const order = ['low','medium','high','ultra'], i = order.indexOf(S.qActive);
       // switching rebuilds shaders (a visible hitch), so: step down only on a sustained drop, and never climb back after one
       if (avg < 27 && i>0){ if (++autoLow >= 2){ applyQuality(order[i-1]); toast(`Grafika: ${QNAMES[order[i-1]]} (tezlik uchun)`); fpsHist.length=0; autoDown = true; autoLow = 0; } }
-      else { autoLow = 0; if (avg > 57 && i<2 && !autoDown && !isMobile && autoChecks<1){ applyQuality(order[i+1]); fpsHist.length=0; autoChecks++; } }
+      else { autoLow = 0; if (avg > 57 && i<order.length-1 && !autoDown && !isMobile && autoChecks<1){ applyQuality(order[i+1]); fpsHist.length=0; autoChecks++; } }
       autoT = 0;
     }
   }
@@ -5005,7 +5085,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
