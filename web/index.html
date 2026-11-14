@@ -4391,7 +4391,7 @@ function walkUpdate(dt){
   if (WALK.inside){ camera.target.set(WALK.x, WALK.y + 1.5, WALK.z); return; }
   let f = 0, turn = 0, jx = 0, jz = 0;
   if (keys.has('w') || keys.has('arrowup')) f += 1; if (keys.has('s') || keys.has('arrowdown')) f -= 1;
-  if (keys.has('a') || keys.has('arrowleft')) turn += 1; if (keys.has('d') || keys.has('arrowright')) turn -= 1;
+  if (keys.has('a') || keys.has('arrowleft')) turn -= 1; if (keys.has('d') || keys.has('arrowright')) turn += 1;   // + yaw turns right
   const run = WALK.run || keys.has('shift');
   let want = 0, dirx = Math.sin(WALK.yaw), dirz = Math.cos(WALK.yaw), back = false;
   if (GP.on && (GP.lx || GP.ly) && WALK.joy.id == null){ WALK.joy.x = GP.lx; WALK.joy.y = GP.ly; WALK.joy.gp = true; } else if (WALK.joy.gp){ WALK.joy.x = WALK.joy.y = 0; WALK.joy.gp = false; }
