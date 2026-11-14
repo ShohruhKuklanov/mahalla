@@ -3871,7 +3871,7 @@ function humanCrowd(k, c){
   return H;
 }
 const humanCasters = () => HUMAN.ready ? Object.values(HUMAN.kinds).flatMap(H => [...H.meshes, ...H.avatar.meshes]) : [];
-const realSlots = () => !HUMAN.ready ? 0 : S.qActive === 'ultra' ? 40 : S.qActive === 'high' ? 28 : S.qActive === 'medium' ? (isMobile ? 10 : 16) : (WALK.on ? 6 : 0);
+const realSlots = () => !HUMAN.ready ? 0 : S.qActive === 'ultra' ? 24 : S.qActive === 'high' ? 16 : S.qActive === 'medium' ? (isMobile ? 10 : 16) : (WALK.on ? 6 : 0);
 const _hm = new B.Matrix(), _hw = new B.Matrix(), _hq = new B.Quaternion(), _hs = new V3(), _ht = new V3(), _hC = [];
 // choose the people nearest to the camera, give them real bodies (their box bodies hide), fill the instance buffers
 function updateRealPeople(dt){
@@ -4681,6 +4681,18 @@ function glassReflections(on){
     } else m.reflectionTexture = null;
   }
 }
+// adaptive resolution: on a slow frame rate render fewer pixels (down to 60 %) before touching the effects
+const RS = { base: 1, scale: 1, hist: [], t: 0 };
+function adaptResolution(dt){
+  if (S.qActive === 'low') return;
+  RS.t += dt; RS.hist.push(engine.getFps());
+  if (RS.t < 1.5) return;
+  const f = RS.hist.reduce((a, b) => a + b, 0)/RS.hist.length; RS.t = 0; RS.hist.length = 0;
+  let ns = RS.scale;
+  if (f < 42) ns = Math.max(0.6, RS.scale - (f < 28 ? 0.15 : 0.08));
+  else if (f > 57 && RS.scale < 1) ns = Math.min(1, RS.scale + 0.05);
+  if (ns !== RS.scale){ RS.scale = ns; engine.setHardwareScalingLevel(RS.base/ns); }
+}
 function applyQuality(q){
   S.qActive = q;
   if (shadowGen){ shadowGen.dispose(); shadowGen = null; }
@@ -4691,7 +4703,8 @@ function applyQuality(q){
   const dpr = window.devicePixelRatio || 1;
   const cap = q==='low' ? 1 : q==='medium' ? 1.5 : 2;
   glassReflections(hi);
-  engine.setHardwareScalingLevel(1 / Math.min(dpr, cap) * (q==='low' && dpr<1.2 ? 1.15 : 1));
+  RS.base = 1 / Math.min(dpr, q==='ultra' ? 1.75 : cap) * (q==='low' && dpr<1.2 ? 1.15 : 1); RS.scale = 1; RS.hist.length = 0;
+  engine.setHardwareScalingLevel(RS.base);
   const webgl2 = engine.webGLVersion >= 2;
   if (q==='medium'){
     shadowGen = new B.ShadowGenerator(2048, sun);
@@ -4700,10 +4713,11 @@ function applyQuality(q){
     shadowGen.bias = 0.0008; shadowGen.normalBias = 0.02; shadowGen.darkness = 0.25;
   } else if (q==='ultra' && webgl2){
     // soft contact-hardening shadows over a wide range, four cascades
-    shadowGen = new B.CascadedShadowGenerator(4096, sun);
-    shadowGen.numCascades = 4; shadowGen.lambda = 0.88; shadowGen.shadowMaxZ = 1100;
+    // (lighter than before: 2048 maps, three cascades, PCF instead of contact hardening, redrawn every other frame)
+    shadowGen = new B.CascadedShadowGenerator(2048, sun);
+    shadowGen.numCascades = 3; shadowGen.lambda = 0.86; shadowGen.shadowMaxZ = 900;
     shadowGen.stabilizeCascades = true; shadowGen.autoCalcDepthBounds = false;
-    shadowGen.useContactHardeningShadow = true; shadowGen.contactHardeningLightSizeUVRatio = 0.035; shadowGen.filteringQuality = B.ShadowGenerator.QUALITY_HIGH;
+    shadowGen.usePercentageCloserFiltering = true; shadowGen.filteringQuality = B.ShadowGenerator.QUALITY_MEDIUM;
     shadowGen.bias = 0.0015; shadowGen.normalBias = 0.025; shadowGen.darkness = 0.12;
   } else if (hi){
     if (webgl2){
@@ -4716,7 +4730,7 @@ function applyQuality(q){
       shadowGen = new B.ShadowGenerator(4096, sun); shadowGen.useBlurExponentialShadowMap = true; shadowGen.darkness=.2;
     }
   }
-  if (shadowGen){ for (const m of casters()) shadowGen.addShadowCaster(m, false); }
+  if (shadowGen){ for (const m of casters()) shadowGen.addShadowCaster(m, false); if (hi) shadowGen.getShadowMap().refreshRate = 2; }
   if (q!=='low'){
     pipeline = new B.DefaultRenderingPipeline('pp', true, scene, [camera]);
     pipeline.fxaaEnabled = true;
@@ -4726,7 +4740,7 @@ function applyQuality(q){
     pipeline.imageProcessing.exposure = 1.15;
     pipeline.imageProcessing.contrast = 1.18;
     if (hi){
-      pipeline.samples = 4;
+      pipeline.samples = q==='ultra' ? 2 : 4;          // FXAA smooths what 2× MSAA leaves
       pipeline.bloomEnabled = true; pipeline.bloomThreshold = 0.75; pipeline.bloomWeight = 0.35; pipeline.bloomKernel = 48; pipeline.bloomScale = 0.5;
       pipeline.imageProcessing.vignetteEnabled = true; pipeline.imageProcessing.vignetteWeight = 1.4;
       glow = new B.GlowLayer('glow', scene, { blurKernelSize: 32, mainTextureRatio: 0.5 });
@@ -4741,16 +4755,15 @@ function applyQuality(q){
       pipeline.imageProcessing.colorCurves = cc;
       pipeline.bloomThreshold = 0.86; pipeline.bloomWeight = 0.22; pipeline.bloomKernel = 64;
       pipeline.sharpenEnabled = true; pipeline.sharpen.edgeAmount = 0.22;
-      pipeline.grainEnabled = true; pipeline.grain.intensity = 2.5; pipeline.grain.animated = true;
       if (webgl2 && B.SSAO2RenderingPipeline && B.SSAO2RenderingPipeline.IsSupported){
-        ssao = new B.SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.6, blurRatio: 0.6 }, [camera], true);
-        ssao.radius = 3.2; ssao.totalStrength = 1.15; ssao.base = 0.18; ssao.samples = 16; ssao.maxZ = 600; ssao.minZAspect = 0.4; ssao.expensiveBlur = true;
+        ssao = new B.SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.5, blurRatio: 0.5 }, [camera], true);
+        ssao.radius = 3.2; ssao.totalStrength = 1.15; ssao.base = 0.18; ssao.samples = 8; ssao.maxZ = 500; ssao.minZAspect = 0.4; ssao.expensiveBlur = false;
       }
     }
   }
   scene.fogDensity = q==='low' ? 0.00034 : 0.00028;
   carsVisible = q==='low' ? 140 : q==='medium' ? 280 : CAR_N;
-  LOD.k = q==='low' ? 0.7 : q==='medium' ? 1 : q==='high' ? 1.35 : 1.6; lodT = 0;
+  LOD.k = q==='low' ? 0.7 : q==='medium' ? 1 : q==='high' ? 1.3 : 1.45; lodT = 0;
   // weakest phones: no moving swell grid, the flat sea (still rippled, with glints) comes up to the waterline
   seaGrid.setEnabled(q !== 'low'); lake.position.y = q === 'low' ? SEA_Y : -2.6;
 }
@@ -5069,10 +5082,10 @@ scene.onBeforeRenderObservable.add(()=>{
   lakeTex.uOffset += dt*0.004; lakeTex.vOffset += dt*0.002; updateSea();
   updateSignals(dt); updateCars(dt); updateDrives(dt); updatePeople(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
   // fps + auto quality
-  fpsAcc += engine.getFps(); fpsN++; fpsT += dt;
+  fpsAcc += engine.getFps(); fpsN++; fpsT += dt; adaptResolution(dt);
   if (fpsT > 0.5){
     const f = fpsAcc/fpsN; fpsHist.push(f); if (fpsHist.length>8) fpsHist.shift();
-    $('#fps').innerHTML = `<b>${f.toFixed(0)}</b> fps · ${QNAMES[S.qActive]}`;
+    $('#fps').innerHTML = `<b>${f.toFixed(0)}</b> fps · ${QNAMES[S.qActive]}${RS.scale < 1 ? ' · ' + Math.round(RS.scale*100) + '%' : ''}`;
     fpsAcc=0; fpsN=0; fpsT=0;
   }
   if (S.quality==='auto'){
@@ -5081,7 +5094,7 @@ scene.onBeforeRenderObservable.add(()=>{
       const avg = fpsHist.reduce((a,b)=>a+b,0)/fpsHist.length;
       const order = ['low','medium','high','ultra'], i = order.indexOf(S.qActive);
       // switching rebuilds shaders (a visible hitch), so: step down only on a sustained drop, and never climb back after one
-      if (avg < 27 && i>0){ if (++autoLow >= 2){ applyQuality(order[i-1]); toast(`Grafika: ${QNAMES[order[i-1]]} (tezlik uchun)`); fpsHist.length=0; autoDown = true; autoLow = 0; } }
+      if (avg < 27 && i>0 && RS.scale <= 0.61){ if (++autoLow >= 2){ applyQuality(order[i-1]); toast(`Grafika: ${QNAMES[order[i-1]]} (tezlik uchun)`); fpsHist.length=0; autoDown = true; autoLow = 0; } }
       else { autoLow = 0; if (avg > 57 && i<order.length-1 && !autoDown && !isMobile && autoChecks<1){ applyQuality(order[i+1]); fpsHist.length=0; autoChecks++; } }
       autoT = 0;
     }
