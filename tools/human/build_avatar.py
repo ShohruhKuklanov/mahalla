@@ -93,13 +93,13 @@ def mat(name, col, rough, tex=None, alpha=False):
 # skin: one neutral mid tone, tinted per player in the game
 S = 1024
 def mask(f): return np.asarray(Image.open(TEX + f).convert('L').resize((S, S)), dtype=np.float32)/255
-base = np.array([206, 156, 122], np.float32)
+base = np.array([252, 232, 220], np.float32)
 rng = np.random.default_rng(3)
 noise = np.asarray(Image.fromarray((rng.random((S//8, S//8))*255).astype(np.uint8)).resize((S, S), Image.BICUBIC), np.float32)/255 - 0.5
 sk = np.ones((S, S, 3), np.float32) * base * (1 + 0.05*noise[..., None])
 lips, lids, nails, face = mask('mpfb_lips.jpg'), mask('mpfb_eyelids.jpg'), mask('mpfb_fingernails.jpg'), mask('mpfb_face.jpg')
-sk = sk*(1 - 0.7*lips[..., None]) + np.array([176, 98, 92], np.float32)*0.7*lips[..., None]
-sk *= (1 - 0.16*lids[..., None]); sk = sk*(1 - 0.5*nails[..., None]) + np.array([232, 196, 184], np.float32)*0.5*nails[..., None]
+sk = sk*(1 - 0.7*lips[..., None]) + np.array([226, 150, 150], np.float32)*0.7*lips[..., None]
+sk *= (1 - 0.12*lids[..., None]); sk = sk*(1 - 0.5*nails[..., None]) + np.array([255, 236, 230], np.float32)*0.5*nails[..., None]
 skin_png = WORK + 'skin_avatar.jpg'; Image.fromarray(np.clip(sk, 0, 255).astype(np.uint8)).save(skin_png, quality=88)
 
 NAMES = ['Skin', 'Shirt', 'Sleeve', 'PantsTop', 'PantsLow', 'Shoes', 'Hair', 'Eyes', 'Sclera', 'HairMid', 'HairLong', 'Skirt', 'Jacket']
