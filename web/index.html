@@ -235,6 +235,12 @@
   #qDone .qd-e{font-size:12.5px;color:#ffd2cb;margin-top:6px} #qDone .qd-b{display:flex;gap:8px;justify-content:center;margin-top:12px}
   body.driving #walkRun{display:none}
   @media (max-width:700px){ #actBtn{bottom:190px;right:14px;font-size:14px} #dlg{bottom:180px} #qTrack{top:64px} }
+  /* ---------- other walkers' name tags ---------- */
+  #wlabels{position:fixed;inset:0;z-index:3;pointer-events:none;overflow:hidden}
+  .wlbl{position:absolute;left:0;top:0;padding:4px 10px;border-radius:999px;background:rgba(18,20,40,.78);border:1px solid rgba(127,224,201,.55);color:#fff;font:800 12.5px/1.2 Manrope,system-ui,sans-serif;white-space:nowrap;transform-origin:50% 100%;will-change:transform;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+  .wlbl::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#7fe0c9;margin-right:6px;vertical-align:1px}
+  .wlbl.drv::before{background:var(--gold)}
+  body.hero #wlabels{opacity:0}
   /* ---------- welcome screen over the living city ---------- */
   body.hero #labels{opacity:0} body.hero .plbl{pointer-events:none}
   #labels{transition:opacity .6s}
@@ -2043,10 +2049,12 @@ poleBase.material = stdMat('poleM',{diffuse:hex('#2b2f36')}); poleBase.isPickabl
 const bulbBase = B.MeshBuilder.CreateBox('bulb',{width:0.6,height:0.5,depth:0.6},scene); bulbBase.position.y=6.1; bulbBase.bakeCurrentTransformIntoVertices();
 mats.bulb = stdMat('bulbM',{diffuse:hex('#fff2cc'), emissive:new C3(0,0,0)}); bulbBase.material = mats.bulb; bulbBase.isPickable=false;
 const poles = chunkSet(poleBase, 750), bulbs = chunkSet(bulbBase, 1100);
+const LAMP_XZ = [];                       // every street lamp (their light pools at night: STREETLIGHT)
 for (const bl of blocks){
   const x0 = blockX(bl.bx), z0 = blockZ(bl.bz);
-  for (const [dx,dz] of [[0.8,0.8],[BLK-0.8,0.8],[0.8,BLK-0.8],[BLK-0.8,BLK-0.8]]){
-    const m = B.Matrix.Translation(x0+dx,0.3,z0+dz); poles.add(m, x0+dx, z0+dz); bulbs.add(m, x0+dx, z0+dz);
+  // the corners, and halfway along each side so the streets have no dark stretches
+  for (const [dx,dz] of [[0.8,0.8],[BLK-0.8,0.8],[0.8,BLK-0.8],[BLK-0.8,BLK-0.8],[BLK/2,0.8],[BLK/2,BLK-0.8],[0.8,BLK/2],[BLK-0.8,BLK/2]]){
+    const m = B.Matrix.Translation(x0+dx,0.3,z0+dz); poles.add(m, x0+dx, z0+dz); bulbs.add(m, x0+dx, z0+dz); LAMP_XZ.push([x0+dx, z0+dz]);
   }
 }
 poles.flush(); bulbs.flush();
@@ -3465,7 +3473,7 @@ function makeCar(dto, tplFn = trackerTemplate){
   const wheels = [], body = root.getChildMeshes(false).find(m => m.material === bodyM);
   for (const n of root.getChildTransformNodes(true)) if (n.name.startsWith('trkWheel')) wheels.push({ w: n, sd: Math.sign(n.position.x), front: n.position.z > 0 });
   body.isPickable = true; body.metadata = { carKey: key };
-  root.metadata = { wheels, body, own: [bodyM, paintM, plateM, tex] };
+  root.metadata = { wheels, body, dto, own: [bodyM, paintM, plateM, tex] };
   if (shadowGen) for (const m of root.getChildMeshes()) shadowGen.addShadowCaster(m, false);
   return root;
 }
@@ -4510,6 +4518,7 @@ const AVSTORE = {
       API.me.avatar3d = r.avatar; API.me.avatar3dDraft = null;
     } else this.setLocal(this.KEY, cfg);
     this.setLocal(this.DRAFT, null);
+    if (typeof presenceAvatarChanged === 'function') presenceAvatarChanged();
     return cfg;
   },
 };
@@ -5248,6 +5257,163 @@ function gpButtons(){
   if (gpPressed(2) && !DRIVE.on){ WALK.run = !WALK.run; $('#walkRun').classList.toggle('on', WALK.run); }
   if (GP.rx || GP.ry){ camera.alpha -= GP.rx*0.045; camera.beta = clamp(camera.beta - GP.ry*0.03, camera.lowerBetaLimit, camera.upperBetaLimit); WALK.camT = performance.now() + 1500; }
 }
+
+// =================== OTHER WALKERS: everyone out in the city, with their avatar and nickname ===================
+// While you walk or drive, your position goes over the websocket ~6 times a second; the server sends everyone's back
+// (see src/presence.ts). Each walker is drawn with their own 3D avatar (or in their car) and a name tag over the head.
+// In the offline demo a few demo residents stroll round the central park instead.
+let WSC = null;
+const OTHERS = new Map();               // id → { nick, cfg, a, car, s: {x,y,z,yaw,mode,speed,carModel,carColor}, x,y,z,yaw, el, demo }
+const wlLayer = document.createElement('div'); wlLayer.id = 'wlabels'; wlLayer.setAttribute('aria-hidden', 'true'); document.body.insertBefore(wlLayer, document.getElementById('top'));
+function otherGet(id){
+  let o = OTHERS.get(id);
+  if (!o){
+    o = { id, nick: '', cfg: null, a: null, k: null, car: null, carKey: null, s: null, x: 0, y: 0, z: 0, yaw: 0, w: { idle: 1, walk: 0, run: 0 }, loading: false };
+    o.el = document.createElement('div'); o.el.className = 'wlbl'; o.el.style.display = 'none'; wlLayer.appendChild(o.el);
+    OTHERS.set(id, o);
+  }
+  return o;
+}
+function otherSetLook(o, nick, avatar){
+  if (nick){ o.nick = nick; o.el.textContent = nick; }
+  o.cfg = avClean(avatar || { body: 'n' });
+  if (o.a && o.k !== o.cfg.body){ o.a.root.dispose(false, true); o.a = null; }
+  if (o.a) AVATAR.apply(o.a, o.cfg);
+}
+function otherGone(id){
+  const o = OTHERS.get(id); if (!o) return;
+  if (o.a) o.a.root.dispose(false, true); if (o.car) disposeCar(o.car); o.el.remove(); OTHERS.delete(id);
+}
+function presenceMessage(m){
+  const myId = API.me ? API.me.id : null;
+  if (m.type === 'pinit'){ for (const p of m.players) if (p.id !== myId) otherSetLook(otherGet(p.id), p.nick, p.avatar); }
+  else if (m.type === 'pav'){ if (m.id !== myId) otherSetLook(otherGet(m.id), m.nick, m.avatar); }
+  else if (m.type === 'pgone') otherGone(m.id);
+  else if (m.type === 'players'){
+    const seen = new Set();
+    for (const [id, x, y, z, yaw, mode, speed, carModel, carColor] of m.list){
+      if (id === myId) continue; seen.add(id);
+      const o = otherGet(id), first = !o.s;
+      o.s = { x, y, z, yaw, mode, speed, carModel, carColor };
+      if (first){ o.x = x; o.y = y; o.z = z; o.yaw = yaw; }
+    }
+    for (const [id, o] of OTHERS) if (!o.demo && !seen.has(id) && o.s) otherGone(id);
+  }
+}
+// what I send: where I am, walking or in which car
+let presT = 0, presWas = false;
+function presenceSend(dt){
+  if (!API.on || !WSC || WSC.readyState !== 1 || !API.me || !API.me.nickname) return;
+  if (!WALK.on){ if (presWas){ WSC.send(JSON.stringify({ type: 'leave' })); presWas = false; } return; }
+  presT -= dt; if (presT > 0) return; presT = 0.16;
+  const drive = DRIVE.on, dto = drive && DRIVE.node && DRIVE.node.metadata && DRIVE.node.metadata.dto;
+  const msg = drive ? { type: 'pos', x: DRIVE.x, y: DRIVE.node.position.y, z: DRIVE.z, yaw: DRIVE.h, mode: 'drive', speed: DRIVE.v, car: dto ? { model: dto.model, color: dto.color } : null }
+                    : { type: 'pos', x: WALK.x, y: WALK.y, z: WALK.z, yaw: WALK.yaw, mode: 'walk', speed: WALK.inside ? 0 : WALK.speed };
+  WSC.send(JSON.stringify(msg)); presWas = true;
+}
+const presenceAvatarChanged = () => { if (WSC && WSC.readyState === 1) WSC.send(JSON.stringify({ type: 'avatar' })); };
+// every frame: glide toward the latest position, animate, keep the name tag over the head
+const _wp = new V3();
+function updateOthers(dt){
+  if (!OTHERS.size) return;
+  const W_ = canvas.clientWidth, H_ = canvas.clientHeight, cp = camera.position;
+  const k = engine.getHardwareScalingLevel(), vp = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()), tm = scene.getTransformMatrix();
+  for (const o of OTHERS.values()){
+    if (!o.s) continue;
+    const f = Math.min(1, dt*8);
+    o.x += (o.s.x - o.x)*f; o.y += (o.s.y - o.y)*f; o.z += (o.s.z - o.z)*f;
+    let dy = o.s.yaw - o.yaw; while (dy > Math.PI) dy -= 2*Math.PI; while (dy < -Math.PI) dy += 2*Math.PI; o.yaw += dy*f;
+    const dist = Math.hypot(o.x - cp.x, o.z - cp.z), near = dist < 400;
+    const driving = o.s.mode === 'drive';
+    // the body (made once the look is known; a neutral one meanwhile)
+    if (!o.a && !o.loading && near){
+      o.loading = true; const cfg = o.cfg || avClean({ body: 'n' }); o.k = cfg.body;
+      AVATAR.make(cfg.body, scene).then(a => { o.loading = false; if (!OTHERS.has(o.id)){ a.root.dispose(false, true); return; } o.a = a; o.k = cfg.body; AVATAR.apply(a, o.cfg || cfg); for (const g of Object.values(a.groups)) g.start(true); if (shadowGen) for (const m of Object.values(a.meshes).flat()) shadowGen.addShadowCaster(m, false); }).catch(() => { o.loading = false; });
+    }
+    if (o.a){
+      o.a.root.setEnabled(near && !driving);
+      o.a.root.position.set(o.x, o.y, o.z); o.a.root.rotation.y = o.yaw;
+      const sp = Math.abs(o.s.speed), wr = clamp((sp - 1.7)/2.2, 0, 1), wi = clamp(1 - sp/0.9, 0, 1);
+      const tgt = { idle: wi, walk: (1 - wi)*(1 - wr), run: (1 - wi)*wr };
+      for (const [n, g] of Object.entries(o.a.groups)){ o.w[n] += (tgt[n] - o.w[n])*Math.min(1, dt*8); g.weight = o.w[n]; }
+      if (o.a.groups.walk) o.a.groups.walk.speedRatio = clamp(sp/HUMAN_WALK_MS, 0.6, 1.5);
+      if (o.a.groups.run) o.a.groups.run.speedRatio = clamp(sp/HUMAN_RUN_MS, 0.8, 1.4);
+    }
+    // their car, while they drive
+    const ck = driving ? (o.s.carModel || 'tracker') + (o.s.carColor || '#f2f3f1') : null;
+    if (o.carKey !== ck){
+      if (o.car){ disposeCar(o.car); o.car = null; }
+      o.carKey = ck;
+      if (ck){ const model = CAR_MODELS[o.s.carModel] && modelReady(o.s.carModel) ? o.s.carModel : 'tracker';
+        if (modelReady(model)) o.car = CAR_MODELS[model].make({ owner: { id: 'w' + o.id }, model, color: o.s.carColor || '#f2f3f1', plate: { region: '01', text: (o.nick || 'MEHMON').slice(0, 8).toUpperCase(), kind: 'custom' } });
+        else o.carKey = null; }
+    }
+    if (o.car){ o.car.setEnabled(near); o.car.position.set(o.x, o.y, o.z); o.car.rotation.y = o.yaw; }
+    // name tag
+    const show = near && dist < 220 && o.nick && !document.body.classList.contains('hero');
+    if (!show){ if (o.el.style.display !== 'none') o.el.style.display = 'none'; continue; }
+    _wp.set(o.x, o.y + (driving ? 2.3 : 2.15), o.z);
+    V3.ProjectToRef(_wp, B.Matrix.IdentityReadOnly, tm, vp, _proj);
+    const sx = _proj.x*k, sy = _proj.y*k;
+    if (_proj.z < 0 || _proj.z > 1 || sx < -80 || sx > W_ + 80 || sy < -40 || sy > H_ + 40){ o.el.style.display = 'none'; continue; }
+    o.el.style.display = '';
+    o.el.style.transform = `translate(${sx.toFixed(1)}px,${sy.toFixed(1)}px) translate(-50%,-100%) scale(${clamp(1.25 - dist/260, 0.7, 1.15).toFixed(2)})`;
+    o.el.classList.toggle('drv', driving);
+  }
+}
+// the offline demo: three residents strolling round the central park
+const DEMO_WALKERS = [
+  { id: -101, nick: 'Malika', cfg: { body: 'f', hair: 'long', hairColor: '#2a1d15', outfit: 'skirt', top: '#e08a2c', bottom: '#2c3e5c', skin: '#e0b48e' }, off: 0, v: 1.35, side: 4 },
+  { id: -102, nick: 'jasur.dev', cfg: { body: 'm', hair: 'short', outfit: 'jacket', outer: '#2e7d4f', bottom: '#16181c', glasses: 'square', skin: '#b98462' }, off: 0.33, v: 1.5, side: 5 },
+  { id: -103, nick: 'Dilnoza_k', cfg: { body: 'n', hair: 'bun', hairColor: '#b0563a', outfit: 'shirt', top: '#7b5ea7', bottom: '#2c3e5c', hat: 'cap', hatColor: '#f2f0ea' }, off: 0.66, v: 3.6, side: 4.5 },
+];
+function demoWalkers(dt){
+  if (API.on) return;
+  const x0 = parkMin.x, x1 = parkMax.x, z0 = parkMin.z, z1 = parkMax.z;
+  for (const d of DEMO_WALKERS){
+    let o = OTHERS.get(d.id);
+    if (!o){ o = otherGet(d.id); o.demo = true; otherSetLook(o, d.nick, d.cfg); d.t = d.off; }
+    // round the park on the pavement, each at their own pace (the third one jogs)
+    const ax0 = x0 - d.side, ax1 = x1 + d.side, az0 = z0 - d.side, az1 = z1 + d.side, L = 2*((ax1 - ax0) + (az1 - az0));
+    d.t = (d.t + dt*d.v/L) % 1; let s = d.t*L, x, z, yaw;
+    if (s < ax1 - ax0){ x = ax0 + s; z = az0; yaw = Math.PI/2; } else if ((s -= ax1 - ax0) < az1 - az0){ x = ax1; z = az0 + s; yaw = 0; }
+    else if ((s -= az1 - az0) < ax1 - ax0){ x = ax1 - s; z = az1; yaw = -Math.PI/2; } else { s -= ax1 - ax0; x = ax0; z = az1 - s; yaw = Math.PI; }
+    o.s = { x, y: walkGround(x, z), z, yaw, mode: 'walk', speed: d.v };
+    if (o.x === 0 && o.z === 0){ o.x = x; o.z = z; o.yaw = yaw; }
+  }
+}
+
+// =================== STREET LIGHT AT NIGHT ===================
+// Every street lamp throws a warm pool of light on the road and pavement around it (an additive glow decal that
+// brightens with the night and is switched off by day), and the car you drive lights the road ahead.
+const STREETLIGHT = (() => {
+  const t = new B.DynamicTexture('slPoolT', { width: 128, height: 128 }, scene, true), g = t.getContext(), gr = g.createRadialGradient(64, 64, 1, 64, 64, 64);
+  gr.addColorStop(0, '#a88e62'); gr.addColorStop(0.35, '#6e5a3c'); gr.addColorStop(0.7, '#241c12'); gr.addColorStop(1, '#000000');
+  g.fillStyle = '#000'; g.fillRect(0, 0, 128, 128); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); t.update(true);
+  const m = new B.StandardMaterial('slPoolM', scene); m.diffuseColor = new C3(0, 0, 0); m.specularColor = new C3(0, 0, 0);
+  m.emissiveTexture = t; m.alphaMode = B.Engine.ALPHA_ADD; m.alpha = 0.999; m.disableDepthWrite = true; m.zOffset = -2; nightMats.push(m);
+  const base = B.MeshBuilder.CreateGround('slPool', { width: 1, height: 1 }, scene); base.material = m; base.isPickable = false;
+  const pools = chunkSet(base, 700);
+  const R = 22;
+  for (const [x, z] of LAMP_XZ) pools.add(B.Matrix.Compose(new V3(R, 1, R), B.Quaternion.Identity(), new V3(x, 0.32, z)), x, z);
+  pools.flush();
+  // headlights of the car you drive: a long soft beam on the road
+  const ht = new B.DynamicTexture('hlBeamT', { width: 64, height: 128 }, scene, true), hg = ht.getContext(), hgr = hg.createLinearGradient(0, 128, 0, 0);
+  hgr.addColorStop(0, '#d8d4c4'); hgr.addColorStop(0.5, '#6c6a60'); hgr.addColorStop(1, '#000000'); hg.fillStyle = hgr; hg.fillRect(0, 0, 64, 128);
+  const side = hg.createLinearGradient(0, 0, 64, 0); side.addColorStop(0, 'rgba(0,0,0,1)'); side.addColorStop(0.25, 'rgba(0,0,0,0)'); side.addColorStop(0.75, 'rgba(0,0,0,0)'); side.addColorStop(1, 'rgba(0,0,0,1)');
+  hg.fillStyle = side; hg.fillRect(0, 0, 64, 128); ht.update(true);
+  const hm = new B.StandardMaterial('hlBeamM', scene); hm.diffuseColor = new C3(0, 0, 0); hm.specularColor = new C3(0, 0, 0); hm.emissiveTexture = ht;
+  hm.alphaMode = B.Engine.ALPHA_ADD; hm.alpha = 0.999; hm.disableDepthWrite = true; hm.zOffset = -2;
+  const beam = B.MeshBuilder.CreateGround('hlBeam', { width: 5, height: 22 }, scene); beam.material = hm; beam.isPickable = false; beam.setEnabled(false);
+  return {
+    update(night){
+      for (const mm of pools.meshes()) mm.setEnabled(night > 0.04);
+      const on = DRIVE.on && night > 0.04;
+      beam.setEnabled(on);
+      if (on){ const fx = Math.sin(DRIVE.h), fz = Math.cos(DRIVE.h); beam.position.set(DRIVE.x + fx*13, (DRIVE.node ? DRIVE.node.position.y : 0) + 0.33, DRIVE.z + fz*13); beam.rotation.y = DRIVE.h; ht.level = night*1.6; }
+    },
+  };
+})();
 
 // ---------- populate others ----------
 function hexArr(h){ const c=hex(h); return [c.r,c.g,c.b,1]; }
@@ -6034,6 +6200,7 @@ function updateSky(){
   const ei = night*1.7;                              // windows: brighter at night
   for (const m of nightMats) m.emissiveTexture.level = ei;
   mats.bulb.emissiveColor = WARM.scale(night*2.4);
+  if (typeof STREETLIGHT !== 'undefined') STREETLIGHT.update(night);
   for (const [m, c, k] of AIR_GLOW) m.emissiveColor = c.scale(night*k);
   if (glow) glow.intensity = 1.15*night;
   mats.mountain.diffuseColor = C3.Lerp(hex('#1c2034'), hex('#6b6f86'), day).add(hex('#4a2a3a').scale(dk*0.5));
@@ -6305,6 +6472,7 @@ scene.onBeforeRenderObservable.add(()=>{
   // clouds drift with the wind; cover slowly comes and goes (broken cumulus ↔ near clear)
   cloudT += dt; skyMat.setFloat('time', cloudT); skyMat.setFloat('cover', 0.5 + 0.09*Math.sin(cloudT/260) + 0.04*Math.sin(cloudT/93));
   updateSignals(dt); updateCars(dt); updateDrives(dt); updatePeople(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
+  presenceSend(dt); demoWalkers(dt); updateOthers(dt);
   // fps + auto quality
   fpsAcc += engine.getFps(); fpsN++; fpsT += dt; adaptResolution(dt);
   if (fpsT > 0.5){
@@ -6385,9 +6553,9 @@ let carPlaceT = 0; const placeCarsSoon = () => { clearTimeout(carPlaceT); carPla
 async function refreshPlot(id){ try { applyDTO(plots[id], await api('GET',`/api/plots/${id}`), false); } catch(_){} }
 function connectWs(){
   try {
-    const ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://') + location.host + '/ws');
-    ws.onmessage = ev => { try { const m = JSON.parse(ev.data); if (m.type==='plot' && plots[m.plot.id]){ const p = plots[m.plot.id], wasMine = p.state==='mine' && p.listed, price = p.price; applyDTO(p, m.plot, true); if (wasMine && p.state!=='mine'){ toast(`${buildingName(p)} sotildi: +${fmt(Math.round(price*0.95))} tanga`); refreshMe(); } if (S.selected===p && S.sheet==='plot') showPlot(p); placeCarsSoon(); } if (m.type==='car' && m.car){ setCar(m.car); placeCars(); if (API.me && m.car.owner.id === API.me.id) API.me.car = m.car; } } catch(_){} };
-    ws.onclose = () => setTimeout(connectWs, 3000);
+    const ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://') + location.host + '/ws'); WSC = ws;
+    ws.onmessage = ev => { try { const m = JSON.parse(ev.data); if (m.type === 'players' || m.type === 'pav' || m.type === 'pinit' || m.type === 'pgone'){ presenceMessage(m); return; } if (m.type==='plot' && plots[m.plot.id]){ const p = plots[m.plot.id], wasMine = p.state==='mine' && p.listed, price = p.price; applyDTO(p, m.plot, true); if (wasMine && p.state!=='mine'){ toast(`${buildingName(p)} sotildi: +${fmt(Math.round(price*0.95))} tanga`); refreshMe(); } if (S.selected===p && S.sheet==='plot') showPlot(p); placeCarsSoon(); } if (m.type==='car' && m.car){ setCar(m.car); placeCars(); if (API.me && m.car.owner.id === API.me.id) API.me.car = m.car; } } catch(_){} };
+    ws.onclose = () => { for (const [id, o] of OTHERS) if (!o.demo) otherGone(id); presWas = false; setTimeout(connectWs, 3000); };
   } catch(_){}
 }
 
@@ -6624,7 +6792,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>

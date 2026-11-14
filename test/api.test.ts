@@ -523,3 +523,39 @@ test('quests: a finished quest pays its coins once, unknown ones are refused, th
   assert.equal((await app.inject({ method: 'POST', url: '/api/quests/welcome/complete' })).statusCode, 401);
   assert.deepEqual(await ledgerMismatches(db), []);
 });
+
+test('walkers: a walking player is seen by others with nickname and avatar; bad positions are ignored; leaving removes them', async () => {
+  const login = async (name: string) => {
+    const r = await app.inject({ method: 'POST', url: '/api/auth/dev', payload: { name } });
+    const cookie = String(r.headers['set-cookie']).split(';')[0];
+    await app.inject({ method: 'POST', url: '/api/me/nickname', payload: { nickname: name, confirm16: true }, headers: { cookie } });
+    return cookie;
+  };
+  const ca = await login('walker_a'), cb = await login('walker_b');
+  await app.inject({ method: 'POST', url: '/api/me/avatar3d', payload: { avatar: { body: 'f', hat: 'doppi' } }, headers: { cookie: ca } });
+  const got: any[] = [];
+  const wsB = await app.injectWS('/ws', { headers: { cookie: cb } });
+  wsB.on('message', (d: any) => got.push(JSON.parse(String(d))));
+  const wsA = await app.injectWS('/ws', { headers: { cookie: ca } });
+  const anon = await app.injectWS('/ws');
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  wsA.send(JSON.stringify({ type: 'pos', x: 12.5, y: 0.3, z: -40, yaw: 1.2, mode: 'walk', speed: 1.5 }));
+  anon.send(JSON.stringify({ type: 'pos', x: 1, y: 0, z: 1, yaw: 0, mode: 'walk', speed: 0 }));       // not signed in: ignored
+  await wait(700);
+  const pav = got.find((m) => m.type === 'pav');
+  assert.ok(pav, JSON.stringify(got.slice(0, 3)));
+  assert.equal(pav.nick, 'walker_a'); assert.equal(pav.avatar.body, 'f'); assert.equal(pav.avatar.hat, 'doppi');
+  const list = got.filter((m) => m.type === 'players').pop();
+  assert.equal(list.list.length, 1);
+  assert.deepEqual(list.list[0].slice(1, 7), [12.5, 0.3, -40, 1.2, 'walk', 1.5]);
+  // nonsense is dropped, the last good position stays
+  wsA.send(JSON.stringify({ type: 'pos', x: 1e9, y: 0, z: 0, yaw: 0, mode: 'fly', speed: 1 }));
+  wsA.send('not json');
+  await wait(400);
+  assert.equal(got.filter((m) => m.type === 'players').pop().list[0][1], 12.5);
+  // leaving: everyone is told
+  wsA.send(JSON.stringify({ type: 'leave' }));
+  await wait(400);
+  assert.ok(got.some((m) => m.type === 'pgone'));
+  wsA.terminate(); wsB.terminate(); anon.terminate();
+});

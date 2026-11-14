@@ -6,6 +6,7 @@ import fstatic from '@fastify/static';
 import { z } from 'zod';
 import { avatarSchema, readAvatar } from './avatar.js';
 import { completeQuest, questsDone } from './quests.js';
+import { createPresence } from './presence.js';
 import crypto from 'node:crypto';
 import type { Db } from './db.js';
 import { tx, rootPath } from './db.js';
@@ -30,10 +31,21 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
   const sockets = new Set<import('ws').WebSocket>();
   const broadcast = (msg: unknown) => { const s = JSON.stringify(msg); for (const ws of sockets) if (ws.readyState === 1) ws.send(s); };
   const pushPlot = async (id: number) => { const p = await game.onePlot(db, id); if (p) broadcast({ type: 'plot', plot: p }); };
-  app.get('/ws', { websocket: true }, (socket) => {
+  // walkers: the only thing clients send over the socket is where their avatar is (see presence.ts)
+  const presence = createPresence(db, broadcast);
+  const presTimer = setInterval(() => presence.tick(), 200); presTimer.unref?.();
+  app.addHook('onClose', async () => clearInterval(presTimer));
+  app.get('/ws', { websocket: true }, (socket, req) => {
     sockets.add(socket);
-    socket.on('close', () => sockets.delete(socket));
-    socket.on('message', () => {}); // read-only channel; actions go through HTTP
+    const userP = sessionUser(db, req.cookies?.[SESSION_COOKIE]).catch(() => null);
+    socket.send(JSON.stringify(presence.snapshot()));
+    socket.on('close', () => { sockets.delete(socket); presence.closed(socket); });
+    socket.on('message', async (buf: Buffer) => {
+      if (buf.length > 600) return;
+      let msg: unknown; try { msg = JSON.parse(String(buf)); } catch { return; }
+      const u = await userP; if (!u || u.status === 'banned') return;
+      try { await presence.message(socket, u, msg); } catch { /* a bad message is dropped */ }
+    });
   });
 
   // ---------- session ----------
