@@ -208,6 +208,12 @@
   }
   @media (prefers-reduced-motion:reduce){ #avEd *{transition:none!important} }
 
+  #avChip{margin-left:8px;min-height:40px;padding:0 14px;font-weight:800;font-size:13px;color:var(--ink);pointer-events:auto}
+  #avChip.need{background:var(--gold);color:#1b1407;animation:avPulse 1.8s ease-in-out infinite}
+  @keyframes avPulse{0%,100%{box-shadow:0 0 0 0 rgba(243,193,75,.55)}50%{box-shadow:0 0 0 8px rgba(243,193,75,0)}}
+  @media (prefers-reduced-motion:reduce){ #avChip.need{animation:none} }
+  @media (max-width:520px){ #avChip span{display:none} #avChip.need span{display:inline} }
+  body.walking #avChip{display:none}
   /* ---------- welcome screen over the living city ---------- */
   body.hero #labels{opacity:0} body.hero .plbl{pointer-events:none}
   #labels{transition:opacity .6s}
@@ -422,6 +428,7 @@
     <span class="vsep"></span>
     <span class="chip" id="clockChip"><span id="clockIcon">☀</span><span id="clock">16:00</span></span>
   </div>
+  <button type="button" class="cap mini" id="avChip" title="Obrazim" aria-label="Obrazim: 3D avatarni yaratish yoki o‘zgartirish">🧍 <span>Obrazim</span></button>
   <div class="spacer"></div>
   <div class="cap mini" id="fps">— fps</div>
 </div>
@@ -4582,6 +4589,7 @@ const AVED = {
   },
   close(result){
     if (!this.open) return;
+    setTimeout(avChipUpdate, 0);
     this.open = false; $('#avEd').hidden = true;
     if (this.eng){ this.eng.stopRenderLoop(); }
     engine.runRenderLoop(() => scene.render());
@@ -4751,6 +4759,16 @@ $('#avEd').addEventListener('keydown', e => {
 // the editor's own keys must not move the city camera behind it
 for (const ev of ['keydown', 'keyup']) $('#avEd').addEventListener(ev, e => e.stopPropagation());
 // first visit: the editor once, right after sign-in (or the first walk in the offline demo)
+function avChipUpdate(){
+  const el = $('#avChip'); if (!el) return;
+  const need = (!API.on || (API.me && API.me.nickname)) && !AVSTORE.saved();
+  el.classList.toggle('need', need);
+  el.querySelector('span').textContent = need ? 'Obrazingizni tanlang' : 'Obrazim';
+}
+$('#avChip').onclick = async () => {
+  if (API.on && !(await ensureLogin())) return;
+  const c = await AVED.start(); if (c && WALK.on) walkUseAvatar(c); avChipUpdate();
+};
 async function avatarFirstRun(){
   if (AVSTORE.saved()) return AVSTORE.saved();
   return AVED.start({ first: true });
@@ -5885,6 +5903,7 @@ async function refreshMe(){
   const me = await api('GET','/api/me');
   API.me = me; S.coins = me.balance; S.pending = me.pending; S.daily = me.dailyIncome; S.limit = me.plotLimit;
   updateCoins(); $('.brand span').textContent = me.nickname || 'Susambil';
+  if (typeof avChipUpdate === 'function') avChipUpdate();
   return me;
 }
 let carPlaceT = 0; const placeCarsSoon = () => { clearTimeout(carPlaceT); carPlaceT = setTimeout(placeCars, 400); };
@@ -6093,6 +6112,7 @@ async function boot(){
     populateDemo(); setCars([{ owner: { id: -1, nickname: 'shohruh.97', telegram: null }, model: 'tracker', color: '#f2f3f1', plate: { region: '90', text: 'Y095AB', kind: 'standard' } }]); flushBuffers(); updateCoins();
     $('#loader').classList.add('hide');
     showHero(); setPopulation(new Set(plots.filter(p => p.owner && p.owner !== 'Shahar hokimligi').map(p => p.owner)).size);
+    avChipUpdate();
   };
   if (!opts) return offline();
   API.on = true;
@@ -6113,10 +6133,11 @@ async function boot(){
   try { me = await refreshMe(); } catch(_){}
   if (!me || !me.nickname){ showHero(); setPopulation(city.stats ? city.stats.residents : 0); return; }
   closeAuth();
-  if (!me.avatar3d) setTimeout(() => AVED.start({ first: true }), 600);       // signed in but no avatar yet: make one (once per visit)
   // re-mark my plots now that we know who "me" is
   applyCity(await api('GET','/api/city'));
   pads.flush();
+  // accounts made before avatars existed get the editor too (every visit until one is saved), then the usual tips
+  if (!me.avatar3d){ await new Promise(r => setTimeout(r, 600)); await AVED.start({ first: true }); }
   if (!me.plots.length) setTimeout(()=>tut(1), 400); else tut(0);
 }
 
