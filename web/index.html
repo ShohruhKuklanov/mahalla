@@ -214,6 +214,27 @@
   @media (prefers-reduced-motion:reduce){ #avChip.need{animation:none} }
   @media (max-width:520px){ #avChip span{display:none} #avChip.need span{display:inline} }
   body.walking #avChip{display:none}
+  /* ---------- playing: context button, quest tracker, talk card, speedometer ---------- */
+  #actBtn{position:absolute;right:18px;bottom:28px;min-width:64px;min-height:64px;max-width:min(320px,70vw);padding:0 20px;border-radius:32px;background:var(--gold);color:#1b1407;font-weight:800;font-size:15px;pointer-events:auto;box-shadow:0 10px 26px rgba(0,0,0,.35)}
+  #actBtn:focus-visible,#walkHud button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+  #qTrack{position:absolute;left:12px;top:70px;max-width:min(320px,62vw);padding:10px 14px;border-radius:14px;background:rgba(18,20,40,.72);border:1px solid rgba(255,255,255,.12);pointer-events:none;backdrop-filter:blur(8px)}
+  #qTrack .qt-t{font-weight:800;font-size:13px;color:var(--gold)} #qTrack .qt-s{font-size:13.5px;margin-top:3px} #qTrack .qt-d{font-size:12px;color:var(--muted);margin-top:2px}
+  #speedo{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);padding:8px 16px;border-radius:14px;background:rgba(18,20,40,.72);display:flex;align-items:baseline;gap:6px;pointer-events:none}
+  #speedo b{font:800 26px/1 var(--display, Manrope);font-variant-numeric:tabular-nums} #speedo span{font-size:12px;color:var(--muted)}
+  #dlg{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);width:min(520px,calc(100% - 24px));padding:16px 18px;border-radius:18px;background:rgba(18,22,30,.92);border:1px solid var(--line);pointer-events:auto;backdrop-filter:blur(12px)}
+  #dlg .dlg-n{font-weight:800;color:var(--gold);margin-bottom:6px} #dlg .dlg-t{font-size:15px;line-height:1.45}
+  #dlg .dlg-b{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center} #dlg .dlg-sub{width:100%;font-size:12.5px;color:#7fe0c9;font-weight:700}
+  #dlg .btn,#qDone .btn,#qLog .btn{flex:0 0 auto;min-height:44px;padding:0 16px}
+  #qLog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(460px,calc(100% - 24px));max-height:80vh;overflow:auto;padding:16px 18px;border-radius:18px;background:rgba(18,22,30,.94);border:1px solid var(--line);pointer-events:auto}
+  #qLog .ql-h{display:flex;align-items:center} #qLog h3{flex:1;margin:0} #qLog .ql-h button{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.07)}
+  #qLog ul{list-style:none;padding:0;margin:12px 0} #qLog li{padding:10px 0;border-bottom:1px solid var(--line);display:grid;gap:4px}
+  #qLog li span{font-size:12.5px;color:var(--muted)} #qLog li.ql-done b{color:#7fe0c9} #qLog li.ql-active b{color:var(--gold)} #qLog li.ql-locked{opacity:.6}
+  #qLog .ql-n{font-size:12px;color:var(--muted);margin:0}
+  #qDone{position:absolute;left:50%;top:22%;transform:translateX(-50%);min-width:260px;max-width:calc(100% - 24px);padding:18px 22px;border-radius:20px;text-align:center;background:rgba(18,22,30,.94);border:1px solid rgba(243,193,75,.5);pointer-events:auto;box-shadow:0 20px 50px rgba(0,0,0,.45)}
+  #qDone .qd-k{font-size:13px;color:var(--muted)} #qDone .qd-t{font-weight:800;font-size:18px;margin:4px 0} #qDone .qd-r{font:800 22px/1.2 var(--display, Manrope);color:var(--gold)}
+  #qDone .qd-e{font-size:12.5px;color:#ffd2cb;margin-top:6px} #qDone .qd-b{display:flex;gap:8px;justify-content:center;margin-top:12px}
+  body.driving #walkRun{display:none}
+  @media (max-width:700px){ #actBtn{bottom:190px;right:14px;font-size:14px} #dlg{bottom:180px} #qTrack{top:64px} }
   /* ---------- welcome screen over the living city ---------- */
   body.hero #labels{opacity:0} body.hero .plbl{pointer-events:none}
   #labels{transition:opacity .6s}
@@ -476,9 +497,15 @@
   </div>
 </div>
 <div id="walkHud">
-  <div class="wk-bar"><button id="walkExit" title="Piyoda rejimdan chiqish">✕ Chiqish</button><button id="walkSwap" title="Obrazni o‘zgartirish">👤 Obraz</button><button id="walkRun" title="Yugurish">🏃</button></div>
+  <div class="wk-bar"><button id="walkExit" title="Piyoda rejimdan chiqish">✕ Chiqish</button><button id="walkSwap" title="Obrazni o‘zgartirish">👤 Obraz</button><button id="walkQuests" title="Vazifalar (Q)" aria-label="Vazifalar ro‘yxati">📜 Vazifalar</button><button id="walkRun" title="Yugurish" aria-label="Yugurish">🏃</button></div>
+  <div id="qTrack" hidden role="status" aria-live="polite"><div class="qt-t"></div><div class="qt-s"></div><div class="qt-d"></div></div>
+  <div id="speedo" hidden aria-live="off"><b>0</b><span>km/soat</span></div>
+  <button type="button" id="actBtn" hidden></button>
+  <div id="dlg" hidden role="dialog" aria-labelledby="dlgName" aria-describedby="dlgText"><div class="dlg-n" id="dlgName"></div><div class="dlg-t" id="dlgText"></div><div class="dlg-b" id="dlgBtns"></div></div>
+  <div id="qLog" hidden role="dialog" aria-labelledby="qLogT"><div class="ql-h"><h3 id="qLogT">Vazifalar</h3><button type="button" id="qLogClose" aria-label="Yopish">✕</button></div><ul id="qLogList"></ul><p class="ql-n">Odamlar tepasidagi <b>!</b> — sizga vazifasi bor, <b>?</b> — sizni kutyapti. Oltin nur va bosh ustidagi strelka yo‘l ko‘rsatadi.</p></div>
+  <div id="qDone" hidden role="alert"><div class="qd-k">🎉 Vazifa bajarildi</div><div class="qd-t"></div><div class="qd-r"></div><div class="qd-e"></div><div class="qd-b"><button type="button" class="btn qd-x" hidden>Qayta urinish</button><button type="button" class="btn qd-c">Yopish</button></div></div>
   <div id="inside" hidden><div class="in-k">🚪 Siz ichkaridasiz</div><b id="inName"></b><div id="inSub"></div><div class="in-row"><button id="inOut">🚪 Tashqariga chiqish</button><button id="inInfo">ℹ️ Bino haqida</button></div></div>
-  <div id="walkHint">W / ↑ — oldinga · S / ↓ — orqaga · A D — burilish · Shift — yugurish · sichqoncha bilan suring — kamera</div>
+  <div id="walkHint">W / ↑ — oldinga · S / ↓ — orqaga · A D — burilish · Shift — yugurish · E — gaplashish / mashina · Q — vazifalar · sichqoncha — kamera · gamepad ham ishlaydi</div>
   <div id="joy"><i></i></div>
 </div>
 
@@ -3517,6 +3544,7 @@ const DLR = (() => {
     const d = Math.hypot(camera.target.x - (x0 + x1)/2, camera.target.z - cz), near = d < 520 + camera.radius*0.6;
     let built = 0;
     SHOW.forEach((c, i) => {
+      if (cars[i] && cars[i].metadata && cars[i].metadata.playerDriven) return;
       if (!near){ if (cars[i]) cars[i].setEnabled(false); return; }
       if (!cars[i]){
         if (!modelReady(c.m) || (!force && built >= 1)) return;          // every model starts loading at once
@@ -3528,7 +3556,7 @@ const DLR = (() => {
       cars[i].setEnabled(true);
     });
   }
-  return { lod, spin, door, box: { SX0, SX1, SZ0, SZ1, cz }, center: new V3((x0 + x1)/2, 0, cz), casters: () => [...parts, ...cars.flatMap(n => n ? n.getChildMeshes() : [])], tick: dt => { spin.rotation.y += dt*0.22; } };
+  return { lod, spin, door, carNodes: () => cars, box: { SX0, SX1, SZ0, SZ1, cz }, center: new V3((x0 + x1)/2, 0, cz), casters: () => [...parts, ...cars.flatMap(n => n ? n.getChildMeshes() : [])], tick: dt => { spin.rotation.y += dt*0.22; } };
 })();
 // ---- every car stands at the kerb in front of its owner's house (first house by plot id) ----
 const CARS = new Map();          // owner id → { dto, node, park, drive }
@@ -3563,7 +3591,7 @@ function placeCars(){
   const taken = [];
   for (const c of CARS.values()){ if (c.drive) taken.push([c.park.x, c.park.z]); }
   for (const c of CARS.values()){
-    if (c.drive) continue;
+    if (c.drive || c.player) continue;
     const p = carHome(c.dto);
     c.park = p ? parkSpot(p, taken) : null;
     if (!c.park){ if (c.node) c.node.setEnabled(false); continue; }
@@ -3589,6 +3617,7 @@ let carLodT = 0;
 function carLOD(force){
   const tx = camera.target.x, tz = camera.target.z, R = 380 + camera.radius*0.5, near = [];
   for (const c of CARS.values()){
+    if (c.player) continue;
     if (!c.park && !c.drive) continue;
     const x = c.node ? c.node.position.x : c.park.x, z = c.node ? c.node.position.z : c.park.z, d = Math.hypot(x - tx, z - tz);
     if (d < R || c.drive) near.push([d, c]); else if (c.node) c.node.setEnabled(false);
@@ -4311,6 +4340,7 @@ async function walkEnter(){
   camera.lowerRadiusLimit = 1.6; camera.upperRadiusLimit = 18; camera.lowerBetaLimit = 0.3; camera.upperBetaLimit = 1.66;
   camera.radius = 4.6; camera.beta = 1.28; camera.alpha = Math.atan2(-Math.cos(WALK.yaw), -Math.sin(WALK.yaw));
   document.body.classList.add('walking'); if (isMobile) document.body.classList.add('touch');
+  PLAY.init(); PLAY.flush();
   $('#walkHint').style.opacity = 1; setTimeout(() => { const h = $('#walkHint'); if (h) h.style.opacity = 0; }, 9000);
 }
 // the person you walk is your avatar: one copy per body kind in the city scene, dressed from your config
@@ -4331,6 +4361,8 @@ async function walkUseAvatar(cfg){
 }
 function walkExit(){
   if (!WALK.on) return;
+  if (DRIVE.on){ DRIVE.v = 0; exitCar(); }
+  PLAY.hideAll();
   if (WALK.inside){ WALK.inside = null; $('#inside').hidden = true; }
   if (DLR.door) DLR.door.scaling.z = 1;
   WALK.on = false; document.body.classList.remove('walking'); WDOOR.update(0, true);
@@ -4342,7 +4374,10 @@ function walkExit(){
 }
 function walkUpdate(dt){
   if (!WALK.av) return;                         // the body is still loading
+  gpPoll(); gpButtons();
   WDOOR.update(dt);
+  if (DRIVE.on){ driveUpdate(dt); PLAY.tick(dt); return; }
+  if (PLAY.dlg || PLAY.logOpen){ WALK.speed = 0; }
   // the showroom's glass doors slide open as you come up to them
   if (DLR.door && DLR.box){ const b = DLR.box, near = Math.hypot(WALK.x - b.SX0, WALK.z - b.cz) < 4.5; DLR.door.scaling.z += ((near ? 0.04 : 1) - DLR.door.scaling.z)*Math.min(1, dt*6); }
   if (WALK.inside){ camera.target.set(WALK.x, WALK.y + 1.5, WALK.z); return; }
@@ -4351,7 +4386,8 @@ function walkUpdate(dt){
   if (keys.has('a') || keys.has('arrowleft')) turn += 1; if (keys.has('d') || keys.has('arrowright')) turn -= 1;
   const run = WALK.run || keys.has('shift');
   let want = 0, dirx = Math.sin(WALK.yaw), dirz = Math.cos(WALK.yaw), back = false;
-  const jm = Math.hypot(WALK.joy.x, WALK.joy.y);
+  if (GP.on && (GP.lx || GP.ly) && WALK.joy.id == null){ WALK.joy.x = GP.lx; WALK.joy.y = GP.ly; WALK.joy.gp = true; } else if (WALK.joy.gp){ WALK.joy.x = WALK.joy.y = 0; WALK.joy.gp = false; }
+  const jm = (PLAY.dlg || PLAY.logOpen) ? 0 : Math.hypot(WALK.joy.x, WALK.joy.y);
   if (jm > 0.12){
     // the joystick steers relative to the camera
     const a = camera.alpha, fx = -Math.cos(a), fz = -Math.sin(a), rx = Math.sin(a), rz = -Math.cos(a);
@@ -4364,6 +4400,7 @@ function walkUpdate(dt){
     WALK.yaw += turn*dt*(run ? 2.2 : 2.6);
     dirx = Math.sin(WALK.yaw); dirz = Math.cos(WALK.yaw);
     if (f > 0) want = run ? 4.2 : 1.6; else if (f < 0){ want = 1.0; back = true; }
+    if (PLAY.dlg || PLAY.logOpen) want = 0;
   }
   WALK.speed += (want - WALK.speed)*Math.min(1, dt*(want > WALK.speed ? 5 : 8));
   if (WALK.speed > 0.02){
@@ -4392,6 +4429,7 @@ function walkUpdate(dt){
     camera.alpha += d*Math.min(1, dt*(jm > 0.12 ? 1.6 : 3.2));
     camera.beta += (1.3 - camera.beta)*Math.min(1, dt*0.8);
   }
+  PLAY.tick(dt);
 }
 $('#walkBtn').onclick = () => walkEnter();
 // real people come in a few seconds after the city (not on the lowest quality)
@@ -4485,13 +4523,16 @@ const AVATAR = {
     return this._js[k];
   },
   // a fresh copy of body k in scene sc: { root, meshes: {Material: [mesh…]}, morphs: [mesh…], groups: {idle, walk, run} }
+  _cont: new Map(), _n: 0,
   async make(k, sc){
     await this.fetch(k);
-    const c = await B.SceneLoader.LoadAssetContainerAsync('', 'data:;base64,' + window['AVATAR_GLB_' + k], sc, null, '.glb');
-    c.addAllToScene();
-    const root = new B.TransformNode('avatar_' + k, sc); c.meshes[0].parent = root;
-    const meshes = {}, morphs = [];
-    for (const m of c.meshes){
+    const key = sc.uid + '|' + k;
+    if (!this._cont.has(key)) this._cont.set(key, B.SceneLoader.LoadAssetContainerAsync('', 'data:;base64,' + window['AVATAR_GLB_' + k], sc, null, '.glb'));
+    const c = await this._cont.get(key), n0 = ++this._n;
+    const inst = c.instantiateModelsToScene(nm => `av${n0}_${nm}`, false, { doNotInstantiate: true });
+    const root = new B.TransformNode('avatar_' + k + n0, sc); inst.rootNodes[0].parent = root;
+    const meshes = {}, morphs = [], all = root.getChildMeshes(false);
+    for (const m of all){
       if (!m.getTotalVertices || !m.getTotalVertices()) continue;
       const pm = m.material, n = pm ? pm.name : '';
       const sm = new B.StandardMaterial('av' + k + n, sc);
@@ -4506,9 +4547,8 @@ const AVATAR = {
       (meshes[n] = meshes[n] || []).push(m);
       if (m.morphTargetManager) morphs.push(m);
     }
-    for (const pm of c.materials) if (!sc.meshes.some(m => m.material === pm)) pm.dispose();
     const groups = {};
-    for (const g of c.animationGroups){ g.stop(); const n = ['idle', 'walk', 'run'].find(x => g.name === x || g.name.endsWith(x)); if (n) groups[n] = g; }
+    for (const g of inst.animationGroups){ g.stop(); const n = ['idle', 'walk', 'run'].find(x => g.name === x || g.name.endsWith(x)); if (n) groups[n] = g; }
     return { k, root, meshes, morphs, groups };
   },
   // dress a body from a config: switch parts on and off, tint them, set the face morphs
@@ -4772,6 +4812,441 @@ $('#avChip').onclick = async () => {
 async function avatarFirstRun(){
   if (AVSTORE.saved()) return AVSTORE.saved();
   return AVED.start({ first: true });
+}
+
+// =================== PLAYING IN THE CITY: gamepad, driving, quests ===================
+// Built on the walking mode above: the same avatar, camera and collisions. A context button (E / Enter / gamepad A /
+// the big round button on touch screens) talks to people, gets into a car and out of it.
+
+// ---------- gamepad (standard mapping): left stick move/steer, right stick camera, A act, X run, Y quests, RT/LT gas/brake ----------
+const GP = { lx: 0, ly: 0, rx: 0, ry: 0, lt: 0, rt: 0, b: [], prev: [], on: false };
+const dz = v => Math.abs(v) < 0.16 ? 0 : (v - Math.sign(v)*0.16)/0.84;
+function gpPoll(){
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const p = [...pads].find(x => x && x.connected);
+  GP.on = !!p; GP.prev = GP.b;
+  if (!p){ GP.lx = GP.ly = GP.rx = GP.ry = GP.lt = GP.rt = 0; GP.b = []; return; }
+  GP.lx = dz(p.axes[0] || 0); GP.ly = dz(p.axes[1] || 0); GP.rx = dz(p.axes[2] || 0); GP.ry = dz(p.axes[3] || 0);
+  GP.b = p.buttons.map(b => b.pressed); GP.lt = p.buttons[6] ? p.buttons[6].value : 0; GP.rt = p.buttons[7] ? p.buttons[7].value : 0;
+}
+const gpPressed = i => GP.b[i] && !GP.prev[i];
+
+// ---------- driving ----------
+// Any parked car (players' cars by their homes, the dealership's cars) can be driven. Arcade physics: a bicycle model
+// with grip, brakes and reverse; buildings, the park, blocks' inner yards, water and the city's edge stop the car,
+// and so do other cars (a bump bounces you back).
+const DRIVE = { on: false, node: null, entry: null, x: 0, z: 0, h: 0, v: 0, steer: 0, roll: 0, odo: 0, bumpT: 0, home: null };
+const CAR_L = 2.6, CAR_HALF_L = 2.15, CAR_HALF_W = 0.92;
+const CITY_BOUNDS = { x0: X0 - 420, x1: DEALER.x1 + 220, z0: CITY_N - 1000, z1: COAST_Z - 2 };
+function carSpotBlocked(x, z){
+  if (x < CITY_BOUNDS.x0 || x > CITY_BOUNDS.x1 || z < CITY_BOUNDS.z0 || z > CITY_BOUNDS.z1) return true;   // the edge of the city, the sea
+  if (onRiverRoad(x, z) && !onBridge(x, z)) return true;
+  if (inPark(x, z)) return true;
+  if (dealerWall(x, z)) return true;
+  const gx = Math.floor((x - X0)/PITCH), gz = Math.floor((z - Z0)/PITCH);
+  if (gx >= 0 && gz >= 0 && gx < GX && gz < GZ){
+    const lx = x - blockX(gx), lz = z - blockZ(gz);
+    if (lx > SW + 1.2 && lx < BLK - SW - 1.2 && lz > SW + 1.2 && lz < BLK - SW - 1.2) return true;   // yards and plots: kerb only
+  }
+  return !!buildingAt(x, z);
+}
+// the four corners and the nose of a car at (x, z) heading h
+function carPoints(x, z, h){
+  const fx = Math.sin(h), fz = Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h), out = [];
+  for (const [a, b] of [[CAR_HALF_L, CAR_HALF_W], [CAR_HALF_L, -CAR_HALF_W], [-CAR_HALF_L, CAR_HALF_W], [-CAR_HALF_L, -CAR_HALF_W], [CAR_HALF_L + 0.1, 0]])
+    out.push([x + fx*a + rx*b, z + fz*a + rz*b]);
+  return out;
+}
+function carHits(x, z, h){
+  for (const [px, pz] of carPoints(x, z, h)) if (carSpotBlocked(px, pz)) return 'wall';
+  // traffic
+  for (const c of cars){
+    if (c.gi >= carsVisible) continue;
+    const along = c.start + c.pos, cx = c.alongX ? along : c.line, cz2 = c.alongX ? c.line : along;
+    if (Math.abs(cx - x) < c.half + 2.4 && Math.abs(cz2 - z) < c.half + 2.4){
+      const ax = c.alongX ? c.half : 1.0, az = c.alongX ? 1.0 : c.half;
+      for (const [px, pz] of carPoints(x, z, h)) if (Math.abs(px - cx) < ax && Math.abs(pz - cz2) < az) return 'car';
+    }
+  }
+  // parked cars
+  for (const n of drivableNodes()){
+    if (n === DRIVE.node) continue;
+    const p = n.getAbsolutePosition(); if (Math.hypot(p.x - x, p.z - z) < 3.2) return 'car';
+  }
+  return null;
+}
+function drivableNodes(){
+  const out = [];
+  for (const c of CARS.values()) if (c.node && c.node.isEnabled() && !c.drive) out.push(c.node);
+  for (const n of DLR.carNodes()) if (n && n.isEnabled() && n.parent !== DLR.spin) out.push(n);
+  return out;
+}
+function nearestCar(x, z, r){
+  let best = null, bd = r;
+  for (const n of drivableNodes()){ const p = n.getAbsolutePosition(), d = Math.hypot(p.x - x, p.z - z); if (d < bd){ bd = d; best = n; } }
+  return best;
+}
+function enterCar(node){
+  if (DRIVE.on || !node) return;
+  const entry = [...CARS.values()].find(c => c.node === node) || null;
+  if (entry) entry.player = true;
+  node.metadata = node.metadata || {}; node.metadata.playerDriven = true;
+  const p = node.getAbsolutePosition();
+  Object.assign(DRIVE, { on: true, node, entry, x: p.x, z: p.z, h: node.rotation.y, v: 0, steer: 0, odo: 0 });
+  // the walk to the driver's door, then in
+  WALK.av.node.setEnabled(false); WALK.speed = 0;
+  camera.radius = 8.5; camera.beta = 1.22; WALK.camT = 0;
+  document.body.classList.add('driving'); $('#speedo').hidden = false;
+  toast('Mashinadasiz: W/S — gaz/tormoz, A/D — rul, Probel — qo‘l tormozi');
+}
+function exitCar(){
+  if (!DRIVE.on) return;
+  if (Math.abs(DRIVE.v) > 3){ toast('Avval to‘xtang'); return; }
+  // out through the driver's (left) door, or the other side if a wall is there
+  const fx = Math.sin(DRIVE.h), fz = Math.cos(DRIVE.h), rx = Math.cos(DRIVE.h), rz = -Math.sin(DRIVE.h);
+  let ex = DRIVE.x - rx*1.6 + fx*0.3, ez = DRIVE.z - rz*1.6 + fz*0.3;
+  if (walkBlocked(ex, ez)){ ex = DRIVE.x + rx*1.6 + fx*0.3; ez = DRIVE.z + rz*1.6 + fz*0.3; }
+  if (walkBlocked(ex, ez)){ const s = walkSpawnPoint(ex, ez); ex = s.x; ez = s.z; }
+  DRIVE.node.metadata.playerDriven = false;
+  if (DRIVE.entry) DRIVE.entry.player = false;
+  for (const wh of (DRIVE.node.metadata.wheels || [])) wh.w.rotation.y = wh.sd*Math.PI/2;
+  DRIVE.on = false; DRIVE.node = null; DRIVE.v = 0;
+  WALK.x = ex; WALK.z = ez; WALK.y = walkGround(ex, ez); WALK.yaw = Math.atan2(-rx, -rz);
+  WALK.av.node.setEnabled(true); WALK.av.node.position.set(WALK.x, WALK.y, WALK.z);
+  camera.radius = 4.6; camera.beta = 1.28;
+  document.body.classList.remove('driving'); $('#speedo').hidden = true;
+}
+function driveUpdate(dt){
+  let thr = 0, st = 0, hand = false;
+  if (keys.has('w') || keys.has('arrowup')) thr += 1; if (keys.has('s') || keys.has('arrowdown')) thr -= 1;
+  if (keys.has('a') || keys.has('arrowleft')) st -= 1; if (keys.has('d') || keys.has('arrowright')) st += 1;
+  if (keys.has(' ')) hand = true;
+  if (Math.hypot(WALK.joy.x, WALK.joy.y) > 0.12){ thr = clamp(-WALK.joy.y*1.3, -1, 1); st = clamp(WALK.joy.x*1.2, -1, 1); }
+  if (GP.on){ if (GP.rt > 0.05 || GP.lt > 0.05) thr = GP.rt - GP.lt; if (GP.lx) st = GP.lx; if (GP.b[1]) hand = true; }
+  const D = DRIVE, vmax = 22, vrev = -6;
+  if (thr > 0) D.v = D.v < 0 ? Math.min(0, D.v + 12*dt) : Math.min(vmax, D.v + 6.5*thr*dt*(1 - D.v/vmax*0.5));
+  else if (thr < 0) D.v = D.v > 0.3 ? Math.max(0, D.v - 13*dt) : Math.max(vrev, D.v - 3.5*dt*(-thr));
+  else D.v -= Math.sign(D.v)*Math.min(Math.abs(D.v), 1.8*dt);
+  if (hand) D.v -= Math.sign(D.v)*Math.min(Math.abs(D.v), 16*dt);
+  D.steer += (st*0.55*(1 - Math.min(0.55, Math.abs(D.v)/40)) - D.steer)*Math.min(1, dt*6);
+  const nh = D.h + D.v/CAR_L*Math.tan(D.steer)*dt;
+  const nx = D.x + Math.sin(nh)*D.v*dt, nz = D.z + Math.cos(nh)*D.v*dt;
+  const hit = carHits(nx, nz, nh);
+  if (!hit){ D.odo += Math.hypot(nx - D.x, nz - D.z); D.x = nx; D.z = nz; D.h = nh; }
+  else {
+    if (Math.abs(D.v) > 4 && performance.now() > D.bumpT){ toast(hit === 'car' ? 'Ehtiyot bo‘ling — mashinaga urildingiz!' : 'Bum! Yo‘l shu yerda tugaydi'); D.bumpT = performance.now() + 2500; }
+    D.v = -D.v*0.25;
+  }
+  const gy = 0.02 + Math.max(0, walkGround(D.x, D.z) - 0.07);
+  const n = D.node; n.position.set(D.x, n.position.y + (gy - n.position.y)*Math.min(1, dt*10), D.z); n.rotation.y = D.h;
+  D.roll += D.v*dt/0.333;
+  for (const wh of (n.metadata.wheels || [])){ wh.w.rotation.z = wh.sd*D.roll; wh.w.rotation.y = wh.sd*Math.PI/2 + (wh.front ? D.steer : 0); }
+  WALK.x = D.x; WALK.z = D.z;
+  $('#speedo b').textContent = Math.round(Math.abs(D.v)*3.6);
+  camera.target.set(D.x, 1.2, D.z);
+  if (!gest && performance.now() > WALK.camT && Math.abs(D.v) > 1){
+    const want = Math.atan2(-Math.cos(D.h), -Math.sin(D.h)) + (D.v < 0 ? Math.PI : 0);
+    let d = want - camera.alpha; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
+    camera.alpha += d*Math.min(1, dt*2.2);
+    camera.beta += (1.22 - camera.beta)*Math.min(1, dt*0.8);
+  }
+}
+
+// ---------- quests ----------
+// People with something to ask, places to see, a thing to find. One quest at a time; the tracker shows the step,
+// a gold arrow over your head and a light column at the goal show the way. Rewards are coins from the server
+// (POST /api/quests/:id/complete, once per quest); in the offline demo they are only shown.
+const lmPos = key => { const p = plots.find(q => q.tpl === key); return p ? bpos(p) : null; };
+const NPCS = {
+  karim:   { name: 'Karim aka',   at: () => ({ x: parkMin.x - 4.5, z: parkC.z + 6 }),  cfg: { body: 'm', face: 'square', skin: '#b98462', hair: 'short', hairColor: '#8f8f8f', brows: 'thick', outfit: 'chopon', top: '#f2f0ea', bottom: '#16181c', outer: '#2c3e5c', hat: 'doppi', hatColor: '#111111', mouth: 'normal' } },
+  malika:  { name: 'Malika opa',  at: () => ({ x: parkC.x + 8, z: parkMin.z - 4.5 }),  cfg: { body: 'f', face: 'oval', skin: '#e0b48e', hair: 'bun', hairColor: '#2a1d15', outfit: 'skirt', top: '#b5577b', bottom: '#2c3e5c', glasses: 'round' } },
+  dilnoza: { name: 'Dilnoza',     at: () => ({ x: parkMax.x + 4.5, z: parkC.z - 10 }), cfg: { body: 'f', face: 'heart', skin: '#c99a78', hair: 'long', hairColor: '#4a3020', outfit: 'shirt', top: '#2fb5a3', bottom: '#16181c' } },
+  sardor:  { name: 'Sardor',      at: () => ({ x: DEALER.x0 + 7, z: (DEALER.z0 + DEALER.z1)/2 + 4 }), cfg: { body: 'm', face: 'oval', skin: '#c99a78', hair: 'short', hairColor: '#111014', outfit: 'jacket', top: '#f2f0ea', bottom: '#2c3e5c', outer: '#16181c', glasses: 'sun' } },
+};
+const KEY_SPOT = () => ({ x: parkMax.x + 4.5 + 70, z: parkC.z + 55 });
+const QUESTS = [
+  { id: 'welcome', title: 'Susambilga xush kelibsiz', giver: 'karim', reward: 150,
+    offer: ['Assalomu alaykum! Men Karim akaman, shu mahallada yashayman.', 'Yangi kelganmisiz? Avval markaziy bog‘dagi favvorani ko‘rib keling — shahrimiz shu yerdan boshlanadi.'],
+    steps: [ { t: 'goto', at: () => ({ x: parkC.x, z: parkC.z }), r: 16, text: 'Markaziy bog‘dagi favvoraga boring' },
+             { t: 'talk', npc: 'karim', text: 'Karim akaga qaytib, ko‘rganingizni ayting', say: ['Ko‘rdingizmi? Kechqurun favvora atrofida odam gavjum bo‘ladi.', 'Mana, kichik sovg‘a — Susambilga xush kelibsiz!'] } ] },
+  { id: 'chorsu', title: 'Chorsu bozori bilan tanishuv', giver: 'malika', reward: 250,
+    offer: ['Salom, qizim / o‘g‘lim! Men Malika opaman.', 'Bozorga borishga vaqtim yo‘q. Chorsu bozorini ko‘rib kelasizmi? Ko‘k gumbazi uzoqdan ko‘rinadi.'],
+    steps: [ { t: 'goto', at: () => lmPos('lm_chorsu'), r: 40, text: 'Chorsu bozoriga boring' },
+             { t: 'inspect', at: () => lmPos('lm_chorsu'), r: 40, text: 'Chorsu bilan tanishing', title: 'Chorsu bozori',
+               info: 'Chorsu — Toshkentning eng qadimiy va mashhur bozorlaridan biri. Ko‘k gumbazli bosh binosi ostida ziravorlar, quruq mevalar, non va sut mahsulotlari sotiladi; atrofida esa rastalar qatorlashgan.' },
+             { t: 'talk', npc: 'malika', text: 'Malika opaga bozor haqida aytib bering', say: ['Gumbazni ko‘rdingizmi? Bolaligimda onam bilan o‘sha yerdan non olardik.', 'Rahmat, ko‘nglimni ko‘tardingiz!'] } ] },
+  { id: 'lost_key', title: 'Yo‘qolgan kalit', giver: 'dilnoza', reward: 300,
+    offer: ['Voy, yaxshiyam keldingiz! Uyimning kalitini yo‘qotib qo‘ydim.', 'Ertalab sharq tomondagi ko‘chadan yurgandim. Yaltirab turgan kalitni ko‘rsangiz, olib kelasizmi?'],
+    steps: [ { t: 'find', at: KEY_SPOT, text: 'Yaltirab turgan kalitni toping' },
+             { t: 'talk', npc: 'dilnoza', text: 'Kalitni Dilnozaga qaytaring', say: ['Topdingizmi? Rahmat! Siz bo‘lmasangiz, uyga kirolmay qolardim.'] } ] },
+  { id: 'tv_tower', title: 'Teleminoraga sayohat', giver: 'malika', requires: 'chorsu', reward: 250,
+    offer: ['Yana bir iltimos: teleminorani yaqindan ko‘rib keling.', 'Uning tepasidan butun shahar kaftdagidek ko‘rinadi, deyishadi. Uzoq — mashinada borsangiz tezroq.'],
+    steps: [ { t: 'goto', at: () => lmPos('lm_tvtower'), r: 45, text: 'Teleminoraga boring' },
+             { t: 'inspect', at: () => lmPos('lm_tvtower'), r: 45, text: 'Teleminora bilan tanishing', title: 'Toshkent teleminorasi',
+               info: 'Haqiqiy Toshkent teleminorasi 375 metr baland — Markaziy Osiyodagi eng baland inshoot. U 1985-yilda ishga tushgan. Susambildagi nusxasi ham shahar ustida qad rostlagan.' },
+             { t: 'talk', npc: 'malika', text: 'Malika opaga qaytib, taassurotingizni ayting', say: ['Baland ekanmi? Men ham bir kun chiqaman, inshoolloh!'] } ] },
+  { id: 'test_drive', title: 'Test-drayv', giver: 'sardor', reward: 400,
+    offer: ['Avtosalonga xush kelibsiz! Men Sardorman.', 'Mashinalarimizdan birini sinab ko‘ring: yonida “Mashina haydash”ni bosing va 300 metr yuring. Keyin olib keling.'],
+    steps: [ { t: 'drive', dist: 300, text: 'Istalgan mashinada 300 m yuring' },
+             { t: 'goto', at: () => NPCS.sardor.at(), r: 22, drive: true, text: 'Mashinani avtosalonga qaytarib keling' },
+             { t: 'talk', npc: 'sardor', text: 'Sardorga taassurotingizni ayting', say: ['Qalay? Yengil boshqariladi-a?', 'Tanlaganingizda bozor bo‘limidan sotib olishingiz mumkin.'] } ] },
+  { id: 'port', title: 'Port qanday ishlaydi', giver: 'sardor', requires: 'test_drive', reward: 200,
+    offer: ['Mashinalarimiz dengiz orqali kemada keladi.', 'Portga borib, kranlar konteynerlarni qanday tushirishini ko‘ring.'],
+    steps: [ { t: 'goto', at: () => ({ x: CRANE_X[3], z: COAST_Z - 30 }), r: 35, text: 'Portdagi kranlar yoniga boring' },
+             { t: 'inspect', at: () => ({ x: CRANE_X[3], z: COAST_Z - 30 }), r: 35, text: 'Kranlarni kuzating', title: 'Konteyner porti',
+               info: 'Sohildagi kranlar kema ustiga borib konteynerni ko‘taradi, uni sohilga olib o‘tib, yuk mashinasiga qo‘yadi. Yuk mashinasi uni omborxonaga olib ketadi. Har bir kran o‘z kemasini navbat bilan tushiradi.' },
+             { t: 'talk', npc: 'sardor', text: 'Sardorga qaytib, ko‘rganingizni ayting', say: ['Ana endi bilasiz: bizning mashinalar ham shunday kelgan.'] } ] },
+];
+const QSTORE = {
+  ACT: 'susambil_quest_active', DONE: 'susambil_quests_done', PEND: 'susambil_quests_pending',
+  get(k, d){ try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : d; } catch(_){ return d; } },
+  set(k, v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch(_){} },
+  done(){ return new Set([...(API.on && API.me && API.me.questsDone ? API.me.questsDone : []), ...this.get(this.DONE, [])]); },
+};
+const PLAY = {
+  ready: false, npcs: {}, active: null, dlg: null, logOpen: false, keyNode: null, beacon: null, arrow: null, marks: {},
+  async init(){
+    if (this.ready) return; this.ready = true;
+    this.active = QSTORE.get(QSTORE.ACT, null);
+    if (this.active && !QUESTS.find(q => q.id === this.active.id)) this.active = null;
+    // the goal: a light column, and an arrow over the walker's head
+    const bm = new B.StandardMaterial('qBeaconM', scene); bm.emissiveColor = hex('#f3c14b'); bm.diffuseColor = new C3(0, 0, 0); bm.alpha = 0.35; bm.disableLighting = true; bm.backFaceCulling = false;
+    this.beacon = B.MeshBuilder.CreateCylinder('qBeacon', { diameterTop: 2.2, diameterBottom: 3.2, height: 60, tessellation: 24, cap: B.Mesh.NO_CAP }, scene); this.beacon.material = bm; this.beacon.isPickable = false; this.beacon.setEnabled(false);
+    const am = new B.StandardMaterial('qArrowM', scene); am.emissiveColor = hex('#f3c14b'); am.diffuseColor = hex('#f3c14b'); am.disableLighting = true;
+    const arrow = B.MeshBuilder.CreateCylinder('qArrow', { diameterTop: 0, diameterBottom: 0.55, height: 0.9, tessellation: 3 }, scene);
+    arrow.rotation.x = Math.PI/2; arrow.bakeCurrentTransformIntoVertices(); arrow.material = am; arrow.isPickable = false; arrow.setEnabled(false); this.arrow = arrow;
+    // the lost key: a small gold key turning and bobbing over the pavement
+    const km = new B.StandardMaterial('qKeyM', scene); km.diffuseColor = hex('#f3c14b'); km.emissiveColor = hex('#7a5a10'); km.specularColor = new C3(1, 1, 1); km.specularPower = 80;
+    const ring = B.MeshBuilder.CreateTorus('qKeyR', { diameter: 0.28, thickness: 0.06, tessellation: 24 }, scene); ring.rotation.x = Math.PI/2; ring.position.y = 0.14;
+    const shaft = B.MeshBuilder.CreateBox('qKeyS', { width: 0.06, height: 0.42, depth: 0.04 }, scene); shaft.position.y = -0.14;
+    const bit = B.MeshBuilder.CreateBox('qKeyB', { width: 0.14, height: 0.06, depth: 0.04 }, scene); bit.position.set(0.06, -0.3, 0);
+    const key = B.Mesh.MergeMeshes([ring, shaft, bit], true); key.material = km; key.isPickable = false; key.setEnabled(false); this.keyNode = key;
+    // the people
+    for (const [id, n] of Object.entries(NPCS)){
+      const p0 = n.at(), sp = walkBlocked(p0.x, p0.z) ? walkSpawnPoint(p0.x, p0.z) : p0;
+      const npc = this.npcs[id] = { id, ...n, x: sp.x, z: sp.z, a: null };
+      AVATAR.make(avClean(n.cfg).body, scene).then(a => {
+        npc.a = a; AVATAR.apply(a, n.cfg); a.root.position.set(npc.x, walkGround(npc.x, npc.z), npc.z);
+        a.root.rotation.y = Math.atan2(parkC.x - npc.x, parkC.z - npc.z);
+        if (a.groups.idle) a.groups.idle.start(true, 0.9 + Math.random()*0.2);
+        if (shadowGen) for (const m of Object.values(a.meshes).flat()) shadowGen.addShadowCaster(m, false);
+        a.root.setEnabled(WALK.on);
+      }).catch(() => {});
+      this.marks[id] = this.mark(id);
+    }
+    this.track();
+  },
+  // "!" (has a quest for you) or "?" (waiting for you) over a person's head
+  mark(id){
+    const mk = (ch, col) => { const t = new B.DynamicTexture('qm' + id + ch, { width: 128, height: 128 }, scene, true), g = t.getContext();
+      g.clearRect(0, 0, 128, 128); g.fillStyle = col; g.beginPath(); g.arc(64, 64, 54, 0, Math.PI*2); g.fill(); g.fillStyle = '#1b1407'; g.font = 'bold 84px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, 64, 70); t.update(); t.hasAlpha = true; return t; };
+    const p = B.MeshBuilder.CreatePlane('qMark' + id, { size: 0.6 }, scene); p.billboardMode = B.Mesh.BILLBOARDMODE_ALL; p.isPickable = false;
+    const m = new B.StandardMaterial('qMarkM' + id, scene); m.disableLighting = true; m.emissiveColor = new C3(1, 1, 1); m.useAlphaFromDiffuseTexture = true; p.material = m;
+    p.metadata = { ex: mk('!', '#f3c14b'), q: mk('?', '#7fe0c9') }; p.setEnabled(false); return p;
+  },
+  quest(id){ return QUESTS.find(q => q.id === id); },
+  step(){ if (!this.active) return null; const q = this.quest(this.active.id); return q ? q.steps[this.active.step] : null; },
+  available(npcId){
+    if (this.active) return null;
+    const done = QSTORE.done();
+    return QUESTS.find(q => q.giver === npcId && !done.has(q.id) && (!q.requires || done.has(q.requires))) || null;
+  },
+  target(){
+    const s = this.step(); if (!s) return null;
+    if (s.t === 'talk'){ const n = this.npcs[s.npc]; return n ? { x: n.x, z: n.z } : null; }
+    if (s.t === 'drive') return null;
+    const p = s.at(); return p ? { x: p.x, z: p.z } : null;
+  },
+  save(){ QSTORE.set(QSTORE.ACT, this.active); this.track(); },
+  track(){
+    const el = $('#qTrack'); if (!el) return;
+    const q = this.active && this.quest(this.active.id), s = this.step();
+    if (!q || !s){ el.hidden = true; return; }
+    el.hidden = false;
+    el.querySelector('.qt-t').textContent = '📜 ' + q.title;
+    let txt = s.text;
+    if (s.t === 'drive') txt += ` · ${Math.min(s.dist, Math.round(this.active.drove || 0))}/${s.dist} m`;
+    el.querySelector('.qt-s').textContent = txt;
+  },
+  // the context action: talk, get in, get out
+  near(){
+    if (DRIVE.on) return { kind: 'exit', label: '🚪 Mashinadan tushish' };
+    if (WALK.inside || this.dlg) return null;
+    let best = null, bd = 3.2;
+    for (const n of Object.values(this.npcs)){ const d = Math.hypot(n.x - WALK.x, n.z - WALK.z); if (d < bd){ bd = d; best = n; } }
+    if (best) return { kind: 'talk', npc: best, label: `💬 ${best.name} bilan gaplashish` };
+    const car = nearestCar(WALK.x, WALK.z, 3.4);
+    if (car) return { kind: 'car', car, label: '🚗 Mashina haydash' };
+    return null;
+  },
+  action(){
+    if (this.dlg){ this.dlgNext(); return; }
+    const n = this.near(); if (!n) return;
+    if (n.kind === 'exit') exitCar();
+    else if (n.kind === 'car') enterCar(n.car);
+    else if (n.kind === 'talk') this.talk(n.npc);
+  },
+  talk(npc){
+    const s = this.step();
+    if (s && s.t === 'talk' && s.npc === npc.id){ this.dialog(npc.name, s.say, [{ label: 'Rahmat!', fn: () => this.advance() }]); return; }
+    const q = this.available(npc.id);
+    if (q){ this.dialog(npc.name, q.offer, [{ label: '✔ Qabul qilish', fn: () => this.accept(q) }, { label: 'Keyinroq', fn: () => {} }], `Vazifa: ${q.title} · mukofot ${fmt(q.reward)} tanga`); return; }
+    if (this.active){ const aq = this.quest(this.active.id); this.dialog(npc.name, [`Hozir “${aq.title}” vazifasi bilan bandsiz-ku. Avval uni tugating!`], [{ label: 'Xo‘p', fn: () => {} }]); return; }
+    this.dialog(npc.name, ['Yana kelib turing! Hozircha boshqa iltimosim yo‘q.'], [{ label: 'Xayr', fn: () => {} }]);
+  },
+  // the talk card: lines one by one, then the choices
+  dialog(name, lines, buttons, sub){
+    this.dlg = { name, lines, i: 0, buttons, sub };
+    $('#dlg').hidden = false; $('#dlgName').textContent = name; this.dlgShow();
+  },
+  dlgShow(){
+    const d = this.dlg, last = d.i >= d.lines.length - 1;
+    $('#dlgText').textContent = d.lines[d.i];
+    const box = $('#dlgBtns'); box.innerHTML = '';
+    if (d.sub && last){ const s = document.createElement('div'); s.className = 'dlg-sub'; s.textContent = d.sub; box.appendChild(s); }
+    const btns = last ? d.buttons : [{ label: 'Davom etish →', fn: null }];
+    btns.forEach((b, i) => { const el = document.createElement('button'); el.type = 'button'; el.className = 'btn' + (i === 0 ? ' primary' : ''); el.textContent = b.label;
+      el.onclick = () => { if (!b.fn){ d.i++; this.dlgShow(); } else { this.dlgClose(); b.fn(); } }; box.appendChild(el); });
+    setTimeout(() => { const f = box.querySelector('button'); if (f) f.focus(); }, 30);
+  },
+  dlgNext(){ const f = $('#dlgBtns button'); if (f) f.click(); },
+  dlgClose(){ this.dlg = null; $('#dlg').hidden = true; },
+  accept(q){ this.active = { id: q.id, step: 0, drove: 0 }; this.save(); toast(`Yangi vazifa: ${q.title}`); },
+  advance(){
+    const q = this.quest(this.active.id);
+    this.active.step++;
+    if (this.active.step >= q.steps.length){ this.active = null; this.save(); this.complete(q); return; }
+    this.save();
+    const s = this.step(); if (s) toast('Keyingi qadam: ' + s.text);
+  },
+  async complete(q){
+    const pend = new Set(QSTORE.get(QSTORE.PEND, [])); pend.add(q.id); QSTORE.set(QSTORE.PEND, [...pend]);
+    this.reward(q, null);
+    await this.flush();
+  },
+  // send finished quests to the server (kept and retried if the connection fails)
+  async flush(){
+    const pend = QSTORE.get(QSTORE.PEND, []); if (!pend.length) return;
+    if (!API.on || !API.me || !API.me.nickname){
+      const done = new Set(QSTORE.get(QSTORE.DONE, [])); for (const id of pend){ done.add(id); const q = this.quest(id); if (q && !API.on){ S.coins += q.reward; updateCoins(); } }
+      QSTORE.set(QSTORE.DONE, [...done]); QSTORE.set(QSTORE.PEND, []); this.rewardText(API.on ? ' (hisobga kirsangiz, tangalar ham beriladi)' : ' (demo rejim)'); return;
+    }
+    for (const id of pend){
+      try {
+        const r = await api('POST', `/api/quests/${id}/complete`);
+        API.me.questsDone = [...new Set([...(API.me.questsDone || []), id])];
+        S.coins = r.balance; updateCoins();
+        QSTORE.set(QSTORE.PEND, QSTORE.get(QSTORE.PEND, []).filter(x => x !== id));
+      } catch(e){
+        this.rewardText('', 'Mukofotni hisobga yozib bo‘lmadi: ' + (e.status ? e.message : 'internet aloqasi yo‘q') + '. Vazifa saqlandi.');
+        return;
+      }
+    }
+  },
+  reward(q){
+    const el = $('#qDone'); el.hidden = false;
+    el.querySelector('.qd-t').textContent = q.title;
+    el.querySelector('.qd-r').textContent = `+${fmt(q.reward)} tanga`;
+    el.querySelector('.qd-e').textContent = ''; el.querySelector('.qd-x').hidden = true;
+    clearTimeout(this._rt); this._rt = setTimeout(() => { el.hidden = true; }, 6000);
+  },
+  rewardText(extra, err){
+    const el = $('#qDone'); if (el.hidden) return;
+    if (extra) el.querySelector('.qd-r').textContent += extra;
+    if (err){ el.querySelector('.qd-e').textContent = err; const b = el.querySelector('.qd-x'); b.hidden = false; b.onclick = () => this.flush().then(() => { el.querySelector('.qd-e').textContent = ''; b.hidden = true; }); clearTimeout(this._rt); }
+  },
+  // the quest list (Q / gamepad Y / the 📜 button)
+  openLog(){
+    const done = QSTORE.done(), act = this.active;
+    const rows = QUESTS.map(q => {
+      const st = done.has(q.id) ? 'done' : act && act.id === q.id ? 'active' : (!q.requires || done.has(q.requires)) ? 'open' : 'locked';
+      const lab = { done: '✓ Bajarildi', active: '▶ Faol', open: '● Mavjud', locked: '🔒 Keyinroq ochiladi' }[st];
+      const giver = NPCS[q.giver].name;
+      return `<li class="ql-${st}"><b>${esc(q.title)}</b><span>${lab} · ${esc(giver)} · ${fmt(q.reward)} tanga</span>${st === 'open' ? `<button type="button" class="btn" data-go="${q.giver}">Yo‘l ko‘rsat</button>` : ''}${st === 'active' ? `<button type="button" class="btn" data-drop="${q.id}">Bekor qilish</button>` : ''}</li>`;
+    }).join('');
+    $('#qLogList').innerHTML = rows;
+    $('#qLog').hidden = false; this.logOpen = true;
+    $('#qLogList').querySelectorAll('[data-go]').forEach(b => b.onclick = () => { this.guide = b.dataset.go; this.closeLog(); toast(`${NPCS[b.dataset.go].name} sari yo‘l ko‘rsatilmoqda`); });
+    $('#qLogList').querySelectorAll('[data-drop]').forEach(b => b.onclick = () => { this.active = null; this.save(); this.openLog(); });
+    setTimeout(() => $('#qLogClose').focus(), 30);
+  },
+  closeLog(){ $('#qLog').hidden = true; this.logOpen = false; },
+  // every frame while walking or driving
+  tick(dt){
+    if (!this.ready) return;
+    const t = performance.now()/1000, done = QSTORE.done();
+    // people: visible near you, a marker over those who want you
+    const s = this.step();
+    for (const n of Object.values(this.npcs)){
+      const d = Math.hypot(n.x - WALK.x, n.z - WALK.z), show = WALK.on && d < 180;
+      if (n.a) n.a.root.setEnabled(show);
+      const mk = this.marks[n.id];
+      const want = s && s.t === 'talk' && s.npc === n.id ? 'q' : this.available(n.id) ? 'ex' : null;
+      mk.setEnabled(show && !!want && !!n.a);
+      if (want){ mk.material.diffuseTexture = mk.metadata[want]; mk.position.set(n.x, walkGround(n.x, n.z) + 2.25 + Math.sin(t*2.4)*0.06, n.z); }
+      // turn to face you when you come close
+      if (n.a && d < 6){ const want2 = Math.atan2(WALK.x - n.x, WALK.z - n.z); let dy = want2 - n.a.root.rotation.y; while (dy > Math.PI) dy -= 2*Math.PI; while (dy < -Math.PI) dy += 2*Math.PI; n.a.root.rotation.y += dy*Math.min(1, dt*3); }
+    }
+    // progress
+    if (s && this.active){
+      if (s.t === 'drive'){ if (DRIVE.on){ this.active.drove = (this.active.drove || 0) + Math.abs(DRIVE.v)*dt; if (this.active.drove >= s.dist){ this.advance(); } else if (Math.floor(this.active.drove/10) !== Math.floor((this.active.drove - Math.abs(DRIVE.v)*dt)/10)) this.track(); } }
+      else if (s.t === 'goto' || s.t === 'inspect' || s.t === 'find'){
+        const p = s.at(), d = p ? Math.hypot(p.x - WALK.x, p.z - WALK.z) : 1e9;
+        if (s.t === 'find'){ if (d < 1.8 && !DRIVE.on){ toast('🔑 Kalit topildi!'); this.advance(); } }
+        else if (d < s.r && (!s.drive || DRIVE.on)){
+          if (s.t === 'inspect'){ if (!this.dlg) this.dialog(s.title, [s.info], [{ label: 'Tushundim', fn: () => this.advance() }]); }
+          else this.advance();
+        }
+      }
+    }
+    // the key, when it is being looked for
+    const findIt = s && s.t === 'find';
+    this.keyNode.setEnabled(WALK.on && !!findIt);
+    if (findIt){ const p = s.at(); this.keyNode.position.set(p.x, walkGround(p.x, p.z) + 0.75 + Math.sin(t*2)*0.12, p.z); this.keyNode.rotation.y = t*1.8; }
+    // the way: beacon at the goal, arrow over your head
+    let tg = this.target();
+    if (!tg && this.guide && this.npcs[this.guide]){ const n = this.npcs[this.guide]; tg = { x: n.x, z: n.z }; if (Math.hypot(n.x - WALK.x, n.z - WALK.z) < 4) this.guide = null; }
+    const dist = tg ? Math.hypot(tg.x - WALK.x, tg.z - WALK.z) : 0;
+    this.beacon.setEnabled(WALK.on && !!tg && dist > 6);
+    if (tg){ this.beacon.position.set(tg.x, 30, tg.z); this.beacon.material.alpha = 0.22 + 0.1*Math.sin(t*3); }
+    this.arrow.setEnabled(WALK.on && !!tg && dist > 8);
+    if (tg){
+      const y = DRIVE.on ? 2.9 : WALK.y + 2.35;
+      this.arrow.position.set(WALK.x, y + Math.sin(t*3)*0.06, WALK.z);
+      this.arrow.rotation.y = Math.atan2(tg.x - WALK.x, tg.z - WALK.z);
+      const dEl = $('#qTrack .qt-d'); if (dEl) dEl.textContent = dist > 8 ? `${dist >= 1000 ? (dist/1000).toFixed(1) + ' km' : Math.round(dist) + ' m'}` : '';
+    } else { const dEl = $('#qTrack .qt-d'); if (dEl) dEl.textContent = ''; }
+    if (this.guide && !this.active){ const el = $('#qTrack'); el.hidden = false; el.querySelector('.qt-t').textContent = '🧭 Yo‘l'; el.querySelector('.qt-s').textContent = NPCS[this.guide].name + ' oldiga boring'; }
+    // the context button
+    const n = this.near(), btn = $('#actBtn');
+    if (n && !this.logOpen){ btn.hidden = false; if (btn.textContent !== n.label) btn.textContent = n.label; } else btn.hidden = true;
+  },
+  hideAll(){
+    if (!this.ready) return;
+    for (const n of Object.values(this.npcs)){ if (n.a) n.a.root.setEnabled(false); this.marks[n.id].setEnabled(false); }
+    this.beacon.setEnabled(false); this.arrow.setEnabled(false); this.keyNode.setEnabled(false);
+    $('#actBtn').hidden = true; $('#qTrack').hidden = true; this.dlgClose(); this.closeLog();
+  },
+};
+$('#actBtn').onclick = () => PLAY.action();
+$('#walkQuests').onclick = () => PLAY.logOpen ? PLAY.closeLog() : PLAY.openLog();
+$('#qLogClose').onclick = () => PLAY.closeLog();
+$('#qDone .qd-c').onclick = () => { $('#qDone').hidden = true; };
+window.addEventListener('keydown', e => {
+  if (!WALK.on || AVED.open || e.repeat || (e.target && e.target.tagName === 'INPUT')) return;
+  const k = e.key.toLowerCase();
+  if (k === 'e' || k === 'f' || (k === 'enter' && !(e.target && e.target.tagName === 'BUTTON'))){ e.preventDefault(); PLAY.action(); }
+  if (k === 'q' || k === 'j'){ e.preventDefault(); PLAY.logOpen ? PLAY.closeLog() : PLAY.openLog(); }
+  if (k === 'escape' && (PLAY.dlg || PLAY.logOpen)){ e.stopImmediatePropagation(); PLAY.dlgClose(); PLAY.closeLog(); }
+}, true);
+// gamepad buttons, read each frame while walking
+function gpButtons(){
+  if (!GP.on) return;
+  if (gpPressed(0)) PLAY.action();
+  if (gpPressed(3)) PLAY.logOpen ? PLAY.closeLog() : PLAY.openLog();
+  if (gpPressed(1)){ PLAY.dlgClose(); PLAY.closeLog(); }
+  if (gpPressed(2) && !DRIVE.on){ WALK.run = !WALK.run; $('#walkRun').classList.toggle('on', WALK.run); }
+  if (GP.rx || GP.ry){ camera.alpha -= GP.rx*0.045; camera.beta = clamp(camera.beta - GP.ry*0.03, camera.lowerBetaLimit, camera.upperBetaLimit); WALK.camT = performance.now() + 1500; }
 }
 
 // ---------- populate others ----------
@@ -6149,7 +6624,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>

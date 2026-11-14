@@ -5,6 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import fstatic from '@fastify/static';
 import { z } from 'zod';
 import { avatarSchema, readAvatar } from './avatar.js';
+import { completeQuest, questsDone } from './quests.js';
 import crypto from 'node:crypto';
 import type { Db } from './db.js';
 import { tx, rootPath } from './db.js';
@@ -102,20 +103,21 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
   // ---------- me ----------
   app.get('/api/me', async (req) => {
     const u = req.user; if (!u) throw E.auth();
-    const [w, plots, inc, eco, extra, car] = await Promise.all([
+    const [w, plots, inc, eco, extra, car, quests] = await Promise.all([
       db.query('select balance from wallets where user_id = $1', [u.id]),
       db.query('select id from plots where owner_id = $1 order by id', [u.id]),
       game.pendingIncome(db, u.id),
       game.economy(db),
       db.query('select telegram_username, show_telegram, avatar3d, avatar3d_draft from users where id = $1', [u.id]),
       game.carOf(db, u.id),
+      questsDone(db, u.id),
     ]);
     return {
       telegram: extra.rows[0]?.telegram_username ?? null, showTelegram: extra.rows[0]?.show_telegram ?? true,
       id: u.id, nickname: u.nickname, role: u.role, status: u.status,
       balance: w.rows[0]?.balance ?? 0, plots: plots.rows.map((r) => r.id),
       pending: inc.pending, dailyIncome: inc.dailyIncome, plotLimit: eco.plot_limit, car,
-      avatar3d: readAvatar(extra.rows[0]?.avatar3d), avatar3dDraft: readAvatar(extra.rows[0]?.avatar3d_draft),
+      avatar3d: readAvatar(extra.rows[0]?.avatar3d), avatar3dDraft: readAvatar(extra.rows[0]?.avatar3d_draft), questsDone: quests,
     };
   });
 
@@ -143,6 +145,14 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
     if (b.data.draft) await db.query('update users set avatar3d_draft = $2 where id = $1', [u.id, b.data.avatar]);
     else await db.query('update users set avatar3d = $2, avatar3d_draft = null, avatar3d_updated_at = now() where id = $1', [u.id, b.data.avatar]);
     return { avatar: b.data.avatar, draft: b.data.draft };
+  });
+
+  // city quests: finished once, paid once
+  app.post('/api/quests/:id/complete', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req) => {
+    const u = req.user; if (!u) throw E.auth();
+    if (!u.nickname) throw E.nickRequired();
+    const { id } = z.object({ id: z.string().regex(/^[a-z_]{2,32}$/) }).parse(req.params);
+    return completeQuest(db, u.id, id);
   });
 
   app.post('/api/me/privacy', async (req) => {

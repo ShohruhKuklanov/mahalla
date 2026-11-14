@@ -505,3 +505,21 @@ test('3D avatar: none at first, a draft is kept apart, saving validates and repl
   const anon = await app.inject({ method: 'POST', url: '/api/me/avatar3d', payload: { avatar: full } });
   assert.equal(anon.statusCode, 401);
 });
+
+test('quests: a finished quest pays its coins once, unknown ones are refused, the ledger stays exact', async () => {
+  const q = await player('quester_1');
+  const before = (await q.me()).balance;
+  assert.deepEqual((await q.me()).questsDone, []);
+  const r1 = await q.call('POST', '/api/quests/welcome/complete');
+  assert.equal(r1.statusCode, 200, r1.body);
+  assert.equal(r1.json().reward, 150); assert.equal(r1.json().balance, before + 150);
+  // the same quest again (double tap, replay): nothing more
+  const r2 = await q.call('POST', '/api/quests/welcome/complete');
+  assert.equal(r2.statusCode, 200); assert.equal(r2.json().reward, 0); assert.equal(r2.json().already, true);
+  const me = await q.me();
+  assert.equal(me.balance, before + 150); assert.deepEqual(me.questsDone, ['welcome']);
+  assert.equal((await q.call('POST', '/api/quests/no_such_quest/complete')).statusCode, 404);
+  assert.equal((await q.call('POST', '/api/quests/BAD-ID!/complete')).statusCode, 400);
+  assert.equal((await app.inject({ method: 'POST', url: '/api/quests/welcome/complete' })).statusCode, 401);
+  assert.deepEqual(await ledgerMismatches(db), []);
+});
