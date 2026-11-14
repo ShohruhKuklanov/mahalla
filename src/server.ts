@@ -4,6 +4,7 @@ import websocket from '@fastify/websocket';
 import rateLimit from '@fastify/rate-limit';
 import fstatic from '@fastify/static';
 import { z } from 'zod';
+import { avatarSchema, readAvatar } from './avatar.js';
 import crypto from 'node:crypto';
 import type { Db } from './db.js';
 import { tx, rootPath } from './db.js';
@@ -106,7 +107,7 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
       db.query('select id from plots where owner_id = $1 order by id', [u.id]),
       game.pendingIncome(db, u.id),
       game.economy(db),
-      db.query('select telegram_username, show_telegram from users where id = $1', [u.id]),
+      db.query('select telegram_username, show_telegram, avatar3d, avatar3d_draft from users where id = $1', [u.id]),
       game.carOf(db, u.id),
     ]);
     return {
@@ -114,6 +115,7 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
       id: u.id, nickname: u.nickname, role: u.role, status: u.status,
       balance: w.rows[0]?.balance ?? 0, plots: plots.rows.map((r) => r.id),
       pending: inc.pending, dailyIncome: inc.dailyIncome, plotLimit: eco.plot_limit, car,
+      avatar3d: readAvatar(extra.rows[0]?.avatar3d), avatar3dDraft: readAvatar(extra.rows[0]?.avatar3d_draft),
     };
   });
 
@@ -131,6 +133,16 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
     if (chk.lower === 'shohruh.97') await game.grantFounderCar(db);
     if (['shaxzamee_5400', 'shaxzomee_5400', 'shaxzoda'].includes(chk.lower)) for (const id of await game.giftShaxzodaHouse(db)) await pushPlot(id);
     return { nickname: chk.nick };
+  });
+
+  // the 3D avatar: { avatar, draft? } — a draft is kept apart until the player presses "Saqlash"
+  app.post('/api/me/avatar3d', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req) => {
+    const u = req.user; if (!u) throw E.auth();
+    const b = z.object({ avatar: avatarSchema, draft: z.boolean().default(false) }).safeParse(req.body);
+    if (!b.success) throw E.bad('bad_avatar', 'Avatar sozlamalari noto‘g‘ri. Sahifani yangilab, qayta urinib ko‘ring.');
+    if (b.data.draft) await db.query('update users set avatar3d_draft = $2 where id = $1', [u.id, b.data.avatar]);
+    else await db.query('update users set avatar3d = $2, avatar3d_draft = null, avatar3d_updated_at = now() where id = $1', [u.id, b.data.avatar]);
+    return { avatar: b.data.avatar, draft: b.data.draft };
   });
 
   app.post('/api/me/privacy', async (req) => {

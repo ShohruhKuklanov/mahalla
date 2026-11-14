@@ -158,6 +158,56 @@
   #joy i{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:rgba(255,255,255,.82);box-shadow:0 4px 14px rgba(0,0,0,.35)}
   body.touch #joy{display:block} body.touch #walkHint{display:none}
 
+  /* ---------- avatar editor: a dialog over the city (the city pauses while it is open) ---------- */
+  #avEd{position:fixed;inset:0;z-index:40;display:grid;grid-template-columns:minmax(0,1fr) min(440px,44vw);background:radial-gradient(120% 90% at 30% 20%,#28324a 0%,#121722 60%,#0b0e14 100%);color:var(--ink)}
+  #avEd[hidden]{display:none}
+  .ave-stage{position:relative;min-height:0}
+  #avCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;outline:none;touch-action:none}
+  #avCanvas:focus-visible{box-shadow:inset 0 0 0 3px var(--gold)}
+  .ave-view{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:6px;padding:5px;border-radius:14px;background:rgba(18,22,40,.7);border:1px solid var(--line)}
+  .ave-view button{min-height:40px;padding:0 12px;border-radius:10px;font-weight:700;font-size:13px;color:#c9cde0}
+  .ave-view button[aria-pressed="true"]{background:rgba(255,255,255,.14);color:#fff}
+  .ave-loading{position:absolute;inset:0;display:grid;place-items:center;font-weight:700;color:var(--muted);pointer-events:none}
+  .ave-panel{display:flex;flex-direction:column;min-height:0;background:rgba(18,22,30,.86);border-left:1px solid var(--line);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .ave-head{display:flex;align-items:center;gap:10px;padding:16px 18px 8px}
+  .ave-head h2{flex:1;margin:0;font:800 18px/1.2 var(--display, Manrope)}
+  .ave-head .ave-x{width:44px;height:44px;border-radius:12px;font-size:20px;background:rgba(255,255,255,.07)}
+  .ave-sub{margin:0 18px 8px;color:var(--muted);font-size:13px}
+  .ave-tabs{display:flex;gap:6px;padding:4px 14px 10px;overflow-x:auto;scrollbar-width:none}
+  .ave-tabs::-webkit-scrollbar{display:none}
+  .ave-tabs [role=tab]{flex:0 0 auto;min-height:40px;padding:0 14px;border-radius:999px;font-weight:700;font-size:13.5px;color:#c9cde0;background:rgba(255,255,255,.06)}
+  .ave-tabs [role=tab][aria-selected="true"]{background:var(--gold);color:#1b1407}
+  .ave-body{flex:1;overflow-y:auto;padding:4px 18px 12px;overscroll-behavior:contain}
+  .ave-group{margin:0 0 16px;border:0;padding:0}
+  .ave-group legend,.ave-group .ave-lbl{font-weight:800;font-size:13px;color:#dfe3ee;margin:0 0 8px;padding:0}
+  .ave-hint{font-size:12px;color:var(--muted);margin:-4px 0 8px}
+  .ave-opts{display:flex;flex-wrap:wrap;gap:8px}
+  .ave-opts [role=radio]{min-height:44px;padding:0 14px;border-radius:12px;font-weight:700;font-size:14px;background:rgba(255,255,255,.07);border:1px solid transparent}
+  .ave-opts [role=radio][aria-checked="true"]{background:rgba(47,181,163,.22);border-color:var(--accent);color:#fff}
+  .ave-sw{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .ave-sw [role=radio]{width:40px;height:40px;border-radius:50%;border:2px solid rgba(255,255,255,.22);position:relative}
+  .ave-sw [role=radio][aria-checked="true"]{border-color:#fff;box-shadow:0 0 0 3px var(--accent)}
+  .ave-sw [role=radio][aria-checked="true"]::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;font-weight:900;color:#fff;text-shadow:0 0 3px #000,0 0 6px #000}
+  .ave-pick{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border-radius:12px;background:rgba(255,255,255,.07);font-size:13px;font-weight:700;cursor:pointer}
+  .ave-pick input{width:28px;height:28px;padding:0;border:0;background:none;cursor:pointer}
+  .ave-name{font-size:12.5px;color:var(--muted);margin-top:6px;min-height:16px}
+  #avEd [role=radio]:focus-visible,#avEd button:focus-visible,#avEd [role=tab]:focus-visible,.ave-pick:focus-within{outline:3px solid var(--gold);outline-offset:2px}
+  .ave-status{margin:0 18px;min-height:0;font-size:13px}
+  .ave-status:not(:empty){padding:10px 12px;border-radius:12px;margin-bottom:8px;background:rgba(255,255,255,.06)}
+  .ave-status.err{background:rgba(232,106,90,.16);color:#ffd2cb}
+  .ave-status button{margin-left:8px;min-height:36px;padding:0 12px;border-radius:10px;background:var(--danger);color:#fff;font-weight:800}
+  .ave-foot{display:grid;grid-template-columns:auto 1fr 1fr;gap:8px;padding:10px 14px max(14px,env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+  .ave-foot .btn{min-height:48px;padding:0 12px;font-size:14px}
+  .ave-foot .ave-save{grid-column:1 / -1}
+  .ave-foot .btn[disabled]{opacity:.45}
+  @media (max-width:860px){
+    #avEd{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(220px,40vh) minmax(0,1fr)}
+    .ave-foot{grid-template-columns:1fr 1fr 1fr} .ave-foot .btn{font-size:13px;padding:0 8px}
+    .ave-panel{border-left:0;border-top:1px solid var(--line);border-radius:20px 20px 0 0}
+    .ave-head{padding:12px 14px 4px} .ave-sub{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){ #avEd *{transition:none!important} }
+
   /* ---------- welcome screen over the living city ---------- */
   body.hero #labels{opacity:0} body.hero .plbl{pointer-events:none}
   #labels{transition:opacity .6s}
@@ -393,8 +443,33 @@
   <button class="tool" id="home" title="Mening yerim" aria-label="Mening yerim"><svg viewBox="0 0 24 24"><path d="M4 11l8-6 8 6"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/></svg></button>
   <button class="tool" id="walkBtn" title="Piyoda yurish" aria-label="Piyoda yurish"><svg viewBox="0 0 24 24"><circle cx="13" cy="4" r="2"/><path d="M9 21l2.5-6.5L14 17v4"/><path d="M11.5 14.5 12 9l-3.5 2.5V15"/><path d="M12 9l3 3 3 1"/></svg></button>
 </div>
+<div id="avEd" role="dialog" aria-modal="true" aria-labelledby="avEdTitle" hidden>
+  <div class="ave-stage">
+    <canvas id="avCanvas" tabindex="0" role="img" aria-label="Avatar ko‘rinishi. Aylantirish uchun suring yoki chap/o‘ng strelkalarni bosing."></canvas>
+    <div class="ave-loading" id="avLoading" aria-hidden="true">Obraz yuklanmoqda…</div>
+    <div class="ave-view" role="group" aria-label="Ko‘rinish">
+      <button type="button" id="avViewBody" aria-pressed="true">Butun bo‘y</button>
+      <button type="button" id="avViewFace" aria-pressed="false">Yuz</button>
+      <button type="button" id="avTurnL" aria-label="Chapga aylantirish">⟲</button>
+      <button type="button" id="avTurnR" aria-label="O‘ngga aylantirish">⟳</button>
+    </div>
+  </div>
+  <div class="ave-panel">
+    <div class="ave-head"><h2 id="avEdTitle">Obrazingizni yarating</h2><button type="button" class="ave-x" id="avClose" aria-label="Yopish. Tanlovlaringiz saqlanib qoladi, keyin davom ettirasiz.">✕</button></div>
+    <p class="ave-sub" id="avSub">Susambilda sizni shu obraz bilan ko‘rishadi. Istalgan payt sozlamalardan o‘zgartirasiz.</p>
+    <div class="ave-tabs" role="tablist" aria-label="Sozlash bo‘limlari" id="avTabs"></div>
+    <div class="ave-body" role="tabpanel" id="avBody" tabindex="-1"></div>
+    <div class="ave-status" id="avStatus" aria-live="polite"></div>
+    <div class="ave-foot">
+      <button type="button" class="btn" id="avRandom">🎲 Tasodifiy yaratish</button>
+      <button type="button" class="btn" id="avBack">← Orqaga</button>
+      <button type="button" class="btn" id="avNext">Davom etish →</button>
+      <button type="button" class="btn primary ave-save" id="avSave">Saqlash</button>
+    </div>
+  </div>
+</div>
 <div id="walkHud">
-  <div class="wk-bar"><button id="walkExit" title="Piyoda rejimdan chiqish">✕ Chiqish</button><button id="walkSwap" title="Obrazni almashtirish">👤 Obraz</button><button id="walkRun" title="Yugurish">🏃</button></div>
+  <div class="wk-bar"><button id="walkExit" title="Piyoda rejimdan chiqish">✕ Chiqish</button><button id="walkSwap" title="Obrazni o‘zgartirish">👤 Obraz</button><button id="walkRun" title="Yugurish">🏃</button></div>
   <div id="inside" hidden><div class="in-k">🚪 Siz ichkaridasiz</div><b id="inName"></b><div id="inSub"></div><div class="in-row"><button id="inOut">🚪 Tashqariga chiqish</button><button id="inInfo">ℹ️ Bino haqida</button></div></div>
   <div id="walkHint">W / ↑ — oldinga · S / ↓ — orqaga · A D — burilish · Shift — yugurish · sichqoncha bilan suring — kamera</div>
   <div id="joy"><i></i></div>
@@ -4027,7 +4102,8 @@ function humanCrowd(k, c){
   }
   return H;
 }
-const humanCasters = () => HUMAN.ready ? Object.values(HUMAN.kinds).flatMap(H => [...H.meshes, ...H.avatar.meshes]) : [];
+const humanCasters = () => [...(HUMAN.ready ? Object.values(HUMAN.kinds).flatMap(H => [...H.meshes, ...H.avatar.meshes]) : []),
+  ...(typeof WALK !== 'undefined' && WALK.avs ? Object.values(WALK.avs).flatMap(a => a.morphs ? Object.values(a.meshes).flat() : []) : [])];
 const realSlots = () => !HUMAN.ready ? 0 : S.qActive === 'ultra' ? 24 : S.qActive === 'high' ? 16 : S.qActive === 'medium' ? (isMobile ? 10 : 16) : (WALK.on ? 6 : 0);
 const _hm = new B.Matrix(), _hw = new B.Matrix(), _hq = new B.Quaternion(), _hs = new V3(), _ht = new V3(), _hC = [];
 // choose the people nearest to the camera, give them real bodies (their box bodies hide), fill the instance buffers
@@ -4216,21 +4292,35 @@ async function walkEnter(){
   if (WALK.on) return;
   toast('Piyoda rejim tayyorlanmoqda…');
   try { await humanLoad(); } catch(e){ toast('Odam modelini yuklab bo‘lmadi'); return; }
+  // your own look: made once (first walk), then always the saved one
+  let cfgW = AVSTORE.saved();
+  if (!cfgW){ cfgW = await AVED.start({ first: true }); if (!cfgW) cfgW = AVSTORE.draft() || AV_DEFAULT; }
   closeSheet && closeSheet(); select(null); stopAuto(); fly = null; S.tour = null; vel.x = vel.z = 0;
   const t = camera.target, sp = walkSpawnPoint(t.x, t.z);
   WALK.saved = { a: camera.alpha, b: camera.beta, r: camera.radius, x: t.x, z: t.z, lims: [camera.lowerRadiusLimit, camera.upperRadiusLimit, camera.lowerBetaLimit, camera.upperBetaLimit] };
   WALK.on = true; WALK.x = sp.x; WALK.z = sp.z; WALK.y = walkGround(sp.x, sp.z); WALK.speed = 0;
   WALK.yaw = Math.atan2(-Math.cos(camera.alpha), -Math.sin(camera.alpha));   // facing away from the camera
-  walkSetKind(WALK.k);
+  await walkUseAvatar(cfgW);
   camera.lowerRadiusLimit = 1.6; camera.upperRadiusLimit = 18; camera.lowerBetaLimit = 0.3; camera.upperBetaLimit = 1.66;
   camera.radius = 4.6; camera.beta = 1.28; camera.alpha = Math.atan2(-Math.cos(WALK.yaw), -Math.sin(WALK.yaw));
   document.body.classList.add('walking'); if (isMobile) document.body.classList.add('touch');
   $('#walkHint').style.opacity = 1; setTimeout(() => { const h = $('#walkHint'); if (h) h.style.opacity = 0; }, 9000);
 }
-function walkSetKind(k){
-  if (WALK.av) WALK.av.node.setEnabled(false);
-  WALK.k = k; WALK.av = HUMAN.kinds[k].avatar; WALK.av.node.setEnabled(true);
-  for (const [n, g] of Object.entries(WALK.av.groups)){ g.start(true, 1); g.weight = WALK.w[n] ?? 0; }
+// the person you walk is your avatar: one copy per body kind in the city scene, dressed from your config
+async function walkUseAvatar(cfg){
+  cfg = avClean(cfg); WALK.avs = WALK.avs || {};
+  let a = WALK.avs[cfg.body];
+  if (!a){
+    try { a = await AVATAR.make(cfg.body, scene); }
+    catch(e){ toast('Obrazni yuklab bo‘lmadi — oddiy odam bilan yurasiz'); a = HUMAN.kinds[cfg.body === 'f' ? 'f' : 'm'].avatar; }
+    a.node = a.node || a.root; WALK.avs[cfg.body] = a;
+    if (shadowGen) for (const m of Object.values(a.meshes || {}).flat()) shadowGen.addShadowCaster(m, false);
+  }
+  if (WALK.av && WALK.av !== a){ WALK.av.node.setEnabled(false); for (const g of Object.values(WALK.av.groups)) g.stop(); }
+  WALK.av = a; if (a.morphs) AVATAR.apply(a, cfg);
+  a.node.setEnabled(WALK.on && !WALK.inside);
+  for (const [n, g] of Object.entries(a.groups)){ g.start(true, 1); g.weight = WALK.w[n] ?? 0; }
+  if (WALK.on){ a.node.position.set(WALK.x, WALK.y, WALK.z); a.node.rotation.y = WALK.yaw; }
 }
 function walkExit(){
   if (!WALK.on) return;
@@ -4244,6 +4334,7 @@ function walkExit(){
   flyTo(WALK.x, WALK.z, Math.max(60, Math.min(s.r, 160)), Math.min(s.b, 1.1));
 }
 function walkUpdate(dt){
+  if (!WALK.av) return;                         // the body is still loading
   WDOOR.update(dt);
   // the showroom's glass doors slide open as you come up to them
   if (DLR.door && DLR.box){ const b = DLR.box, near = Math.hypot(WALK.x - b.SX0, WALK.z - b.cz) < 4.5; DLR.door.scaling.z += ((near ? 0.04 : 1) - DLR.door.scaling.z)*Math.min(1, dt*6); }
@@ -4299,7 +4390,7 @@ $('#walkBtn').onclick = () => walkEnter();
 // real people come in a few seconds after the city (not on the lowest quality)
 setTimeout(() => { if (S.qActive !== 'low') humanLoad(); }, 5000);
 $('#walkExit').onclick = () => walkExit();
-$('#walkSwap').onclick = () => { if (WALK.on) walkSetKind(WALK.k === 'm' ? 'f' : 'm'); };
+$('#walkSwap').onclick = async () => { const c = await AVED.start(); if (c && WALK.on) walkUseAvatar(c); };
 $('#walkRun').onclick = () => { WALK.run = !WALK.run; $('#walkRun').classList.toggle('on', WALK.run); };
 window.addEventListener('keydown', e => { if (WALK.on && e.key === 'Escape') walkExit(); });
 // the on-screen joystick (touch screens)
@@ -4311,6 +4402,359 @@ window.addEventListener('keydown', e => { if (WALK.on && e.key === 'Escape') wal
   const end = e => { if (e.pointerId !== WALK.joy.id) return; WALK.joy.id = null; WALK.joy.x = WALK.joy.y = 0; knob.style.transform = ''; };
   pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
 })();
+
+// =================== AVATAR: the player's own 3D look ===================
+// Choices only (no photos): a body presentation, face, skin, hair, details, clothes and accessories, drawn from the
+// shared MakeHuman bodies in people/avatar-{m,f,n}.js. Saved to the account on the server (POST /api/me/avatar3d);
+// in the offline demo, in this browser. A draft is kept as you go, so a closed editor picks up where it was left.
+// Keep AV_OPTIONS in step with avatarSchema in src/avatar.ts.
+const AV_SKIN = [['#f4dcc8','Och pushti-oq'],['#ecc8a8','Fil suyagi'],['#e0b48e','Och bug‘doyrang'],['#c99a78','Bug‘doyrang'],['#b98462','Qoramtir bug‘doyrang'],
+  ['#a06e4f','Qaynatilgan yong‘oq'],['#8d5a3b','Kashtan'],['#734530','Kakao'],['#5a3524','Qora shokolad'],['#432619','Qahvarang-qora']];
+const AV_HAIR = [['#111014','Qop-qora'],['#2a1d15','To‘q jigarrang'],['#4a3020','Jigarrang'],['#6e4a2e','Kashtan'],['#9a6a3e','Och kashtan'],['#c79a5c','Bug‘doy sariq'],
+  ['#e2c38a','Oq sariq'],['#b0563a','Mis-malla'],['#8f8f8f','Kumush'],['#e9e6e0','Oq'],['#3b5bd6','Ko‘k (fantaziya)'],['#c2457a','Pushti (fantaziya)']];
+const AV_EYE = [['#4a3426','Qo‘ng‘ir'],['#2b1d14','To‘q qo‘ng‘ir'],['#6b5a2e','Yong‘oq rang'],['#2f5d3a','Yashil'],['#3b6b8f','Ko‘k'],['#7a8a96','Kulrang']];
+const AV_CLOTH = [['#f2f0ea','Oq'],['#16181c','Qora'],['#2c3e5c','To‘q ko‘k'],['#1f6fb2','Ko‘k'],['#2fb5a3','Firuza'],['#2e7d4f','Yashil'],['#c0392b','Qizil'],
+  ['#e08a2c','To‘q sariq'],['#f3c14b','Oltin'],['#7b5ea7','Binafsha'],['#b5577b','Gilos'],['#8a6f4f','Qahva'],['#9aa3ad','Kulrang'],['#c9b38a','Bej']];
+const AV_OPTIONS = {
+  body: [['m','Erkakona'],['f','Ayolona'],['n','Neytral']],
+  face: [['oval','Oval'],['round','Dumaloq'],['square','To‘rtburchak'],['long','Cho‘ziq'],['heart','Yuraksimon']],
+  eyes: [['normal','O‘rtacha'],['big','Katta'],['small','Kichik']],
+  brows: [['thin','Ingichka'],['normal','O‘rtacha'],['thick','Qalin']],
+  nose: [['normal','O‘rtacha'],['narrow','Ingichka'],['wide','Keng'],['long','Uzun']],
+  mouth: [['normal','O‘rtacha'],['small','Kichik'],['wide','Keng'],['full','To‘la lablar']],
+  hair: [['short','Qisqa'],['mid','O‘rtacha (yoqagacha)'],['long','Uzun (yelkagacha)'],['bun','Tugun'],['bald','Sochsiz']],
+  outfit: [['tee','Futbolka va shim'],['shirt','Uzun yengli ko‘ylak'],['shorts','Futbolka va shortik'],['skirt','Ko‘ylak-yubka'],['jacket','Kurtka'],['chopon','Chopon']],
+  glasses: [['none','Yo‘q'],['round','Yumaloq'],['square','To‘rtburchak'],['sun','Quyosh ko‘zoynagi']],
+  hat: [['none','Yo‘q'],['doppi','Do‘ppi'],['cap','Kepka'],['wide','Shlyapa']],
+};
+const AV_DEFAULT = { v: 1, body: 'n', face: 'oval', skin: '#c99a78', eyes: 'normal', eyeColor: '#4a3426', brows: 'normal', nose: 'normal', mouth: 'normal',
+  hair: 'short', hairColor: '#2a1d15', outfit: 'tee', top: '#f2f0ea', bottom: '#2c3e5c', outer: '#3a4a5c', shoes: '#1c1c1e', glasses: 'none', hat: 'none', hatColor: '#111111' };
+const HEX_RX = /^#[0-9a-f]{6}$/i;
+// keep only known fields and values (old or hand-edited data never breaks the editor)
+function avClean(c){
+  const o = { ...AV_DEFAULT };
+  if (!c || typeof c !== 'object') return o;
+  for (const k of Object.keys(AV_DEFAULT)){
+    const v = c[k]; if (v == null || k === 'v') continue;
+    if (AV_OPTIONS[k]){ if (AV_OPTIONS[k].some(([id]) => id === v)) o[k] = v; }
+    else if (typeof v === 'string' && HEX_RX.test(v)) o[k] = v.toLowerCase();
+  }
+  return o;
+}
+const colorName = (hex, pal) => { const f = pal.find(([h]) => h.toLowerCase() === hex.toLowerCase()); return f ? f[1] : `Boshqa rang (${hex.toUpperCase()})`; };
+
+// ---------- storage: the account on the server when signed in, this browser otherwise ----------
+const AVSTORE = {
+  KEY: 'susambil_avatar', DRAFT: 'susambil_avatar_draft', _t: 0,
+  local(k){ try { const s = localStorage.getItem(k); return s ? avClean(JSON.parse(s)) : null; } catch(_){ return null; } },
+  setLocal(k, v){ try { v ? localStorage.setItem(k, JSON.stringify(v)) : localStorage.removeItem(k); } catch(_){} },
+  online(){ return API.on && API.me && API.me.nickname; },
+  saved(){ if (this.online()) return API.me.avatar3d ? avClean(API.me.avatar3d) : null; return this.local(this.KEY); },
+  draft(){ const l = this.local(this.DRAFT); if (l) return l; if (this.online() && API.me.avatar3dDraft) return avClean(API.me.avatar3dDraft); return null; },
+  // a draft goes to the browser at once and (signed in) to the server a moment later; a failed draft upload is not an error
+  saveDraft(cfg){
+    this.setLocal(this.DRAFT, cfg);
+    if (!this.online()) return;
+    clearTimeout(this._t);
+    this._t = setTimeout(() => { api('POST', '/api/me/avatar3d', { avatar: cfg, draft: true }).catch(() => {}); }, 1500);
+  },
+  async save(cfg){
+    clearTimeout(this._t);
+    if (this.online()){
+      const r = await api('POST', '/api/me/avatar3d', { avatar: cfg });
+      API.me.avatar3d = r.avatar; API.me.avatar3dDraft = null;
+    } else this.setLocal(this.KEY, cfg);
+    this.setLocal(this.DRAFT, null);
+    return cfg;
+  },
+};
+
+// ---------- the bodies: load once, put into any scene, dress from a config ----------
+const AVATAR = {
+  _js: {},
+  fetch(k){
+    if (window['AVATAR_GLB_' + k]) return Promise.resolve();
+    if (!this._js[k]) this._js[k] = new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = `people/avatar-${k}.js`; sc.onload = ok; sc.onerror = () => { this._js[k] = null; no(new Error('Obraz fayli yuklanmadi')); }; document.head.appendChild(sc); });
+    return this._js[k];
+  },
+  // a fresh copy of body k in scene sc: { root, meshes: {Material: [mesh…]}, morphs: [mesh…], groups: {idle, walk, run} }
+  async make(k, sc){
+    await this.fetch(k);
+    const c = await B.SceneLoader.LoadAssetContainerAsync('', 'data:;base64,' + window['AVATAR_GLB_' + k], sc, null, '.glb');
+    c.addAllToScene();
+    const root = new B.TransformNode('avatar_' + k, sc); c.meshes[0].parent = root;
+    const meshes = {}, morphs = [];
+    for (const m of c.meshes){
+      if (!m.getTotalVertices || !m.getTotalVertices()) continue;
+      const pm = m.material, n = pm ? pm.name : '';
+      const sm = new B.StandardMaterial('av' + k + n, sc);
+      sm.specularColor = new C3(.06, .06, .06); sm.specularPower = 24;
+      if (n === 'Skin'){ sm.diffuseTexture = pm.albedoTexture; sm.specularColor = new C3(.12, .1, .09); sm.specularPower = 18; }
+      else if (n === 'Eyes' || n === 'Sclera' || n === 'Lens'){ sm.specularColor = new C3(.7, .7, .7); sm.specularPower = 120; }
+      else if (n === 'HatDoppiPattern'){ sm.diffuseTexture = pm.albedoTexture; if (sm.diffuseTexture) sm.diffuseTexture.hasAlpha = true; sm.useAlphaFromDiffuseTexture = false; }
+      if (n === 'Lens'){ sm.alpha = 0.85; }
+      if (/^Hair|^Brow/.test(n)){ sm.backFaceCulling = false; sm.specularColor = new C3(.14, .12, .1); sm.specularPower = 40; }
+      if (pm && pm.albedoColor && !sm.diffuseTexture) sm.diffuseColor = pm.albedoColor.toGammaSpace ? pm.albedoColor.toGammaSpace() : pm.albedoColor;
+      m.material = sm; m.isPickable = false; m.receiveShadows = true; m.alwaysSelectAsActiveMesh = true;
+      (meshes[n] = meshes[n] || []).push(m);
+      if (m.morphTargetManager) morphs.push(m);
+    }
+    for (const pm of c.materials) if (!sc.meshes.some(m => m.material === pm)) pm.dispose();
+    const groups = {};
+    for (const g of c.animationGroups){ g.stop(); const n = ['idle', 'walk', 'run'].find(x => g.name === x || g.name.endsWith(x)); if (n) groups[n] = g; }
+    return { k, root, meshes, morphs, groups };
+  },
+  // dress a body from a config: switch parts on and off, tint them, set the face morphs
+  apply(a, cfgIn){
+    const c = avClean(cfgIn), show = new Set(['Skin', 'Eyes', 'Sclera', 'Shoes', 'Hair', 'Shirt']);
+    const tint = {}, rgb = h => hex(h), mul = (h, k) => { const x = hex(h); return new C3(x.r*k, x.g*k, x.b*k); };
+    // hair: the cap is the scalp itself, so "bald" tints it to the skin
+    if (c.hair === 'mid') show.add('HairMid');
+    if (c.hair === 'long'){ show.add('HairMid'); show.add('HairLong'); }
+    if (c.hair === 'bun') show.add('HairBun');
+    const hairC = c.hair === 'bald' ? null : rgb(c.hairColor);
+    for (const n of ['Hair', 'HairMid', 'HairLong', 'HairBun']) tint[n] = hairC || mul(c.skin, 0.93);
+    show.add({ thin: 'BrowThin', normal: 'BrowNormal', thick: 'BrowThick' }[c.brows]);
+    for (const n of ['BrowThin', 'BrowNormal', 'BrowThick']) tint[n] = c.hair === 'bald' ? hex('#3a2a20') : mul(c.hairColor, 0.85);
+    // clothes
+    const o = c.outfit;
+    if (o !== 'tee' && o !== 'shorts') show.add('Sleeve');
+    if (o === 'chopon' || o === 'jacket') show.add('Jacket');
+    show.add('PantsTop');
+    if (o !== 'shorts' && o !== 'skirt') show.add('PantsLow');
+    if (o === 'skirt' || o === 'chopon') show.add('Skirt');
+    tint.Shirt = tint.Sleeve = rgb(c.top);
+    tint.PantsTop = tint.PantsLow = rgb(c.bottom);
+    tint.Skirt = o === 'chopon' ? rgb(c.outer) : rgb(c.bottom);
+    tint.Jacket = rgb(c.outer); tint.Shoes = rgb(c.shoes);
+    if (o === 'skirt') tint.PantsTop = rgb(c.bottom);
+    // face
+    tint.Eyes = rgb(c.eyeColor);
+    const base = [206, 156, 122], sk = hex(c.skin);
+    tint.Skin = new C3(clamp(sk.r*255/base[0], 0.3, 1.35), clamp(sk.g*255/base[1], 0.3, 1.35), clamp(sk.b*255/base[2], 0.3, 1.35));
+    // accessories
+    if (c.glasses === 'round') show.add('GlassesRound');
+    if (c.glasses === 'square') show.add('GlassesSquare');
+    if (c.glasses === 'sun'){ show.add('GlassesSun'); show.add('Lens'); }
+    if (c.hat === 'doppi'){ show.add('HatDoppi'); show.add('HatDoppiPattern'); }
+    if (c.hat === 'cap') show.add('HatCap');
+    if (c.hat === 'wide') show.add('HatWide');
+    tint.HatDoppi = tint.HatCap = tint.HatWide = rgb(c.hatColor);
+    for (const [n, list] of Object.entries(a.meshes)) for (const m of list){
+      m.setEnabled(show.has(n));
+      if (tint[n]) m.material.diffuseColor = tint[n];
+    }
+    // morph targets (face shape, nose, mouth, eye size)
+    const on = new Set(['face_' + c.face, 'nose_' + c.nose, 'mouth_' + c.mouth, 'eyes_' + c.eyes]);
+    for (const m of a.morphs){ const mm = m.morphTargetManager; for (let i = 0; i < mm.numTargets; i++){ const t = mm.getTarget(i); t.influence = on.has(t.name) ? 1 : 0; } }
+    a.cfg = c;
+    return a;
+  },
+};
+
+// ---------- the editor ----------
+const AVED = {
+  open: false, cfg: null, tab: 0, eng: null, sc: null, cam: null, bodies: {}, cur: null, view: 'body', resolve: null, busy: false,
+  TABS: [
+    { id: 'body', name: 'Tana', face: false, groups: [{ k: 'body', label: 'Ko‘rinish', hint: 'Majburiy emas: neytral obrazni ham tanlashingiz mumkin.' }] },
+    { id: 'face', name: 'Yuz', face: true, groups: [{ k: 'face', label: 'Yuz shakli' }, { k: 'eyes', label: 'Ko‘z kattaligi' }, { k: 'eyeColor', label: 'Ko‘z rangi', pal: AV_EYE }] },
+    { id: 'skin', name: 'Teri', face: true, groups: [{ k: 'skin', label: 'Teri rangi', pal: AV_SKIN }] },
+    { id: 'hair', name: 'Soch', face: true, groups: [{ k: 'hair', label: 'Turmak va uzunlik' }, { k: 'hairColor', label: 'Soch rangi', pal: AV_HAIR }] },
+    { id: 'details', name: 'Yuz detallari', face: true, groups: [{ k: 'brows', label: 'Qosh' }, { k: 'nose', label: 'Burun' }, { k: 'mouth', label: 'Og‘iz' }] },
+    { id: 'outfit', name: 'Kiyim', face: false, groups: [{ k: 'outfit', label: 'Uslub' }, { k: 'top', label: 'Ko‘ylak rangi', pal: AV_CLOTH }, { k: 'bottom', label: 'Shim / yubka rangi', pal: AV_CLOTH },
+      { k: 'outer', label: 'Kurtka / chopon rangi', pal: AV_CLOTH, when: c => c.outfit === 'jacket' || c.outfit === 'chopon' }, { k: 'shoes', label: 'Oyoq kiyim rangi', pal: AV_CLOTH }] },
+    { id: 'acc', name: 'Aksessuar', face: true, groups: [{ k: 'glasses', label: 'Ko‘zoynak' }, { k: 'hat', label: 'Bosh kiyim' }, { k: 'hatColor', label: 'Bosh kiyim rangi', pal: AV_CLOTH, when: c => c.hat !== 'none' }] },
+  ],
+  // open the editor; resolves with the saved config, or null if closed without saving (the draft stays)
+  async start(opts = {}){
+    if (this.open) return null;
+    const saved = AVSTORE.saved(), draft = AVSTORE.draft();
+    this.cfg = avClean(draft || saved || AV_DEFAULT);
+    this.first = !saved; this.tab = 0; this.open = true; this.lastFocus = document.activeElement;
+    $('#avEdTitle').textContent = saved ? 'Obrazingizni o‘zgartiring' : 'Obrazingizni yarating';
+    $('#avEd').hidden = false; engine.stopRenderLoop();
+    this.status(draft && (!saved || JSON.stringify(draft) !== JSON.stringify(saved)) ? 'Avvalgi tanlovlaringiz tiklandi — davom ettiring.' : '');
+    this.renderTabs(); this.renderTab();
+    setTimeout(() => $('#avTabs [aria-selected="true"]').focus(), 30);
+    try { await this.initScene(); await this.show(); }
+    catch(e){ this.status('3D ko‘rinishni yuklab bo‘lmadi. Tanlovlar baribir saqlanadi.', true); }
+    return new Promise(res => { this.resolve = res; });
+  },
+  close(result){
+    if (!this.open) return;
+    this.open = false; $('#avEd').hidden = true;
+    if (this.eng){ this.eng.stopRenderLoop(); }
+    engine.runRenderLoop(() => scene.render());
+    if (this.lastFocus && this.lastFocus.focus) try { this.lastFocus.focus(); } catch(_){}
+    const r = this.resolve; this.resolve = null; if (r) r(result || null);
+  },
+  async initScene(){
+    if (!this.eng){
+      const cv = $('#avCanvas');
+      this.eng = new B.Engine(cv, true, { preserveDrawingBuffer: false, stencil: true, alpha: true });
+      const sc = this.sc = new B.Scene(this.eng); sc.clearColor = new C4(0, 0, 0, 0);
+      const cam = this.cam = new B.ArcRotateCamera('avCam', Math.PI/2, 1.38, 3.4, new V3(0, 0.95, 0), sc);
+      cam.lowerRadiusLimit = 0.6; cam.upperRadiusLimit = 5; cam.lowerBetaLimit = 0.6; cam.upperBetaLimit = 1.75; cam.minZ = 0.05; cam.wheelPrecision = 120; cam.panningSensibility = 0;
+      cam.attachControl(cv, true);
+      const hemi = new B.HemisphericLight('avHemi', new V3(0.2, 1, -0.3), sc); hemi.intensity = 0.75; hemi.groundColor = new C3(.25, .22, .28);
+      const key = new B.DirectionalLight('avKey', new V3(-0.4, -0.6, 0.8), sc); key.intensity = 1.6; key.diffuse = new C3(1, .96, .9);
+      const rim = new B.DirectionalLight('avRim', new V3(0.6, -0.2, -0.9), sc); rim.intensity = 0.7; rim.diffuse = new C3(.7, .8, 1);
+      const disc = B.MeshBuilder.CreateDisc('avFloor', { radius: 0.9, tessellation: 48 }, sc); disc.rotation.x = Math.PI/2;
+      const fm = new B.StandardMaterial('avFloorM', sc); fm.diffuseColor = new C3(.16, .19, .27); fm.specularColor = new C3(0, 0, 0); fm.alpha = 0.85; disc.material = fm;
+      window.addEventListener('resize', () => this.eng && this.eng.resize());
+      cv.addEventListener('keydown', e => { if (e.key === 'ArrowLeft'){ this.cam.alpha += 0.25; e.preventDefault(); } if (e.key === 'ArrowRight'){ this.cam.alpha -= 0.25; e.preventDefault(); } });
+    }
+    this.eng.resize();
+    this.eng.runRenderLoop(() => { if (this.cur && this.cur.root){ const t = this.view === 'face' ? new V3(0, 1.62, 0) : new V3(0, 0.95, 0); this.cam.target = V3.Lerp(this.cam.target, t, 0.12); this.cam.radius += ((this.view === 'face' ? 0.95 : 3.4) - this.cam.radius)*0.08*(this._zoomT > 0 ? 1 : 0); if (this._zoomT > 0) this._zoomT--; } this.sc.render(); });
+  },
+  async show(){
+    const k = this.cfg.body;
+    $('#avLoading').style.display = this.bodies[k] ? 'none' : '';
+    if (!this.bodies[k]) this.bodies[k] = await AVATAR.make(k, this.sc);
+    $('#avLoading').style.display = 'none';
+    for (const [kk, b] of Object.entries(this.bodies)){ b.root.setEnabled(kk === k); if (b.groups.idle){ if (kk === k) b.groups.idle.start(true); else b.groups.idle.stop(); } }
+    this.cur = this.bodies[k];
+    AVATAR.apply(this.cur, this.cfg);
+  },
+  setView(v){ this.view = v; this._zoomT = 40; $('#avViewBody').setAttribute('aria-pressed', v === 'body'); $('#avViewFace').setAttribute('aria-pressed', v === 'face'); },
+  status(msg, err, retry){
+    const el = $('#avStatus'); el.className = 'ave-status' + (err ? ' err' : ''); el.setAttribute('role', err ? 'alert' : 'status');
+    el.textContent = msg || '';
+    if (retry){ const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Qayta urinish'; b.onclick = retry; el.appendChild(b); }
+  },
+  renderTabs(){
+    const t = $('#avTabs'); t.innerHTML = '';
+    this.TABS.forEach((tb, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'tab'); b.id = 'avTab_' + tb.id; b.textContent = tb.name;
+      b.setAttribute('aria-selected', i === this.tab); b.setAttribute('aria-controls', 'avBody'); b.tabIndex = i === this.tab ? 0 : -1;
+      b.onclick = () => this.go(i);
+      b.onkeydown = e => {
+        let j = null;
+        if (e.key === 'ArrowRight') j = (i + 1) % this.TABS.length; if (e.key === 'ArrowLeft') j = (i - 1 + this.TABS.length) % this.TABS.length;
+        if (e.key === 'Home') j = 0; if (e.key === 'End') j = this.TABS.length - 1;
+        if (j != null){ e.preventDefault(); this.go(j); $('#avTab_' + this.TABS[j].id).focus(); }
+      };
+      t.appendChild(b);
+    });
+  },
+  go(i){
+    this.tab = clamp(i, 0, this.TABS.length - 1);
+    this.renderTabs(); this.renderTab();
+    this.setView(this.TABS[this.tab].face ? 'face' : 'body');
+    const tb = $('#avTab_' + this.TABS[this.tab].id); if (tb) tb.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  },
+  renderTab(){
+    const tb = this.TABS[this.tab], body = $('#avBody'); body.innerHTML = ''; body.setAttribute('aria-labelledby', 'avTab_' + tb.id);
+    for (const g of tb.groups){
+      if (g.when && !g.when(this.cfg)) continue;
+      const wrap = document.createElement('div'); wrap.className = 'ave-group';
+      const lid = 'avL_' + g.k;
+      wrap.innerHTML = `<div class="ave-lbl" id="${lid}">${g.label}</div>${g.hint ? `<div class="ave-hint">${g.hint}</div>` : ''}`;
+      const box = document.createElement('div'); box.setAttribute('role', 'radiogroup'); box.setAttribute('aria-labelledby', lid);
+      const items = g.pal ? g.pal : AV_OPTIONS[g.k];
+      box.className = g.pal ? 'ave-sw' : 'ave-opts';
+      const cur = this.cfg[g.k];
+      let anyChecked = items.some(([id]) => id.toLowerCase() === String(cur).toLowerCase());
+      items.forEach(([id, name], idx) => {
+        const b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'radio');
+        const on = id.toLowerCase() === String(cur).toLowerCase();
+        b.setAttribute('aria-checked', on); b.tabIndex = on || (!anyChecked && idx === 0) ? 0 : -1;
+        if (g.pal){ b.style.background = id; b.setAttribute('aria-label', name); b.title = name; }
+        else b.textContent = name;
+        b.onclick = () => this.set(g.k, id);
+        b.onkeydown = e => {
+          const list = [...box.querySelectorAll('[role=radio]')], j = list.indexOf(b);
+          let n = null;
+          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = (j + 1) % list.length;
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = (j - 1 + list.length) % list.length;
+          if (n != null){ e.preventDefault(); list[n].click(); setTimeout(() => { const nb = $('#avBody').querySelectorAll(`[aria-labelledby="${lid}"] [role=radio]`)[n]; if (nb) nb.focus(); }, 0); }
+        };
+        box.appendChild(b);
+      });
+      if (g.pal){
+        const pick = document.createElement('label'); pick.className = 'ave-pick';
+        pick.innerHTML = `<input type="color" value="${HEX_RX.test(cur) ? cur : '#888888'}" aria-label="${g.label}: boshqa rang tanlash"> Boshqa rang`;
+        pick.querySelector('input').oninput = e => this.set(g.k, e.target.value, true);
+        box.appendChild(pick);
+      }
+      wrap.appendChild(box);
+      if (g.pal){ const nm = document.createElement('div'); nm.className = 'ave-name'; nm.setAttribute('aria-live', 'polite'); nm.textContent = 'Tanlangan: ' + colorName(cur, g.pal); wrap.appendChild(nm); }
+      body.appendChild(wrap);
+    }
+    $('#avBack').disabled = this.tab === 0;
+    $('#avNext').disabled = this.tab === this.TABS.length - 1;
+  },
+  async set(k, v, fromPicker){
+    if (this.cfg[k] === v) return;
+    this.cfg = avClean({ ...this.cfg, [k]: v });
+    AVSTORE.saveDraft(this.cfg);
+    if (k === 'body'){ try { await this.show(); } catch(_){ this.status('Bu obrazni yuklab bo‘lmadi. Internetni tekshirib, qayta tanlang.', true); } }
+    else if (this.cur) AVATAR.apply(this.cur, this.cfg);
+    if (!fromPicker){ const f = document.activeElement && document.activeElement.closest && document.activeElement.closest('[role=radiogroup]'); const idx = f ? [...f.querySelectorAll('[role=radio]')].indexOf(document.activeElement) : -1;
+      this.renderTab();
+      if (f && idx >= 0){ const nb = $('#avBody').querySelectorAll(`[aria-labelledby="${f.getAttribute('aria-labelledby')}"] [role=radio]`)[idx]; if (nb) nb.focus(); } }
+    else { const nm = [...$('#avBody').querySelectorAll('.ave-group')].find(g => g.querySelector(`#avL_${k}`)); if (nm){ const el = nm.querySelector('.ave-name'); if (el) el.textContent = 'Tanlangan: Boshqa rang (' + v.toUpperCase() + ')'; nm.querySelectorAll('[role=radio]').forEach(b => b.setAttribute('aria-checked', 'false')); } }
+  },
+  randomize(){
+    const pick = a => a[Math.floor(Math.random()*a.length)];
+    const body = pick(AV_OPTIONS.body)[0];
+    const c = {
+      body, face: pick(AV_OPTIONS.face)[0], skin: pick(AV_SKIN)[0], eyes: pick(AV_OPTIONS.eyes)[0], eyeColor: pick(AV_EYE)[0],
+      brows: pick(AV_OPTIONS.brows)[0], nose: pick(AV_OPTIONS.nose)[0], mouth: pick(AV_OPTIONS.mouth)[0],
+      hair: pick(body === 'm' ? ['short', 'short', 'mid', 'bald'] : body === 'f' ? ['long', 'mid', 'bun', 'long'] : ['short', 'mid', 'long', 'bun']),
+      hairColor: pick(AV_HAIR.slice(0, 9))[0],
+      outfit: pick(body === 'm' ? ['tee', 'shirt', 'jacket', 'chopon', 'shorts'] : ['tee', 'shirt', 'skirt', 'jacket', 'chopon']),
+      top: pick(AV_CLOTH)[0], bottom: pick(AV_CLOTH)[0], outer: pick(AV_CLOTH)[0], shoes: pick(['#1c1c1e', '#16181c', '#8a6f4f', '#f2f0ea', '#2c3e5c'])
+    };
+    c.glasses = Math.random() < 0.25 ? pick(['round', 'square', 'sun']) : 'none';
+    c.hat = Math.random() < 0.3 ? pick(['doppi', 'cap', 'wide']) : 'none';
+    c.hatColor = c.hat === 'doppi' ? '#111111' : pick(AV_CLOTH)[0];
+    if (c.top === c.bottom) c.bottom = '#2c3e5c';
+    const prevBody = this.cfg.body;
+    this.cfg = avClean(c); AVSTORE.saveDraft(this.cfg);
+    (prevBody !== this.cfg.body ? this.show() : Promise.resolve(AVATAR.apply(this.cur, this.cfg))).catch(() => {});
+    this.renderTab(); this.status('Tasodifiy obraz yaratildi. Yoqmasa, yana bosing yoki bo‘limlarda o‘zgartiring.');
+  },
+  async save(){
+    if (this.busy) return;
+    this.busy = true; $('#avSave').disabled = true; $('#avSave').textContent = 'Saqlanmoqda…'; this.status('');
+    try {
+      const c = await AVSTORE.save(this.cfg);
+      this.status('Saqlandi ✓');
+      toast('Obrazingiz saqlandi');
+      setTimeout(() => this.close(c), 350);
+    } catch(e){
+      const why = e && e.status === 401 ? 'Tizimdan chiqib ketgansiz — qayta kiring.' : e && e.message && e.status ? e.message : 'Internet aloqasi yo‘q yoki server javob bermadi.';
+      this.status('Saqlab bo‘lmadi: ' + why + ' Tanlovlaringiz yo‘qolmadi.', true, () => this.save());
+    } finally { this.busy = false; $('#avSave').disabled = false; $('#avSave').textContent = 'Saqlash'; }
+  },
+};
+$('#avClose').onclick = () => { AVSTORE.saveDraft(AVED.cfg); toast('Tanlovlaringiz saqlab qo‘yildi — keyin davom ettirasiz'); AVED.close(null); };
+$('#avRandom').onclick = () => AVED.randomize();
+$('#avBack').onclick = () => AVED.go(AVED.tab - 1);
+$('#avNext').onclick = () => AVED.go(AVED.tab + 1);
+$('#avSave').onclick = () => AVED.save();
+$('#avViewBody').onclick = () => AVED.setView('body');
+$('#avViewFace').onclick = () => AVED.setView('face');
+$('#avTurnL').onclick = () => { if (AVED.cam) AVED.cam.alpha += 0.4; };
+$('#avTurnR').onclick = () => { if (AVED.cam) AVED.cam.alpha -= 0.4; };
+// keyboard: Esc closes (the draft stays); Tab stays inside the dialog
+$('#avEd').addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); $('#avClose').click(); return; }
+  if (e.key === 'Tab'){
+    const f = [...$('#avEd').querySelectorAll('button:not([disabled]),input,[tabindex="0"]')].filter(el => el.offsetParent !== null);
+    if (!f.length) return; const i = f.indexOf(document.activeElement);
+    if (e.shiftKey && (i <= 0)){ e.preventDefault(); f[f.length - 1].focus(); }
+    else if (!e.shiftKey && i === f.length - 1){ e.preventDefault(); f[0].focus(); }
+  }
+});
+// the editor's own keys must not move the city camera behind it
+for (const ev of ['keydown', 'keyup']) $('#avEd').addEventListener(ev, e => e.stopPropagation());
+// first visit: the editor once, right after sign-in (or the first walk in the offline demo)
+async function avatarFirstRun(){
+  if (AVSTORE.saved()) return AVSTORE.saved();
+  return AVED.start({ first: true });
+}
 
 // ---------- populate others ----------
 function hexArr(h){ const c=hex(h); return [c.r,c.g,c.b,1]; }
@@ -4926,10 +5370,12 @@ function openSettings(){
     ${API.on && API.me && API.me.telegram ? `<label class="chk" style="margin:0 0 14px"><input type="checkbox" id="tgToggle" ${API.me.showTelegram?'checked':''}> Mening Telegram nikim (@${esc(API.me.telegram)}) boshqalarga ko‘rinsin</label>` : ''}
     <div class="lbl2" style="margin-bottom:6px">Vaqt tezligi</div>
     <div class="seg" id="sseg">${[[0,'To‘xtatish'],[1,'1× (kun = 24 daq)'],[10,'10×']].map(([v,l])=>`<button data-s="${v}" class="${sp===v?'on':''}">${l}</button>`).join('')}</div>
+    <div class="row" style="margin-bottom:12px"><button class="btn" id="avatarBtn">🧍 Obrazimni o‘zgartirish</button></div>
     ${API.on ? '<div class="row" style="margin-bottom:12px"><button class="btn" id="logoutBtn">Chiqish</button></div>' : ''}
     <div class="note">Past — soyasiz, tez. O‘rta — soyalar va silliqlash. Yuqori — chuqur soyalar, yorug‘lik porlashi va kino ranglari.</div>`, 'settings');
   body.querySelectorAll('[data-q]').forEach(el=>el.onclick=()=>{ S.quality=el.dataset.q; applyQuality(S.quality==='auto'?autoStart():S.quality); openSettings(); });
   body.querySelectorAll('[data-s]').forEach(el=>el.onclick=()=>{ S.speed=+el.dataset.s; openSettings(); });
+  $('#avatarBtn').onclick = async ()=>{ if (API.on && !(await ensureLogin())) return; closeSheet(); const c = await AVED.start(); if (c && WALK.on) walkUseAvatar(c); };
   if ($('#logoutBtn')) $('#logoutBtn').onclick = async ()=>{ try { await api('POST','/api/auth/logout'); } catch(_){} location.reload(); };
   $('#lblToggle').onchange = e=>{ LBL.on = e.target.checked; lblTimer = 0; };
   if ($('#tgToggle')) $('#tgToggle').onchange = async e=>{
@@ -5624,6 +6070,7 @@ async function ensureLogin(){
   if (!API.me){ const ok = await showLogin(API.opts); if (!ok){ closeAuth(); return false; } await refreshMe(); }
   if (!API.me.nickname){ await showNickname(); await refreshMe(); }
   closeAuth();
+  if (!API.me.avatar3d) await AVED.start({ first: true });
   try { applyCity(await api('GET','/api/city')); flushBuffers(); } catch(_){}
   return true;
 }
@@ -5666,6 +6113,7 @@ async function boot(){
   try { me = await refreshMe(); } catch(_){}
   if (!me || !me.nickname){ showHero(); setPopulation(city.stats ? city.stats.residents : 0); return; }
   closeAuth();
+  if (!me.avatar3d) setTimeout(() => AVED.start({ first: true }), 600);       // signed in but no avatar yet: make one (once per visit)
   // re-mark my plots now that we know who "me" is
   applyCity(await api('GET','/api/city'));
   pads.flush();
@@ -5680,7 +6128,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>

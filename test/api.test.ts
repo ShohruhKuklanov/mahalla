@@ -476,3 +476,32 @@ test('cars: the same buy sent twice charges once; the founder keeps the white Tr
   assert.equal(car.color, '#f2f3f1');
   assert.equal((await f.me()).balance, 10000);
 });
+
+test('3D avatar: none at first, a draft is kept apart, saving validates and replaces the draft', async () => {
+  const a = await player('avatar_1');
+  let me = await a.me();
+  assert.equal(me.avatar3d, null); assert.equal(me.avatar3dDraft, null);
+  // a half-finished draft: missing fields get defaults, nothing is "saved" yet
+  const d = await a.call('POST', '/api/me/avatar3d', { avatar: { body: 'f', hair: 'long' }, draft: true });
+  assert.equal(d.statusCode, 200, d.body);
+  me = await a.me();
+  assert.equal(me.avatar3d, null);
+  assert.equal(me.avatar3dDraft.body, 'f'); assert.equal(me.avatar3dDraft.hair, 'long'); assert.equal(me.avatar3dDraft.face, 'oval');
+  // save: neutral body, glasses and a doppi; the draft is cleared
+  const full = { v: 1, body: 'n', face: 'round', skin: '#8d5a3b', eyes: 'big', eyeColor: '#2f5d3a', brows: 'thick', nose: 'wide', mouth: 'full',
+    hair: 'bun', hairColor: '#b0563a', outfit: 'chopon', top: '#ffffff', bottom: '#222222', outer: '#2b4c7e', shoes: '#3b2a1e',
+    glasses: 'round', hat: 'doppi', hatColor: '#111111' };
+  const s = await a.call('POST', '/api/me/avatar3d', { avatar: full });
+  assert.equal(s.statusCode, 200, s.body);
+  me = await a.me();
+  assert.deepEqual(me.avatar3d, full); assert.equal(me.avatar3dDraft, null);
+  // bad values are refused with a readable message; the saved avatar stays
+  for (const bad of [{ ...full, skin: 'red' }, { ...full, hat: 'crown' }, { ...full, extra: 1 }, { ...full, v: 2 }]) {
+    const r = await a.call('POST', '/api/me/avatar3d', { avatar: bad });
+    assert.equal(r.statusCode, 400, r.body); assert.equal(r.json().error, 'bad_avatar'); assert.ok(r.json().message);
+  }
+  assert.deepEqual((await a.me()).avatar3d, full);
+  // only the owner: signed-out requests are refused
+  const anon = await app.inject({ method: 'POST', url: '/api/me/avatar3d', payload: { avatar: full } });
+  assert.equal(anon.statusCode, 401);
+});
