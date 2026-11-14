@@ -38,7 +38,7 @@ export async function buildApp(db: Db, opts: { logger?: boolean; rateLimit?: boo
   app.get('/ws', { websocket: true }, (socket, req) => {
     sockets.add(socket);
     const userP = sessionUser(db, req.cookies?.[SESSION_COOKIE]).catch(() => null);
-    socket.send(JSON.stringify(presence.snapshot()));
+    setTimeout(() => { if (socket.readyState === 1) socket.send(JSON.stringify(presence.snapshot())); }, 50);   // who is out, and the latest city chat
     socket.on('close', () => { sockets.delete(socket); presence.closed(socket); });
     socket.on('message', async (buf: Buffer) => {
       if (buf.length > 600) return;

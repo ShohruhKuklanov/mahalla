@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Db } from './db.js';
 import { readAvatar, type Avatar } from './avatar.js';
 import { CAR } from './economy.js';
+import { isCleanText } from './nickname.js';
 
 /**
  * Who is out walking or driving in the city right now. A walking player's client sends its position over the
@@ -20,8 +21,14 @@ const posMsg = z.object({
   car: z.object({ model: z.string().max(24), color: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).nullable().optional(),
 });
 
+/** City chat: short public lines, near (shown as a bubble to those close by) or to the whole city. */
+const LINK_RX = /(https?:\/\/|www\.|t\.me|@[a-z0-9_]{4,}|\.(com|uz|ru|org|net)\b)/i;
+const chatMsg = z.object({ type: z.literal('chat'), text: z.string().min(1).max(200), scope: z.enum(['near', 'all']) });
+
 export function createPresence(db: Db, broadcast: (msg: unknown, except?: WebSocket) => void) {
   const players = new Map<number, Player>();
+  const history: unknown[] = [];                                       // the last city-wide lines, for newcomers
+  const said = new Map<number, number[]>();                            // user id → recent send times (rate limit)
   const pav = (p: Player) => ({ type: 'pav', id: p.id, nick: p.nick, avatar: p.avatar });
   const remove = (id: number) => { if (players.delete(id)) broadcast({ type: 'pgone', id }); };
   async function loadAvatar(id: number) {
@@ -30,12 +37,27 @@ export function createPresence(db: Db, broadcast: (msg: unknown, except?: WebSoc
   }
   return {
     players,
-    snapshot: () => ({ type: 'pinit', players: [...players.values()].map(pav) }),
+    snapshot: () => ({ type: 'pinit', players: [...players.values()].map(pav), chat: history }),
     /** a message from a signed-in socket; returns nothing, answers by broadcast */
     async message(sock: WebSocket, user: { id: number; nickname: string | null }, raw: unknown) {
       if (!user.nickname) return;
       const m = raw as any;
       if (m && m.type === 'leave') { const p = players.get(user.id); if (p && p.sock === sock) remove(user.id); return; }
+      if (m && m.type === 'chat') {
+        const r = chatMsg.safeParse(raw); if (!r.success) return;
+        const text = r.data.text.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!text) return;
+        const now = Date.now(), times = (said.get(user.id) || []).filter((t) => now - t < 60000);
+        if (times.length && now - times[times.length - 1] < 1200 || times.length >= 20) { sock.send(JSON.stringify({ type: 'chaterr', message: 'Juda tez yozyapsiz — biroz kuting.' })); return; }
+        if (!isCleanText(text)) { sock.send(JSON.stringify({ type: 'chaterr', message: 'Xabarda nomaqbul so‘z bor. Hurmat bilan yozing.' })); return; }
+        if (LINK_RX.test(text)) { sock.send(JSON.stringify({ type: 'chaterr', message: 'Chatga havola, nik yoki sayt manzilini yozib bo‘lmaydi.' })); return; }
+        times.push(now); said.set(user.id, times);
+        const p = players.get(user.id);
+        const out = { type: 'chat', id: user.id, nick: user.nickname, text, scope: p ? r.data.scope : 'all', x: p ? p.x : null, z: p ? p.z : null, t: now };
+        if (out.scope === 'all'){ history.push(out); if (history.length > 30) history.shift(); }
+        broadcast(out);
+        return;
+      }
       if (m && m.type === 'avatar') {
         const p = players.get(user.id); if (!p) return;
         p.avatar = await loadAvatar(user.id); broadcast(pav(p)); return;

@@ -559,3 +559,39 @@ test('walkers: a walking player is seen by others with nickname and avatar; bad 
   assert.ok(got.some((m) => m.type === 'pgone'));
   wsA.terminate(); wsB.terminate(); anon.terminate();
 });
+
+test('city chat: signed-in players talk to each other; rude words, links and flooding are refused', async () => {
+  const login = async (name: string) => {
+    const r = await app.inject({ method: 'POST', url: '/api/auth/dev', payload: { name } });
+    const cookie = String(r.headers['set-cookie']).split(';')[0];
+    await app.inject({ method: 'POST', url: '/api/me/nickname', payload: { nickname: name, confirm16: true }, headers: { cookie } });
+    return cookie;
+  };
+  const ca = await login('talker_a'), cb = await login('talker_b');
+  const gotA: any[] = [], gotB: any[] = [];
+  const wsA = await app.injectWS('/ws', { headers: { cookie: ca } }); wsA.on('message', (d: any) => gotA.push(JSON.parse(String(d))));
+  const wsB = await app.injectWS('/ws', { headers: { cookie: cb } }); wsB.on('message', (d: any) => gotB.push(JSON.parse(String(d))));
+  const anon = await app.injectWS('/ws');
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  wsA.send(JSON.stringify({ type: 'chat', text: '  Salom,   hammaga!  ', scope: 'all' }));
+  anon.send(JSON.stringify({ type: 'chat', text: 'anonim', scope: 'all' }));
+  await wait(300);
+  const line = gotB.find((m) => m.type === 'chat');
+  assert.ok(line, JSON.stringify(gotB));
+  assert.equal(line.nick, 'talker_a'); assert.equal(line.text, 'Salom, hammaga!');
+  assert.ok(!gotB.some((m) => m.type === 'chat' && m.text === 'anonim'));
+  // too fast, a link: refused with a message to the sender only
+  wsA.send(JSON.stringify({ type: 'chat', text: 'yana', scope: 'all' }));
+  await wait(1300);
+  wsA.send(JSON.stringify({ type: 'chat', text: 'kanalim t.me/spam', scope: 'all' }));
+  await wait(300);
+  const errs = gotA.filter((m) => m.type === 'chaterr').map((m) => m.message);
+  assert.equal(errs.length, 2, JSON.stringify(errs));
+  assert.equal(gotB.filter((m) => m.type === 'chat').length, 1);
+  // a newcomer sees the recent city-wide lines
+  const late: any[] = []; const wsC = await app.injectWS('/ws', { headers: { cookie: cb } }); wsC.on('message', (d: any) => late.push(JSON.parse(String(d))));
+  await wait(200);
+  const init = late.find((m) => m.type === 'pinit');
+  assert.ok(init && init.chat.some((c: any) => c.text === 'Salom, hammaga!'));
+  wsA.terminate(); wsB.terminate(); wsC.terminate(); anon.terminate();
+});

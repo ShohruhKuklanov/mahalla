@@ -235,6 +235,28 @@
   #qDone .qd-e{font-size:12.5px;color:#ffd2cb;margin-top:6px} #qDone .qd-b{display:flex;gap:8px;justify-content:center;margin-top:12px}
   body.driving #walkRun{display:none}
   @media (max-width:700px){ #actBtn{bottom:190px;right:14px;font-size:14px} #dlg{bottom:180px} #qTrack{top:64px} }
+  /* ---------- city chat ---------- */
+  #chatBtn{margin-left:8px;min-height:40px;padding:0 12px;font-weight:800;font-size:13px;color:var(--ink);pointer-events:auto;position:relative}
+  #chatBadge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--danger);color:#fff;font:800 11px/18px Manrope,sans-serif;font-style:normal}
+  @media (max-width:520px){ #chatBtn span{display:none} }
+  #chatBox{position:fixed;left:12px;bottom:110px;z-index:9;width:min(360px,calc(100% - 24px));max-height:46vh;display:flex;flex-direction:column;border-radius:16px;background:rgba(18,22,30,.9);border:1px solid var(--line);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  #chatBox[hidden]{display:none}
+  body.walking #chatBox{bottom:200px}
+  .ch-h{display:flex;align-items:center;padding:10px 12px 4px} .ch-h b{flex:1;font-size:13px} .ch-h button{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.07)}
+  #chatLog{list-style:none;margin:0;padding:4px 12px;overflow-y:auto;flex:1;min-height:60px;font-size:13.5px;line-height:1.4}
+  #chatLog li{margin:3px 0;word-wrap:break-word} #chatLog li.sys{color:var(--muted);font-size:12.5px} #chatLog li.err{color:#ffb4a8}
+  #chatLog .cn{font-weight:800;color:#7fe0c9;padding:0;font-size:13.5px} #chatLog .cn.mine{color:var(--gold)}
+  .ch-n{font-size:12px;color:var(--gold);padding:0 12px}
+  #chatForm{display:flex;gap:6px;padding:8px 10px 4px} #chatForm input{flex:1;min-width:0;height:42px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);padding:0 12px;font:500 14px Manrope,sans-serif}
+  #chatScope{flex:0 0 auto;height:42px;padding:0 10px;border-radius:12px;background:rgba(255,255,255,.08);font-weight:700;font-size:12px}
+  .ch-send{width:42px;height:42px;border-radius:12px;background:var(--accent);color:var(--accent-ink);font-weight:900}
+  .ch-r{font-size:11px;color:var(--muted);padding:0 12px 10px}
+  #chatMenu{position:fixed;z-index:12;display:flex;flex-direction:column;gap:4px;min-width:200px;padding:10px;border-radius:14px;background:rgba(18,22,30,.96);border:1px solid var(--line)}
+  #chatMenu b{padding:2px 6px 6px} #chatMenu button{text-align:left;min-height:40px;padding:0 10px;border-radius:10px;background:rgba(255,255,255,.06);font-weight:700}
+  #chatBox :focus-visible,#chatMenu :focus-visible,#chatBtn:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+  .wlbl .bub{position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);max-width:240px;width:max-content;padding:7px 11px;border-radius:12px;background:#fff;color:#14171f;font:600 13px/1.35 Manrope,sans-serif;white-space:normal;text-shadow:none;box-shadow:0 6px 16px rgba(0,0,0,.3)}
+  .wlbl .bub::after{content:"";position:absolute;left:50%;top:100%;margin-left:-6px;border:6px solid transparent;border-top-color:#fff}
+  .wlbl.me{background:none;border:0;padding:0} .wlbl.me::before{display:none}
   /* ---------- other walkers' name tags ---------- */
   #wlabels{position:fixed;inset:0;z-index:3;pointer-events:none;overflow:hidden}
   .wlbl{position:absolute;left:0;top:0;padding:4px 10px;border-radius:999px;background:rgba(18,20,40,.78);border:1px solid rgba(127,224,201,.55);color:#fff;font:800 12.5px/1.2 Manrope,system-ui,sans-serif;white-space:nowrap;transform-origin:50% 100%;will-change:transform;text-shadow:0 1px 2px rgba(0,0,0,.5)}
@@ -455,6 +477,7 @@
     <span class="vsep"></span>
     <span class="chip" id="clockChip"><span id="clockIcon">☀</span><span id="clock">16:00</span></span>
   </div>
+  <button type="button" class="cap mini" id="chatBtn" aria-expanded="false" aria-controls="chatBox" title="Chat (T)">💬 <span>Chat</span><i id="chatBadge" hidden></i></button>
   <button type="button" class="cap mini" id="avChip" title="Obrazim" aria-label="Obrazim: 3D avatarni yaratish yoki o‘zgartirish">🧍 <span>Obrazim</span></button>
   <div class="spacer"></div>
   <div class="cap mini" id="fps">— fps</div>
@@ -502,8 +525,16 @@
     </div>
   </div>
 </div>
+<div id="chatBox" hidden role="region" aria-label="Shahar chati">
+  <div class="ch-h"><b>💬 Shahar chati</b><button type="button" id="chatClose" aria-label="Chatni yopish">✕</button></div>
+  <ul id="chatLog" role="log" aria-live="polite" aria-relevant="additions"></ul>
+  <div id="chatNote" class="ch-n"></div>
+  <form id="chatForm" autocomplete="off"><button type="button" id="chatScope"></button><input id="chatIn" maxlength="200" placeholder="Xabar yozing…" aria-label="Chat xabari"><button type="submit" class="ch-send" aria-label="Yuborish">➤</button></form>
+  <div class="ch-r">Hurmat bilan yozing. Havola va shaxsiy ma’lumot yubormang.</div>
+</div>
+<div id="chatMenu" hidden role="menu"></div>
 <div id="walkHud">
-  <div class="wk-bar"><button id="walkExit" title="Piyoda rejimdan chiqish">✕ Chiqish</button><button id="walkSwap" title="Obrazni o‘zgartirish">👤 Obraz</button><button id="walkQuests" title="Vazifalar (Q)" aria-label="Vazifalar ro‘yxati">📜 Vazifalar</button><button id="walkRun" title="Yugurish" aria-label="Yugurish">🏃</button></div>
+  <div class="wk-bar"><button id="walkExit" title="Piyoda rejimdan chiqish">✕ Chiqish</button><button id="walkSwap" title="Obrazni o‘zgartirish">👤 Obraz</button><button id="walkQuests" title="Vazifalar (Q)" aria-label="Vazifalar ro‘yxati">📜 Vazifalar</button><button id="walkChat" title="Chat (T)" aria-label="Chat">💬 Chat</button><button id="walkRun" title="Yugurish" aria-label="Yugurish">🏃</button><button id="walkJump" title="Sakrash (Tab)" aria-label="Sakrash">⤒ Sakrash</button></div>
   <div id="qTrack" hidden role="status" aria-live="polite"><div class="qt-t"></div><div class="qt-s"></div><div class="qt-d"></div></div>
   <div id="speedo" hidden aria-live="off"><b>0</b><span>km/soat</span></div>
   <button type="button" id="actBtn" hidden></button>
@@ -511,7 +542,7 @@
   <div id="qLog" hidden role="dialog" aria-labelledby="qLogT"><div class="ql-h"><h3 id="qLogT">Vazifalar</h3><button type="button" id="qLogClose" aria-label="Yopish">✕</button></div><ul id="qLogList"></ul><p class="ql-n">Odamlar tepasidagi <b>!</b> — sizga vazifasi bor, <b>?</b> — sizni kutyapti. Oltin nur va bosh ustidagi strelka yo‘l ko‘rsatadi.</p></div>
   <div id="qDone" hidden role="alert"><div class="qd-k">🎉 Vazifa bajarildi</div><div class="qd-t"></div><div class="qd-r"></div><div class="qd-e"></div><div class="qd-b"><button type="button" class="btn qd-x" hidden>Qayta urinish</button><button type="button" class="btn qd-c">Yopish</button></div></div>
   <div id="inside" hidden><div class="in-k">🚪 Siz ichkaridasiz</div><b id="inName"></b><div id="inSub"></div><div class="in-row"><button id="inOut">🚪 Tashqariga chiqish</button><button id="inInfo">ℹ️ Bino haqida</button></div></div>
-  <div id="walkHint">W / ↑ — oldinga · S / ↓ — orqaga · A D — burilish · Shift — yugurish · E — gaplashish / mashina · Q — vazifalar · sichqoncha — kamera · gamepad ham ishlaydi</div>
+  <div id="walkHint">W / ↑ — oldinga · S / ↓ — orqaga · A D — burilish · Shift — yugurish · Tab — sakrash · E — gaplashish / mashina · Q — vazifalar · sichqoncha — kamera · gamepad ham ishlaydi</div>
   <div id="joy"><i></i></div>
 </div>
 
@@ -4189,7 +4220,7 @@ function realLook(p, shirt, pants, skin){
 // =================== WALKING ===================
 // "Piyoda yurish": a person appears where you look; W/S (or the joystick) walks, A/D turns, Shift runs; the camera
 // follows from behind and can be swung round by dragging. Buildings and water stop you; you step up kerbs.
-const WALK = { on: false, k: 'm', av: null, x: 0, z: 0, y: 0.3, yaw: 0, speed: 0, run: false, camT: 0, joy: { x: 0, y: 0, id: null }, saved: null, w: { idle: 1, walk: 0, run: 0 } };
+const WALK = { jy: 0, vy: 0, on: false, k: 'm', av: null, x: 0, z: 0, y: 0.3, yaw: 0, speed: 0, run: false, camT: 0, joy: { x: 0, y: 0, id: null }, saved: null, w: { idle: 1, walk: 0, run: 0 } };
 function walkGround(x, z){
   const gx = Math.floor((x - X0)/PITCH), gz = Math.floor((z - Z0)/PITCH);
   if (gx >= 0 && gz >= 0 && gx < GX && gz < GZ){
@@ -4421,14 +4452,17 @@ function walkUpdate(dt){
     else WALK.speed *= 0.5;
   }
   WALK.y += (walkGround(WALK.x, WALK.z) - WALK.y)*Math.min(1, dt*14);
+  // a jump: up at 4.4 m/s, down with gravity (about half a metre high, ~0.9 s in the air)
+  if (WALK.jy > 0 || WALK.vy > 0){ WALK.vy -= 9.8*dt; WALK.jy += WALK.vy*dt; if (WALK.jy <= 0){ WALK.jy = 0; WALK.vy = 0; } }
   // the body: place, turn, blend idle → walk → run, step rate matched to the ground speed
   const av = WALK.av, sp = WALK.speed;
-  av.node.position.set(WALK.x, WALK.y, WALK.z); av.node.rotation.y = WALK.yaw;
+  av.node.position.set(WALK.x, WALK.y + WALK.jy, WALK.z); av.node.rotation.y = WALK.yaw;
   const wr = clamp((sp - 1.7)/2.2, 0, 1), wi = clamp(1 - sp/0.9, 0, 1);
   const tgt = { idle: wi, walk: (1 - wi)*(1 - wr), run: (1 - wi)*wr };
   for (const [n, g] of Object.entries(av.groups)){ WALK.w[n] += (tgt[n] - WALK.w[n])*Math.min(1, dt*10); g.weight = WALK.w[n]; }
   av.groups.walk.speedRatio = clamp(sp/HUMAN_WALK_MS, 0.6, 1.5)*(back ? -1 : 1);
   av.groups.run.speedRatio = clamp(sp/HUMAN_RUN_MS, 0.8, 1.4);
+  if (WALK.jy > 0){ av.groups.walk.speedRatio = 0.15; av.groups.run.speedRatio = 0.15; }   // legs hold the stride in the air
   // the camera: behind the head; it swings back behind you a moment after you stop dragging it
   camera.target.set(WALK.x, WALK.y + 1.5, WALK.z);
   if (!gest && performance.now() > WALK.camT && (sp > 0.3 || turn)){
@@ -4444,6 +4478,16 @@ $('#walkBtn').onclick = () => walkEnter();
 setTimeout(() => { if (S.qActive !== 'low') humanLoad(); }, 5000);
 $('#walkExit').onclick = () => walkExit();
 $('#walkSwap').onclick = async () => { const c = await AVED.start(); if (c && WALK.on) walkUseAvatar(c); };
+function walkJump(){
+  if (!WALK.on || DRIVE.on || WALK.inside || WALK.jy > 0 || PLAY.dlg || PLAY.logOpen) return;
+  WALK.vy = 4.4; WALK.jy = 0.001;
+}
+$('#walkJump').onclick = () => walkJump();
+window.addEventListener('keydown', e => {
+  if (e.key !== 'Tab' || !WALK.on || AVED.open || DRIVE.on) return;
+  const t = e.target; if (t && (t.tagName === 'INPUT' || t.closest && (t.closest('#dlg') || t.closest('#qLog') || t.closest('#chatBox') || t.closest('#inside')))) return;   // Tab still moves focus in dialogs
+  e.preventDefault(); walkJump();
+});
 $('#walkRun').onclick = () => { WALK.run = !WALK.run; $('#walkRun').classList.toggle('on', WALK.run); };
 window.addEventListener('keydown', e => { if (WALK.on && e.key === 'Escape') walkExit(); });
 // the on-screen joystick (touch screens)
@@ -5254,6 +5298,7 @@ function gpButtons(){
   if (gpPressed(0)) PLAY.action();
   if (gpPressed(3)) PLAY.logOpen ? PLAY.closeLog() : PLAY.openLog();
   if (gpPressed(1)){ PLAY.dlgClose(); PLAY.closeLog(); }
+  if (gpPressed(5)) walkJump();
   if (gpPressed(2) && !DRIVE.on){ WALK.run = !WALK.run; $('#walkRun').classList.toggle('on', WALK.run); }
   if (GP.rx || GP.ry){ camera.alpha -= GP.rx*0.045; camera.beta = clamp(camera.beta - GP.ry*0.03, camera.lowerBetaLimit, camera.upperBetaLimit); WALK.camT = performance.now() + 1500; }
 }
@@ -5275,7 +5320,7 @@ function otherGet(id){
   return o;
 }
 function otherSetLook(o, nick, avatar){
-  if (nick){ o.nick = nick; o.el.textContent = nick; }
+  if (nick){ o.nick = nick; o.el.textContent = nick; o._bub = null; }
   o.cfg = avClean(avatar || { body: 'n' });
   if (o.a && o.k !== o.cfg.body){ o.a.root.dispose(false, true); o.a = null; }
   if (o.a) AVATAR.apply(o.a, o.cfg);
@@ -5381,6 +5426,115 @@ function demoWalkers(dt){
     o.s = { x, y: walkGround(x, z), z, yaw, mode: 'walk', speed: d.v };
     if (o.x === 0 && o.z === 0){ o.x = x; o.z = z; o.yaw = yaw; }
   }
+}
+
+// =================== CITY CHAT: talking to the other walkers ===================
+// Lines go over the websocket (src/presence.ts checks, cleans and rate-limits them). "Yaqindagilar" lines show as a
+// bubble over the speaker and in the log of people within 60 m; "Butun shahar" lines go to everyone. You can mute
+// someone (kept in this browser) or report a line. The offline demo's residents chat a little too.
+const CHAT = {
+  open: false, unread: 0, scope: 'near', muted: new Set(), bubbles: new Map(), lines: [],
+  NEAR: 60,
+  init(){
+    try { this.muted = new Set(JSON.parse(localStorage.getItem('susambil_muted') || '[]')); } catch(_){}
+    this.me = document.createElement('div'); this.me.className = 'wlbl me'; this.me.style.display = 'none'; wlLayer.appendChild(this.me);
+  },
+  canSend(){ return API.on ? !!(API.me && API.me.nickname) : true; },
+  toggle(on = !this.open){
+    this.open = on; $('#chatBox').hidden = !on; $('#chatBtn').setAttribute('aria-expanded', on);
+    if (on){ this.unread = 0; this.badge(); this.render(); setTimeout(() => $('#chatIn').focus(), 30);
+      $('#chatNote').textContent = this.canSend() ? '' : 'Yozish uchun tizimga kiring va nik tanlang.'; }
+  },
+  badge(){ const b = $('#chatBadge'); b.textContent = this.unread > 9 ? '9+' : this.unread; b.hidden = !this.unread; },
+  setScope(s){ this.scope = s; $('#chatScope').textContent = s === 'near' ? '🗣 Yaqindagilar' : '🌐 Butun shahar'; $('#chatScope').setAttribute('aria-label', 'Kimga: ' + (s === 'near' ? 'yaqindagilarga (60 m)' : 'butun shaharga') + '. Almashtirish uchun bosing'); },
+  where(){ return WALK.on ? { x: WALK.x, z: WALK.z } : { x: camera.target.x, z: camera.target.z }; },
+  async send(){
+    const inp = $('#chatIn'), text = inp.value.replace(/\s+/g, ' ').trim();
+    if (!text) return;
+    if (API.on && !this.canSend()){ if (!(await ensureLogin())) return; }
+    if (API.on){
+      if (!WSC || WSC.readyState !== 1){ this.system('Aloqa yo‘q — biroz kutib, qayta yuboring.', true); return; }
+      WSC.send(JSON.stringify({ type: 'chat', text: text.slice(0, 200), scope: WALK.on ? this.scope : 'all' }));
+    } else {
+      const p = this.where(); this.receive({ id: 'me', nick: 'Siz', text: text.slice(0, 200), scope: this.scope, x: p.x, z: p.z, t: Date.now() });
+    }
+    inp.value = '';
+  },
+  receive(m){
+    const mine = m.id === 'me' || (API.me && m.id === API.me.id);
+    if (!mine && this.muted.has(m.id)) return;
+    if (m.scope === 'near' && !mine && m.x != null){ const p = this.where(); if (Math.hypot(m.x - p.x, m.z - p.z) > this.NEAR) return; }
+    this.lines.push({ ...m, mine }); if (this.lines.length > 80) this.lines.shift();
+    this.bubbles.set(mine ? 'me' : m.id, { text: m.text, until: performance.now() + 7000 });
+    if (this.open) this.render(); else if (!mine){ this.unread++; this.badge(); }
+  },
+  system(text, err){ this.lines.push({ sys: true, text, err }); if (this.open) this.render(); else { this.unread++; this.badge(); } },
+  render(){
+    const log = $('#chatLog'); log.innerHTML = '';
+    for (const l of this.lines.slice(-40)){
+      const li = document.createElement('li');
+      if (l.sys){ li.className = 'sys' + (l.err ? ' err' : ''); li.textContent = l.text; }
+      else {
+        const nb = document.createElement('button'); nb.type = 'button'; nb.className = 'cn' + (l.mine ? ' mine' : ''); nb.textContent = l.mine ? 'Siz' : l.nick;
+        if (!l.mine) nb.onclick = () => this.menu(l, nb); else nb.disabled = true;
+        const tx = document.createElement('span'); tx.textContent = (l.scope === 'all' ? ' 🌐 ' : ' ') + l.text;
+        li.append(nb, tx);
+      }
+      log.appendChild(li);
+    }
+    log.scrollTop = log.scrollHeight;
+  },
+  menu(l, anchor){
+    const box = $('#chatMenu'); box.hidden = false;
+    box.innerHTML = `<b>${esc(l.nick)}</b><button type="button" data-a="mute">🔇 Jim qilish</button>${API.on && typeof l.id === 'number' && l.id > 0 ? '<button type="button" data-a="rep">⚑ Shikoyat qilish</button>' : ''}<button type="button" data-a="x">Yopish</button>`;
+    const r = anchor.getBoundingClientRect(); box.style.left = Math.min(r.left, innerWidth - 220) + 'px'; box.style.top = Math.max(8, r.top - 150) + 'px';
+    box.querySelector('[data-a=mute]').onclick = () => { this.muted.add(l.id); try { localStorage.setItem('susambil_muted', JSON.stringify([...this.muted])); } catch(_){}
+      this.lines = this.lines.filter(x => x.id !== l.id); this.bubbles.delete(l.id); box.hidden = true; this.system(`${l.nick} jim qilindi. Uning xabarlari endi sizga ko‘rinmaydi.`); };
+    const rb = box.querySelector('[data-a=rep]');
+    if (rb) rb.onclick = async () => { box.hidden = true;
+      try { await api('POST', '/api/reports', { targetType: 'user', targetId: l.id, reason: ('Chatdagi xabar: ' + l.text).slice(0, 300) }); this.system('Shikoyat yuborildi. Moderatorlar ko‘rib chiqadi.'); }
+      catch(e){ this.system('Shikoyatni yuborib bo‘lmadi: ' + e.message, true); } };
+    box.querySelector('[data-a=x]').onclick = () => { box.hidden = true; };
+    setTimeout(() => box.querySelector('button').focus(), 20);
+  },
+  // the speech bubbles: over the other walkers' name tags, and over your own head
+  frame(){
+    const now = performance.now();
+    for (const [id, b] of this.bubbles) if (now > b.until) this.bubbles.delete(id);
+    for (const o of OTHERS.values()){
+      const b = this.bubbles.get(o.id), want = b ? b.text : '';
+      if (o._bub !== want){ o._bub = want; o.el.innerHTML = ''; o.el.append(document.createTextNode(o.nick)); if (want){ const s = document.createElement('div'); s.className = 'bub'; s.textContent = want; o.el.appendChild(s); } }
+    }
+    const mb = this.bubbles.get('me');
+    if (mb && WALK.on && WALK.av && !DRIVE.on){
+      _wp.set(WALK.x, WALK.y + 2.15, WALK.z);
+      const k = engine.getHardwareScalingLevel(), vp = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight());
+      V3.ProjectToRef(_wp, B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), vp, _proj);
+      if (this.me._t !== mb.text){ this.me._t = mb.text; this.me.innerHTML = ''; const s = document.createElement('div'); s.className = 'bub'; s.textContent = mb.text; this.me.appendChild(s); }
+      this.me.style.display = ''; this.me.style.transform = `translate(${(_proj.x*k).toFixed(1)}px,${(_proj.y*k).toFixed(1)}px) translate(-50%,-100%)`;
+    } else if (this.me.style.display !== 'none') this.me.style.display = 'none';
+  },
+};
+CHAT.init(); CHAT.setScope('near');
+$('#chatBtn').onclick = () => CHAT.toggle();
+$('#walkChat').onclick = () => CHAT.toggle();
+$('#chatClose').onclick = () => CHAT.toggle(false);
+$('#chatScope').onclick = () => CHAT.setScope(CHAT.scope === 'near' ? 'all' : 'near');
+$('#chatForm').onsubmit = e => { e.preventDefault(); CHAT.send(); };
+$('#chatIn').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape'){ e.preventDefault(); CHAT.toggle(false); } });
+$('#chatIn').addEventListener('keyup', e => e.stopPropagation());
+window.addEventListener('keydown', e => {
+  if (e.repeat || AVED.open || (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'))) return;
+  if (e.key === 't' || e.key === 'T' || e.key === '/'){ e.preventDefault(); CHAT.toggle(true); }
+});
+// the demo residents say something now and then (offline only)
+const DEMO_LINES = ['Salom! Bugun havo ajoyib.', 'Chorsuga kim boradi?', 'Favvora yonida uchrashamizmi?', 'Yangi mashinani avtosalonda ko‘rdingizmi?', 'Kechqurun ko‘chalar juda chiroyli yonadi.', 'Karim akaning vazifasini bajardim!'];
+let demoChatT = 9;
+function demoChat(dt){
+  if (API.on) return;
+  demoChatT -= dt; if (demoChatT > 0) return; demoChatT = 14 + Math.random()*16;
+  const d = DEMO_WALKERS[Math.floor(Math.random()*DEMO_WALKERS.length)], o = OTHERS.get(d.id); if (!o || !o.s) return;
+  CHAT.receive({ id: d.id, nick: d.nick, text: DEMO_LINES[Math.floor(Math.random()*DEMO_LINES.length)], scope: 'all', x: o.x, z: o.z, t: Date.now() });
 }
 
 // =================== STREET LIGHT AT NIGHT ===================
@@ -6472,7 +6626,7 @@ scene.onBeforeRenderObservable.add(()=>{
   // clouds drift with the wind; cover slowly comes and goes (broken cumulus ↔ near clear)
   cloudT += dt; skyMat.setFloat('time', cloudT); skyMat.setFloat('cover', 0.5 + 0.09*Math.sin(cloudT/260) + 0.04*Math.sin(cloudT/93));
   updateSignals(dt); updateCars(dt); updateDrives(dt); updatePeople(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
-  presenceSend(dt); demoWalkers(dt); updateOthers(dt);
+  presenceSend(dt); demoWalkers(dt); updateOthers(dt); demoChat(dt); CHAT.frame();
   // fps + auto quality
   fpsAcc += engine.getFps(); fpsN++; fpsT += dt; adaptResolution(dt);
   if (fpsT > 0.5){
@@ -6554,7 +6708,8 @@ async function refreshPlot(id){ try { applyDTO(plots[id], await api('GET',`/api/
 function connectWs(){
   try {
     const ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://') + location.host + '/ws'); WSC = ws;
-    ws.onmessage = ev => { try { const m = JSON.parse(ev.data); if (m.type === 'players' || m.type === 'pav' || m.type === 'pinit' || m.type === 'pgone'){ presenceMessage(m); return; } if (m.type==='plot' && plots[m.plot.id]){ const p = plots[m.plot.id], wasMine = p.state==='mine' && p.listed, price = p.price; applyDTO(p, m.plot, true); if (wasMine && p.state!=='mine'){ toast(`${buildingName(p)} sotildi: +${fmt(Math.round(price*0.95))} tanga`); refreshMe(); } if (S.selected===p && S.sheet==='plot') showPlot(p); placeCarsSoon(); } if (m.type==='car' && m.car){ setCar(m.car); placeCars(); if (API.me && m.car.owner.id === API.me.id) API.me.car = m.car; } } catch(_){} };
+    ws.onmessage = ev => { try { const m = JSON.parse(ev.data); if (m.type === 'players' || m.type === 'pav' || m.type === 'pinit' || m.type === 'pgone'){ presenceMessage(m); if (m.type === 'pinit' && m.chat && !CHAT.lines.length) for (const c of m.chat) CHAT.receive(c); return; }
+      if (m.type === 'chat'){ CHAT.receive(m); return; } if (m.type === 'chaterr'){ CHAT.system(m.message, true); return; } if (m.type==='plot' && plots[m.plot.id]){ const p = plots[m.plot.id], wasMine = p.state==='mine' && p.listed, price = p.price; applyDTO(p, m.plot, true); if (wasMine && p.state!=='mine'){ toast(`${buildingName(p)} sotildi: +${fmt(Math.round(price*0.95))} tanga`); refreshMe(); } if (S.selected===p && S.sheet==='plot') showPlot(p); placeCarsSoon(); } if (m.type==='car' && m.car){ setCar(m.car); placeCars(); if (API.me && m.car.owner.id === API.me.id) API.me.car = m.car; } } catch(_){} };
     ws.onclose = () => { for (const [id, o] of OTHERS) if (!o.demo) otherGone(id); presWas = false; setTimeout(connectWs, 3000); };
   } catch(_){}
 }
@@ -6792,7 +6947,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
