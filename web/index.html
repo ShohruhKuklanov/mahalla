@@ -2572,16 +2572,48 @@ const GARDEN = { x0:-330, x1:330, z0:-7190, z1:-6810 };
 // gradient sky dome with a soft sun glow (replaces a flat background colour)
 B.Effect.ShadersStore.skyVertexShader = `precision highp float; attribute vec3 position; uniform mat4 worldViewProjection; varying vec3 vDir;
   void main(){ vDir = position; vec4 p = worldViewProjection * vec4(position, 1.0); gl_Position = p.xyww; }`;
+// clouds: a drifting layer of fractal noise on a plane overhead, shaped by a slow domain warp so they change as they
+// sail, lit from the sun's side (a second, sun-ward sample darkens their bellies) with bright silver edges near the sun
 B.Effect.ShadersStore.skyFragmentShader = `precision highp float; varying vec3 vDir; uniform vec3 topC; uniform vec3 horC; uniform vec3 lowC; uniform vec3 sunDir; uniform vec3 sunC; uniform float glow; uniform float stars;
+  uniform float time; uniform float cover; uniform vec3 cLit; uniform vec3 cShade;
   float hash(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,45.164))) * 43758.5453); }
+  float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
+    return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y); }
+  float fbm(vec2 p){ float a = 0.5, v = 0.0; mat2 r = mat2(1.6, 1.2, -1.2, 1.6);
+    for (int i = 0; i < 5; i++){ v += a*vnoise(p); p = r*p; a *= 0.5; } return v; }
+  float dens(vec2 uv){
+    vec2 w = vec2(fbm(uv*0.6 + vec2(time*0.011, 0.0)), fbm(uv*0.6 + vec2(5.2, 1.3) - vec2(0.0, time*0.008)));
+    float n = fbm(uv + 1.1*w);
+    return smoothstep(cover, cover + 0.28, n); }
   void main(){ vec3 d = normalize(vDir); float h = d.y;
     vec3 c = h > 0.0 ? mix(horC, topC, pow(clamp(h,0.0,1.0), 0.5)) : mix(horC, lowC, clamp(-h*6.0, 0.0, 1.0));
-    float s = max(dot(d, normalize(sunDir)), 0.0);
-    c += sunC * (pow(s, 900.0) * 3.0 + pow(s, 12.0) * 0.45 * glow + pow(s, 3.0) * 0.12 * glow);
+    vec3 sd = normalize(sunDir);
+    float s = max(dot(d, sd), 0.0);
     vec3 g = floor(d * 380.0); float st = step(0.9975, hash(g)) * stars * smoothstep(0.05, 0.4, h);
     c += vec3(st);
+    vec3 sunGlow = sunC * (pow(s, 12.0) * 0.45 * glow + pow(s, 3.0) * 0.12 * glow);
+    vec3 disc = sunC * pow(s, 900.0) * 3.0;
+    if (h > 0.0){
+      // the cloud deck: rays meet a plane overhead; the wind carries the whole field along
+      vec2 uv = d.xz / (h + 0.09) * 1.35 + vec2(time*0.016, time*0.006);
+      float k = dens(uv);
+      if (k > 0.001){
+        vec2 toSun = normalize(sd.xz + vec2(1e-4)) * 0.22;
+        float k2 = dens(uv + toSun);
+        float lit = clamp(1.0 - 0.9*k2 + 0.25*(1.0 - k), 0.0, 1.0);
+        vec3 cc = mix(cShade, cLit, lit);
+        cc += sunC * pow(s, 6.0) * (1.0 - k2) * 0.9;                      // silver lining toward the sun
+        float fade = smoothstep(0.0, 0.16, h);                            // thin out into the haze at the horizon
+        float a = k * fade * 0.96;
+        c = mix(c + sunGlow, cc, a);
+        disc *= 1.0 - smoothstep(0.05, 0.4, k);                           // clouds hide the sun
+        c += disc;
+      } else c += sunGlow + disc;
+    } else c += sunGlow + disc;
     gl_FragColor = vec4(c, 1.0); }`;
-const skyMat = new B.ShaderMaterial('sky', scene, { vertex:'sky', fragment:'sky' }, { attributes:['position'], uniforms:['worldViewProjection','topC','horC','lowC','sunDir','sunC','glow','stars'] });
+const skyMat = new B.ShaderMaterial('sky', scene, { vertex:'sky', fragment:'sky' }, { attributes:['position'], uniforms:['worldViewProjection','topC','horC','lowC','sunDir','sunC','glow','stars','time','cover','cLit','cShade'] });
+skyMat.setFloat('time', 0); skyMat.setFloat('cover', 0.55); skyMat.setColor3('cLit', new C3(1,1,1)); skyMat.setColor3('cShade', new C3(.6,.65,.72));
 skyMat.backFaceCulling = false; skyMat.disableDepthWrite = true;
 const skyDome = B.MeshBuilder.CreateSphere('skyDome',{diameter:16000, segments:24, sideOrientation:B.Mesh.BACKSIDE},scene);
 skyDome.material = skyMat; skyDome.infiniteDistance = true; skyDome.isPickable = false; skyDome.applyFog = false;
@@ -4803,6 +4835,10 @@ function updateSky(){
   skyMat.setVector3('sunDir', new V3(-sx, Math.max(sy, -0.2), -0.45));
   skyMat.setColor3('sunC', C3.Lerp(hex('#ff9a4a'), hex('#fff4d6'), smooth(0, 0.5, elev)).scale(elev > -0.1 ? 1 : 0));
   skyMat.setFloat('glow', 0.4 + dk*1.6); skyMat.setFloat('stars', night);
+  // clouds: white tops and blue-grey bellies by day, peach and violet at dusk, dim with a warm city glow at night
+  const cl = C3.Lerp(C3.Lerp(hex('#1a1f2e'), hex('#ffffff'), day), hex('#ffc49a'), dk*0.75);
+  const cs = C3.Lerp(C3.Lerp(hex('#2a2320'), hex('#9aa6b8'), day), hex('#6b5a86'), dk*0.6);
+  skyMat.setColor3('cLit', cl); skyMat.setColor3('cShade', cs);
   if (Math.abs(S.hours - envHours) > 0.2){ envHours = S.hours; refreshEnv(); scene.environmentIntensity = 0.25 + 0.85*day; }
   scene.clearColor = new C4(hor.r, hor.g, hor.b, 1);
   scene.fogColor = C3.Lerp(hor, sky, 0.35);
@@ -5026,6 +5062,7 @@ $('#tilt').onclick = ()=>{ tiltMode=(tiltMode+1)%3; const cfg=[[0.92,null,'3D'],
 $('#home').onclick = ()=>{ const m = myPlots()[0]; if (m){ flyTo(m.x,m.z,70,1.05); showPlot(m); } else toast('Sizda hali yer yo‘q — “Yer top” ni bosing.'); };
 
 // ---------- render loop ----------
+let cloudT = 40;
 let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0, autoT = 0, autoChecks = 0, autoLow = 0, autoDown = false;
 const fpsHist = [];
 scene.onBeforeRenderObservable.add(()=>{
@@ -5080,6 +5117,8 @@ scene.onBeforeRenderObservable.add(()=>{
   // water shimmer + traffic
   jet.scaling.y = 1 + Math.sin(now/160)*0.06;
   lakeTex.uOffset += dt*0.004; lakeTex.vOffset += dt*0.002; updateSea();
+  // clouds drift with the wind; cover slowly comes and goes (broken cumulus ↔ near clear)
+  cloudT += dt; skyMat.setFloat('time', cloudT); skyMat.setFloat('cover', 0.5 + 0.09*Math.sin(cloudT/260) + 0.04*Math.sin(cloudT/93));
   updateSignals(dt); updateCars(dt); updateDrives(dt); updatePeople(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
   // fps + auto quality
   fpsAcc += engine.getFps(); fpsN++; fpsT += dt; adaptResolution(dt);
