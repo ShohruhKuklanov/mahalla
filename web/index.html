@@ -2009,7 +2009,8 @@ function makeCrane(x){
   const mr = merge(r); mr.material = craneRed; const mw = merge(w); mw.material = craneWhite;
   for (const m of [mr, mw]){ m.isPickable = false; m.receiveShadows = true; }
 }
-for (let x = PORT.x0+90; x < PORT.x1-200; x += 95) makeCrane(x);
+const CRANE_X = [];
+for (let x = PORT.x0+90; x < PORT.x1-200; x += 95){ makeCrane(x); CRANE_X.push(x); }
 // breakwater with a lighthouse at its tip
 const stoneM = stdMat('stoneM',{dt:noiseTex('st','#8d8a84',0.3,128,3)});
 flatBox('bw1', PORT.x0-40, PORT.x0-14, COAST_Z, COAST_Z+460, -2, 3.4, stoneM);
@@ -2079,10 +2080,26 @@ function hullMesh(o){
     cols.push(c.r, c.g, c.b, 1);
   }
   hull.setVerticesData(B.VertexBuffer.ColorKind, cols);
+  // the transom: close the square stern (a fan across the aft ring of the hull, both sides)
+  if (!o.doubleEnded){
+    const ring = paths.map(pa => pa[0]), c0 = ring.reduce((a, v) => a.addInPlace(v), new V3()).scale(1/ring.length);
+    const pos = [c0.x, c0.y, c0.z], ind = [], tc = [];
+    const colAt = y => y < bottomTo ? cB : (band && y > band.y0 && y < band.y1 ? cBand : cT);
+    for (const v of ring) pos.push(v.x, v.y, v.z);
+    for (let k = 0; k < ring.length - 1; k++) ind.push(0, k + 1, k + 2, 0, k + 2, k + 1);
+    ind.push(0, ring.length, 1, 0, 1, ring.length);
+    for (let i = 0; i < pos.length; i += 3){ const c = colAt(pos[i + 1]); tc.push(c.r, c.g, c.b, 1); }
+    const vd = new B.VertexData(); vd.positions = pos; vd.indices = ind; vd.colors = tc; const nr = []; B.VertexData.ComputeNormals(pos, ind, nr); vd.normals = nr; vd.uvs = new Array(pos.length/3*2).fill(0);
+    const tm = new B.Mesh(name + 'Transom', scene); vd.applyToMesh(tm);
+    const merged = B.Mesh.MergeMeshes([hull, tm], true, true); if (merged){ merged.name = name + 'Hull'; return finish(merged); }
+  }
+  return finish(hull);
+  function finish(hull){
   const deck = B.MeshBuilder.CreateRibbon(name+'Deck', { pathArray: [paths[0], paths[paths.length-1]], sideOrientation: B.Mesh.DOUBLESIDE }, scene);
   const deckY = (t) => { const k = Math.round(t*N); return paths[0][k].y; };
   const hwAt = (t) => { const k = Math.round(Math.max(0, Math.min(1, t))*N); return Math.abs(paths[0][k].z); };
   return { hull, deck, deckY, hwAt, freeboard: D - draft };
+  }
 }
 const hullMat = stdMat('hullM', { diffuse: new C3(1,1,1), spec: new C3(.35,.35,.35), power: 48 });
 const deckMat = stdMat('shipDeckM', { diffuse: hex('#7d858c') });
@@ -2173,6 +2190,109 @@ addShip('cargo',  { cx:1400, cz:COAST_Z+2600, r:1500, v:-8 });
 addShip('cruise', { cx:900,  cz:COAST_Z+1700, r:1100, v:6 });
 addShip('ferry',  { cx:200,  cz:COAST_Z+900,  r:500,  v:-9 });
 for (let i = 0; i < 4; i++) addShip('yacht', { cx:850+i*40, cz:COAST_Z+330+i*60, r:140+i*30, v:(i%2?-1:1)*(5+i) });
+// =================== THE PORT AT WORK ===================
+// Each quay crane runs its own cycle over the ship below it: trolley out over the hull, spreader down, a box up, back over
+// the quay and down onto a terminal truck, which carries it round to the stacks and comes back empty. A third cargo ship
+// keeps arriving at the free berth, ties up while its cranes work it, backs off the quay, is swung round and sails out.
+const PORTOPS = (() => {
+  const zq = COAST_Z, N = CRANE_X.length;
+  const steel = stdMat('trolleyM', { diffuse: hex('#3b4048'), spec: new C3(.3,.3,.3) });
+  const yellow = stdMat('spreaderM', { diffuse: hex('#f2b01e'), spec: new C3(.3,.3,.3) });
+  const cabM = stdMat('truckCabM', { diffuse: hex('#e6e7e2'), spec: new C3(.5,.5,.5), power: 60 });
+  const chM = stdMat('truckChM', { diffuse: hex('#24272b') });
+  const mk = (name, w, h, d, mat, color) => {
+    const m = B.MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene); m.material = mat; m.isPickable = false; m.receiveShadows = true;
+    m.thinInstanceSetBuffer('matrix', new Float32Array(N*16), 16, false);
+    if (color){ m.thinInstanceRegisterAttribute('color', 4); m.thinInstanceSetBuffer('color', new Float32Array(N*4).fill(1), 4, false); }
+    m.alwaysSelectAsActiveMesh = true; return m;
+  };
+  const trolley = mk('crTrolley', 7, 2.2, 6, steel), cable = mk('crCable', 0.18, 1, 0.18, steel), cable2 = mk('crCable2', 0.18, 1, 0.18, steel);
+  const spreader = mk('crSpreader', 12.6, 0.7, 2.7, yellow), box1 = mk('crCont', 12.2, 2.6, 2.44, cont.material, true);
+  const cab = mk('tkCab', 3.2, 3.0, 2.6, cabM), chassis = mk('tkCh', 14, 1.0, 2.5, chM), box2 = mk('tkCont', 12.2, 2.6, 2.44, cont.material, true);
+  const parts = [trolley, cable, cable2, spreader, box1, cab, chassis, box2];
+  const cranes = CRANE_X.map((x, i) => ({ x, off: rnd()*36, zs: zq + 8 + rnd()*22, col: hex(CONT_COLORS[i % CONT_COLORS.length]) }));
+  // ---- the visiting ship and its timetable (seconds)
+  const BERTH3 = PORT.x0 + 680, ship = shipMesh('cargo'); ship.position.set(4000, WATER_Y, COAST_Z + 2000);
+  const sea = [new V3(1500, 0, COAST_Z + 1300), new V3(700, 0, COAST_Z + 620), new V3(200, 0, COAST_Z + 260), new V3(-60, 0, COAST_Z + 90), new V3(BERTH3 + 120, 0, COAST_Z + 26), new V3(BERTH3, 0, COAST_Z + 19)];
+  const inPath = B.Curve3.CreateCatmullRomSpline(sea, 60, false).getPoints();
+  const lens = [0]; for (let i = 1; i < inPath.length; i++) lens.push(lens[i - 1] + V3.Distance(inPath[i - 1], inPath[i]));
+  const along = (d) => { d = clamp(d, 0, lens[lens.length - 1]); let i = 1; while (i < lens.length - 1 && lens[i] < d) i++; const t = (d - lens[i - 1])/(lens[i] - lens[i - 1] || 1); return { p: V3.Lerp(inPath[i - 1], inPath[i], t), dir: inPath[i].subtract(inPath[i - 1]).normalize() }; };
+  const TOTAL = lens[lens.length - 1];
+  const T = { arrive: 170, dock: 160, back: 60, turn: 50, leave: 150, gone: 60 };
+  const C = { a: T.arrive, d: T.arrive + T.dock, b: T.arrive + T.dock + T.back, t: T.arrive + T.dock + T.back + T.turn, l: T.arrive + T.dock + T.back + T.turn + T.leave };
+  const CYCLE = C.l + T.gone, OFF_POS = new V3(-80, 0, COAST_Z + 120);
+  let clock = 60;                                      // first visit: already on its way in
+  const yawOf = (d) => Math.atan2(-d.z, d.x), ease = u => u*u*(3 - 2*u);
+  const shipAt = (t) => {
+    if (t < C.a){ const u = t/T.arrive, s = TOTAL*(1 - (1 - u)*(1 - u)); const a = along(s); return { p: a.p, yaw: yawOf(a.dir), docked: false }; }
+    const west = Math.PI, berth = new V3(BERTH3, 0, COAST_Z + 19);
+    if (t < C.d) return { p: berth, yaw: west, docked: true };
+    if (t < C.b){ const u = ease((t - C.d)/T.back); return { p: V3.Lerp(berth, OFF_POS, u), yaw: west, docked: false }; }   // astern, off the quay
+    const out = new V3(1500, 0, COAST_Z + 1300), dOut = out.subtract(OFF_POS).normalize(), yOut = yawOf(dOut);
+    if (t < C.t){ const u = ease((t - C.b)/T.turn); let dy = yOut - west; while (dy > Math.PI) dy -= 2*Math.PI; while (dy < -Math.PI) dy += 2*Math.PI; return { p: OFF_POS, yaw: west + dy*u, docked: false }; }
+    if (t < C.l){ const u = (t - C.t)/T.leave; return { p: V3.Lerp(OFF_POS, out, u*u), yaw: yOut, docked: false }; }
+    return { p: new V3(4000, 0, COAST_Z + 2000), yaw: 0, docked: false, hidden: true };
+  };
+  const berths = () => [PORT.x0 + 180, PORT.x0 + 430, ...(PORTOPS_STATE.docked ? [BERTH3] : [])];
+  const PORTOPS_STATE = { docked: false };
+  const M = new B.Matrix(), q = new B.Quaternion(), sc = new V3(1, 1, 1), tr = new V3(), qI = B.Quaternion.Identity();
+  const put = (m, i, x, y, z, sy = 1, yaw = 0) => { sc.set(1, sy, 1); B.Quaternion.RotationYawPitchRollToRef(yaw, 0, 0, q); tr.set(x, y, z); B.Matrix.ComposeToRef(sc, q, tr, M); M.copyToArray(m._thinInstanceDataStorage.matrixData, i*16); };
+  const hide = (m, i) => m._thinInstanceDataStorage.matrixData.fill(0, i*16, i*16 + 16);
+  const setCol = (m, i, c) => { const b = m._userThinInstanceBuffersStorage.data; const a = b.instanceColor || b.color; a[i*4] = c.r; a[i*4 + 1] = c.g; a[i*4 + 2] = c.b; a[i*4 + 3] = 1; };
+  const BOOM_Y = 42, QUAY_Z = zq - 13, TRUCK_Y = 0.3, LOOP = [[0, QUAY_Z], [40, QUAY_Z], [40, zq - 40], [-40, zq - 40], [-40, QUAY_Z], [0, QUAY_Z]];
+  const loopLen = LOOP.slice(1).reduce((a, p, i) => a + Math.hypot(p[0] - LOOP[i][0], p[1] - LOOP[i][1]), 0);
+  function update(dt){
+    // the visiting ship
+    clock = (clock + dt) % CYCLE;
+    const s = shipAt(clock);
+    PORTOPS_STATE.docked = s.docked;
+    ship.setEnabled(!s.hidden);
+    if (!s.hidden){ ship.position.x = s.p.x; ship.position.z = s.p.z; ship.rotation.y = s.yaw; shipOnSwell(ship, s.p.x, s.p.z, s.yaw, 92); }
+    const bs = berths();
+    cranes.forEach((c, i) => {
+      const working = bs.some(bx => Math.abs(bx - c.x) < 100);
+      let u = working ? (performance.now()/1000 + c.off) % 36 : 30;
+      // crane: [0,6) out over the ship · [6,10) down · [10,14) up with a box · [14,22) back over the quay · [22,27) hold · [27,31) down onto the truck · [31,33) let go · [33,36) up empty
+      const shipZ = c.zs, deckY = 18, topY = 36, truckTop = TRUCK_Y + 1.0 + 0.5 + 2.6 + 0.35;
+      let tz, sy, carry;
+      if (u < 6){ tz = lerp(QUAY_Z, shipZ, ease(u/6)); sy = topY; carry = false; }
+      else if (u < 10){ tz = shipZ; sy = lerp(topY, deckY, ease((u - 6)/4)); carry = false; }
+      else if (u < 14){ tz = shipZ; sy = lerp(deckY, topY, ease((u - 10)/4)); carry = true; }
+      else if (u < 22){ tz = lerp(shipZ, QUAY_Z, ease((u - 14)/8)); sy = topY; carry = true; }
+      else if (u < 27){ tz = QUAY_Z; sy = topY; carry = true; }
+      else if (u < 31){ tz = QUAY_Z; sy = lerp(topY, truckTop, ease((u - 27)/4)); carry = true; }
+      else if (u < 33){ tz = QUAY_Z; sy = truckTop; carry = false; }
+      else { tz = QUAY_Z; sy = lerp(truckTop, topY, ease((u - 33)/3)); carry = false; }
+      if (!working){ tz = QUAY_Z; sy = topY; carry = false; }
+      put(trolley, i, c.x, BOOM_Y, tz);
+      const clen = BOOM_Y - 1 - (sy + 0.35);
+      put(cable, i, c.x - 4, sy + 0.35 + clen/2, tz, clen); put(cable2, i, c.x + 4, sy + 0.35 + clen/2, tz, clen);
+      put(spreader, i, c.x, sy, tz);
+      if (carry){ put(box1, i, c.x, sy - 1.65, tz); setCol(box1, i, c.col); } else hide(box1, i);
+      // its truck: parked under the crane from 27 s, then round the loop to the stacks and back
+      let tx = c.x, tzz = QUAY_Z, yaw = 0, loaded;
+      if (!working || u >= 27){ loaded = working && u >= 31; }
+      else {
+        let d = (u/27)*loopLen; loaded = u < 13;
+        for (let k = 1; k < LOOP.length; k++){
+          const a = LOOP[k - 1], b = LOOP[k], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+          if (d <= L){ const f = d/L; tx = c.x + a[0] + (b[0] - a[0])*f; tzz = a[1] + (b[1] - a[1])*f; yaw = Math.atan2(-(b[1] - a[1]), b[0] - a[0]); break; }
+          d -= L;
+        }
+      }
+      put(chassis, i, tx, TRUCK_Y + 1.0, tzz, 1, yaw);
+      const fx = Math.cos(yaw), fz = -Math.sin(yaw);
+      put(cab, i, tx + fx*6.2, TRUCK_Y + 2.4, tzz + fz*6.2, 1, yaw);
+      if (loaded){ put(box2, i, tx - fx*0.8, TRUCK_Y + 1.5 + 1.3, tzz - fz*0.8, 1, yaw); setCol(box2, i, c.col); } else hide(box2, i);
+      if (u >= 33 || u < 1) c.col = hex(CONT_COLORS[Math.floor(rnd()*CONT_COLORS.length)]);   // the next box is another colour
+    });
+    for (const m of parts) m.thinInstanceBufferUpdated('matrix');
+    box1.thinInstanceBufferUpdated(box1._userThinInstanceBuffersStorage.data.instanceColor ? 'instanceColor' : 'color');
+    box2.thinInstanceBufferUpdated(box2._userThinInstanceBuffersStorage.data.instanceColor ? 'instanceColor' : 'color');
+  }
+  return { update, ship, coast: COAST_Z, casters: () => [...parts, ...ship.getChildMeshes()] };
+})();
+
 // a ship sits on the swell under it: heave from the mean height, pitch and roll from the slope along / across the hull
 function shipOnSwell(n, x, z, yaw, len){
   const sm = (a, b, v) => { const k = Math.min(1, Math.max(0, (v-a)/(b-a))); return k*k*(3-2*k); };
@@ -2184,6 +2304,7 @@ function shipOnSwell(n, x, z, yaw, len){
   n.rotation.x = -(m.dx*fz*-1 + m.dz*fx)*fade*0.25;                               // gentle roll
 }
 function updateShips(dt){
+  PORTOPS.update(dt);
   for (const d of docked) shipOnSwell(d.n, d.n.position.x, d.n.position.z, d.n.rotation.y, d.len*0.4);
   for (const s of ships){
     const P = s.path; s.t += dt; const ph = s.t*P.v/P.r;
@@ -5559,7 +5680,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
