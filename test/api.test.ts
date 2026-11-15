@@ -488,7 +488,7 @@ test('3D avatar: none at first, a draft is kept apart, saving validates and repl
   assert.equal(me.avatar3d, null);
   assert.equal(me.avatar3dDraft.body, 'f'); assert.equal(me.avatar3dDraft.hair, 'long'); assert.equal(me.avatar3dDraft.face, 'oval');
   // save: neutral body, glasses and a doppi; the draft is cleared
-  const full = { v: 1, body: 'n', face: 'round', skin: '#8d5a3b', eyes: 'big', eyeColor: '#2f5d3a', brows: 'thick', nose: 'wide', mouth: 'full',
+  const full = { v: 1, body: 'n', face: 'round', skin: '#8d5a3b', eyes: 'big', eyeColor: '#2f5d3a', brows: 'thick', beard: 'goatee', beardColor: '#8f8f8f', nose: 'wide', mouth: 'full',
     hair: 'bun', hairColor: '#b0563a', outfit: 'chopon', top: '#ffffff', bottom: '#222222', outer: '#2b4c7e', shoes: '#3b2a1e',
     glasses: 'round', hat: 'doppi', hatColor: '#111111' };
   const s = await a.call('POST', '/api/me/avatar3d', { avatar: full });
