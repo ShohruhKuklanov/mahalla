@@ -4473,7 +4473,7 @@ function walkUpdate(dt){
   const jm = (PLAY.dlg || PLAY.logOpen) ? 0 : Math.hypot(WALK.joy.x, WALK.joy.y);
   if (jm > 0.12){
     // the joystick steers relative to the camera
-    const a = camera.alpha, fx = -Math.cos(a), fz = -Math.sin(a), rx = Math.sin(a), rz = -Math.cos(a);
+    const a = camera.alpha, fx = -Math.cos(a), fz = -Math.sin(a), rx = fz, rz = -fx;   // right of the view (left-handed: facing +z, right is +x)
     jx = fx*(-WALK.joy.y) + rx*WALK.joy.x; jz = fz*(-WALK.joy.y) + rz*WALK.joy.x;
     const L = Math.hypot(jx, jz); dirx = jx/L; dirz = jz/L;
     want = (run || jm > 0.92 ? 4.2 : 1.6)*Math.min(1, jm);
