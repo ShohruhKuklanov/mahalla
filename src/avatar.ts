@@ -14,7 +14,7 @@ export const avatarSchema = z.object({
   skin: hex.default('#c99a78'),
   eyes: z.enum(['normal', 'big', 'small']).default('normal'),
   eyeColor: hex.default('#4a3426'),
-  brows: z.enum(['thin', 'normal', 'thick', 'arched', 'straight', 'angled', 'bushy', 'short', 'uni']).default('normal'),
+  brows: z.enum(['thin', 'normal', 'thick', 'arched', 'straight', 'angled', 'bushy', 'short', 'uni', 'natural']).default('normal'),
   beard: z.enum(['none', 'stubble', 'mustache', 'goatee', 'chin', 'short', 'full', 'long']).default('none'),
   beardColor: hex.default('#2a1d15'),
   nose: z.enum(['normal', 'narrow', 'wide', 'long']).default('normal'),

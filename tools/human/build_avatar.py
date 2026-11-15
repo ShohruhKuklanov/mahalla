@@ -33,12 +33,13 @@ bpy.context.view_layer.objects.active = h; h.select_set(True)
 # the feminine face follows classical proportions (measured on a reference: forehead, nose and lower face in near-equal
 # thirds, the lower one a little longer; eyes one eye-width apart; a narrow nose; an oval face tapering to a soft chin;
 # high cheekbones and full lips)
-FACE_F = {'nose/nose-scale-vert-decr': 0.25, 'nose/nose-point-width-decr': 0.45, 'nose/nose-scale-horiz-decr': 0.2, 'nose/nose-width1-decr': 0.3,
-          'mouth/mouth-trans-up': 0.3, 'chin/chin-height-incr': 0.45, 'chin/chin-prominent-incr': 0.3, 'chin/chin-width-decr': 0.15,
-          'eyes/l-eye-trans-out': 0.35, 'eyes/r-eye-trans-out': 0.35,
-          'cheek/l-cheek-bones-incr': 0.4, 'cheek/r-cheek-bones-incr': 0.4, 'cheek/l-cheek-volume-decr': 0.25, 'cheek/r-cheek-volume-decr': 0.25,
-          'mouth/mouth-upperlip-volume-incr': 0.35, 'mouth/mouth-lowerlip-volume-incr': 0.45, 'mouth/mouth-cupidsbow-incr': 0.4,
-          'eyebrows/eyebrows-angle-up': 0.3}
+FACE_F = {'nose/nose-scale-vert-decr': 0.25, 'nose/nose-point-width-decr': 0.2, 'nose/nose-scale-horiz-decr': 0.1, 'nose/nose-width1-decr': 0.35,
+          'nose/nose-hump-decr': 0.3, 'mouth/mouth-trans-up': 0.25, 'chin/chin-height-incr': 0.35, 'chin/chin-prominent-incr': 0.15, 'chin/chin-width-incr': 0.15,
+          'eyes/l-eye-trans-out': 0.35, 'eyes/r-eye-trans-out': 0.35, 
+          'eyes/l-eye-corner2-up': 0.3, 'eyes/r-eye-corner2-up': 0.3,
+          'cheek/l-cheek-bones-incr': 0.45, 'cheek/r-cheek-bones-incr': 0.45, 'cheek/l-cheek-volume-decr': 0.1, 'cheek/r-cheek-volume-decr': 0.1,
+          'mouth/mouth-upperlip-volume-incr': 0.15, 'mouth/mouth-lowerlip-volume-incr': 0.4, 'mouth/mouth-cupidsbow-incr': 0.3, 'mouth/mouth-philtrum-volume-incr': 0.3,
+          'forehead/forehead-scale-vert-incr': 0.3}
 if KIND == 'f':
     for i, (p, w) in enumerate(FACE_F.items()): TargetService.load_target(h, TGT + p + '.target.gz', weight=w, name=f'ff{i}')
 if h.data.shape_keys: bpy.ops.object.shape_key_remove(all=True, apply_mix=True)
@@ -116,7 +117,7 @@ rng = np.random.default_rng(3)
 noise = np.asarray(Image.fromarray((rng.random((S//8, S//8))*255).astype(np.uint8)).resize((S, S), Image.BICUBIC), np.float32)/255 - 0.5
 sk = np.ones((S, S, 3), np.float32) * base * (1 + 0.05*noise[..., None])
 lips, lids, nails, face = mask('mpfb_lips.jpg'), mask('mpfb_eyelids.jpg'), mask('mpfb_fingernails.jpg'), mask('mpfb_face.jpg')
-sk = sk*(1 - 0.7*lips[..., None]) + np.array([226, 150, 150], np.float32)*0.7*lips[..., None]
+sk = sk*(1 - 0.55*lips[..., None]) + np.array([214, 146, 140], np.float32)*0.55*lips[..., None]   # soft natural lips
 sk *= (1 - 0.12*lids[..., None]); sk = sk*(1 - 0.5*nails[..., None]) + np.array([255, 236, 230], np.float32)*0.5*nails[..., None]
 skin_png = WORK + 'skin_avatar.jpg'; Image.fromarray(np.clip(sk, 0, 255).astype(np.uint8)).save(skin_png, quality=88)
 
@@ -403,7 +404,7 @@ def piece(name, bmesh_fn, material):
     for p in m.polygons: p.use_smooth = True
     pieces.append(o); return o
 
-BROW_DZ = 0.0165 if KIND == 'f' else 0.021                          # how far above the eye the brow starts
+BROW_DZ = 0.0155 if KIND == 'f' else 0.021                          # how far above the eye the brow starts
 # brows: strips laid on the brow ridge; shape = how high they arch, where the peak is, how long and how ragged
 def brow(width_m, arch=0.008, length=0.05, start=-0.024, slope=-0.004, peak=None, jag=0.0, join=False, rows=9):
     rnd = np.random.default_rng(11)
@@ -441,6 +442,7 @@ BROWS = {
     'BrowBushy':    brow(0.0125, arch=0.0070, jag=0.35, rows=15),
     'BrowShort':    brow(0.0070, length=0.036, start=-0.018),
     'BrowUni':      brow(0.0085, arch=0.0060, join=True),
+    'BrowNatural':  brow(0.0066, arch=0.0045, slope=-0.0035, start=-0.026, length=0.052, rows=11),
 }
 for nm, fn in BROWS.items(): piece(nm, fn, mat(nm, lin('#2a1d15'), 0.9))
 

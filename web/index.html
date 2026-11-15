@@ -4599,7 +4599,7 @@ const AV_OPTIONS = {
     ['triangle','Keng jag‘li'],['rect','Uzunchoq to‘rtburchak'],['full','To‘la yonoqli'],['lean','Qotma, yonoq suyagi bo‘rtiq'],['chin','Kuchli iyakli']],
   eyes: [['normal','O‘rtacha'],['big','Katta'],['small','Kichik']],
   brows: [['thin','Ingichka'],['normal','O‘rtacha'],['thick','Qalin'],['arched','Kamonsimon'],['straight','To‘g‘ri'],['angled','Burchakli'],
-    ['bushy','Quyuq'],['short','Kalta'],['uni','Qo‘shma qosh']],
+    ['bushy','Quyuq'],['short','Kalta'],['uni','Qo‘shma qosh'],['natural','Tabiiy (yumshoq)']],
   beard: [['none','Yo‘q'],['stubble','Qirilmagan (soqol izi)'],['mustache','Mo‘ylov'],['goatee','Echki soqol va mo‘ylov'],['chin','Faqat iyakda'],
     ['short','Kalta soqol'],['full','Qalin soqol'],['long','Uzun soqol']],
   nose: [['normal','O‘rtacha'],['narrow','Ingichka'],['wide','Keng'],['long','Uzun']],
@@ -4699,9 +4699,10 @@ const AVATAR = {
     if (c.hair === 'bun') show.add('HairBun');
     const hairC = c.hair === 'bald' ? null : rgb(c.hairColor);
     for (const n of ['Hair', 'HairMid', 'HairLong', 'HairBun']) tint[n] = hairC || mul(c.skin, 0.93);
-    const BROW = { thin: 'BrowThin', normal: 'BrowNormal', thick: 'BrowThick', arched: 'BrowArched', straight: 'BrowStraight', angled: 'BrowAngled', bushy: 'BrowBushy', short: 'BrowShort', uni: 'BrowUni' };
+    const BROW = { natural: 'BrowNatural', thin: 'BrowThin', normal: 'BrowNormal', thick: 'BrowThick', arched: 'BrowArched', straight: 'BrowStraight', angled: 'BrowAngled', bushy: 'BrowBushy', short: 'BrowShort', uni: 'BrowUni' };
     show.add(BROW[c.brows]);
     for (const n of Object.values(BROW)) tint[n] = c.hair === 'bald' ? hex('#3a2a20') : mul(c.hairColor, 0.85);
+    if (c.brows === 'natural'){ const h_ = c.hair === 'bald' ? hex('#3a2a20') : hex(c.hairColor), s_ = hex(c.skin); tint.BrowNatural = new C3(h_.r*0.7 + s_.r*0.3*0.55, h_.g*0.7 + s_.g*0.3*0.55, h_.b*0.7 + s_.b*0.3*0.55); }   // soft brows: a touch of skin through the hair
     // beard: a few pieces that add up (the goatee and the beards bring the moustache)
     const BEARD = { none: [], stubble: ['BeardStubble'], mustache: ['Mustache'], goatee: ['Mustache', 'BeardGoatee'], chin: ['BeardGoatee'],
       short: ['Mustache', 'BeardShort'], full: ['Mustache', 'BeardFull'], long: ['Mustache', 'BeardFull', 'BeardLong'] };
@@ -4881,6 +4882,7 @@ const AVED = {
   async set(k, v, fromPicker){
     if (this.cfg[k] === v) return;
     const extra = (k === 'hairColor' && this.cfg.beardColor === this.cfg.hairColor) ? { beardColor: v } : {};   // the beard follows the hair until you colour it apart
+    if (k === 'body' && v === 'f' && this.cfg.brows === 'normal') extra.brows = 'natural';                       // the feminine base face comes with soft brows
     this.cfg = avClean({ ...this.cfg, [k]: v, ...extra });
     AVSTORE.saveDraft(this.cfg);
     if (k === 'body'){ try { await this.show(); } catch(_){ this.status('Bu obrazni yuklab bo‘lmadi. Internetni tekshirib, qayta tanlang.', true); } }
@@ -5177,8 +5179,8 @@ function driveUpdate(dt){
 const lmPos = key => { const p = plots.find(q => q.tpl === key); return p ? bpos(p) : null; };
 const NPCS = {
   karim:   { name: 'Karim aka',   at: () => ({ x: parkMin.x - 4.5, z: parkC.z + 6 }),  cfg: { body: 'm', face: 'square', skin: '#b98462', hair: 'short', hairColor: '#8f8f8f', brows: 'thick', outfit: 'chopon', top: '#f2f0ea', bottom: '#16181c', outer: '#2c3e5c', hat: 'doppi', hatColor: '#111111', mouth: 'normal' } },
-  malika:  { name: 'Malika opa',  at: () => ({ x: parkC.x + 8, z: parkMin.z - 4.5 }),  cfg: { body: 'f', face: 'oval', skin: '#e0b48e', hair: 'bun', hairColor: '#2a1d15', outfit: 'skirt', top: '#b5577b', bottom: '#2c3e5c', glasses: 'round' } },
-  dilnoza: { name: 'Dilnoza',     at: () => ({ x: parkMax.x + 4.5, z: parkC.z - 10 }), cfg: { body: 'f', face: 'heart', skin: '#c99a78', hair: 'long', hairColor: '#4a3020', outfit: 'shirt', top: '#2fb5a3', bottom: '#16181c' } },
+  malika:  { name: 'Malika opa',  at: () => ({ x: parkC.x + 8, z: parkMin.z - 4.5 }),  cfg: { body: 'f', face: 'oval', skin: '#e0b48e', hair: 'bun', hairColor: '#2a1d15', outfit: 'skirt', brows: 'natural', top: '#b5577b', bottom: '#2c3e5c', glasses: 'round' } },
+  dilnoza: { name: 'Dilnoza',     at: () => ({ x: parkMax.x + 4.5, z: parkC.z - 10 }), cfg: { body: 'f', face: 'heart', skin: '#c99a78', hair: 'long', hairColor: '#4a3020', outfit: 'shirt', brows: 'natural', top: '#2fb5a3', bottom: '#16181c' } },
   sardor:  { name: 'Sardor',      at: () => ({ x: DEALER.x0 + 7, z: (DEALER.z0 + DEALER.z1)/2 + 4 }), cfg: { body: 'm', face: 'oval', skin: '#c99a78', hair: 'short', hairColor: '#111014', outfit: 'jacket', top: '#f2f0ea', bottom: '#2c3e5c', outer: '#16181c', glasses: 'sun' } },
 };
 const KEY_SPOT = () => ({ x: parkMax.x + 4.5 + 70, z: parkC.z + 55 });

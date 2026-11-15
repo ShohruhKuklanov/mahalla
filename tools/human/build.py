@@ -22,12 +22,13 @@ for k, v in P.items(): HOP.set_value(k, v, entity_reference=h)
 TargetService.reapply_macro_details(h)
 bpy.context.view_layer.objects.active = h; h.select_set(True)
 # the same feminine face as the player avatars (tools/human/build_avatar.py)
-FACE_F = {'nose/nose-scale-vert-decr': 0.25, 'nose/nose-point-width-decr': 0.45, 'nose/nose-scale-horiz-decr': 0.2, 'nose/nose-width1-decr': 0.3,
-          'mouth/mouth-trans-up': 0.3, 'chin/chin-height-incr': 0.45, 'chin/chin-prominent-incr': 0.3, 'chin/chin-width-decr': 0.15,
-          'eyes/l-eye-trans-out': 0.35, 'eyes/r-eye-trans-out': 0.35,
-          'cheek/l-cheek-bones-incr': 0.4, 'cheek/r-cheek-bones-incr': 0.4, 'cheek/l-cheek-volume-decr': 0.25, 'cheek/r-cheek-volume-decr': 0.25,
-          'mouth/mouth-upperlip-volume-incr': 0.35, 'mouth/mouth-lowerlip-volume-incr': 0.45, 'mouth/mouth-cupidsbow-incr': 0.4,
-          'eyebrows/eyebrows-angle-up': 0.3}
+FACE_F = {'nose/nose-scale-vert-decr': 0.25, 'nose/nose-point-width-decr': 0.2, 'nose/nose-scale-horiz-decr': 0.1, 'nose/nose-width1-decr': 0.35,
+          'nose/nose-hump-decr': 0.3, 'mouth/mouth-trans-up': 0.25, 'chin/chin-height-incr': 0.35, 'chin/chin-prominent-incr': 0.15, 'chin/chin-width-incr': 0.15,
+          'eyes/l-eye-trans-out': 0.35, 'eyes/r-eye-trans-out': 0.35, 
+          'eyes/l-eye-corner2-up': 0.3, 'eyes/r-eye-corner2-up': 0.3,
+          'cheek/l-cheek-bones-incr': 0.45, 'cheek/r-cheek-bones-incr': 0.45, 'cheek/l-cheek-volume-decr': 0.1, 'cheek/r-cheek-volume-decr': 0.1,
+          'mouth/mouth-upperlip-volume-incr': 0.15, 'mouth/mouth-lowerlip-volume-incr': 0.4, 'mouth/mouth-cupidsbow-incr': 0.3, 'mouth/mouth-philtrum-volume-incr': 0.3,
+          'forehead/forehead-scale-vert-incr': 0.3}
 if KIND == 'female':
     for i, (p, w) in enumerate(FACE_F.items()): TargetService.load_target(h, '/home/claude/makehumancommunity/mpfb2/src/mpfb/data/targets/' + p + '.target.gz', weight=w, name=f'ff{i}')
 if h.data.shape_keys:
@@ -73,7 +74,7 @@ def lin(hexs): c = [int(hexs[i:i+2], 16)/255 for i in (1, 3, 5)]; return tuple((
 # baked skin: warm tan base, a little blotchy noise, redder lips, darker lids, paler nails
 print('STEP S = 1024', flush=True); S = 1024
 def mask(f): return np.asarray(Image.open(TEX + f).convert('L').resize((S, S)), dtype=np.float32)/255
-base = np.array([197, 146, 112], np.float32) if KIND == 'male' else np.array([214, 165, 132], np.float32)
+base = np.array([197, 146, 112], np.float32) if KIND == 'male' else np.array([206, 156, 122], np.float32)
 rng = np.random.default_rng(3)
 noise = np.asarray(Image.fromarray((rng.random((S//8, S//8))*255).astype(np.uint8)).resize((S, S), Image.BICUBIC), np.float32)/255 - 0.5
 sk = np.ones((S, S, 3), np.float32) * base * (1 + 0.06*noise[..., None])
