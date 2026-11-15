@@ -472,6 +472,39 @@ BROWS = {
     'BrowNatural':  brow(0.0066, arch=0.0045, slope=-0.0035, start=-0.026, length=0.052, rows=11),
 }
 BROWS.update(BROW_SHAPES)
+# masculine shapes: thicker, lower, straighter, with a squarer head; and two made of single hairs
+def blocky(w0, w1, tail, t0):
+    return lambda u: (w0 + (w1 - w0)*u/t0 if u < t0 else w1 + (tail - w1)*sm(t0, 1.0, u))
+def hairs(hfn, wfn, n=46, start=-0.025, length=0.054, groomed=False):
+    """single hairs: short thin strokes, upright by the nose, lying flat towards the tail"""
+    rnd = np.random.default_rng(23)
+    def fn(b):
+        for sgn, E in ((1, EYE_L), (-1, EYE_R)):
+            for i in range(n):
+                for row in range(3):
+                    u = (i + rnd.random()*0.8)/n; w = wfn(u)
+                    zc = E.z + BROW_DZ + hfn(u) + (row - 1)*w*0.33 + (rnd.random() - 0.5)*w*0.2
+                    ang = math.radians(75*(1 - u)**1.6 + 12 + (rnd.random() - 0.5)*(8 if groomed else 22))
+                    L = w*(0.75 + 0.35*rnd.random())
+                    x0 = E.x + sgn*(start + length*u); z0 = zc - L*0.45*math.sin(ang)
+                    x1 = x0 + sgn*L*math.cos(ang); z1 = z0 + L*math.sin(ang)
+                    p0, p1 = on_skin(x0, z0, 0.0018), on_skin(x1, z1, 0.0023)
+                    if not (p0 and p1): continue
+                    d = (p1 - p0); side = Vector((-d.z, 0, d.x)).normalized()*0.00042
+                    v = [b.verts.new(p0 - side), b.verts.new(p0 + side), b.verts.new(p1 + side*0.4), b.verts.new(p1 - side*0.4)]
+                    b.faces.new(v); b.faces.new([b.verts.new(q.co) for q in v[::-1]])   # both sides
+    return fn
+BROW_MEN = {
+    'BrowMStraight': brow_shape(lambda u: 0.001*sm(0, 0.4, u) - 0.003*sm(0.8, 1.0, u), blocky(0.0115, 0.0105, 0.0045, 0.8)),
+    'BrowMSoftArch': brow_shape(lambda u: 0.0055*math.sin(math.pi*min(1.0, u*1.15)) - 0.002*u, blocky(0.0112, 0.0095, 0.0035, 0.65)),
+    'BrowMAngled':   brow_shape(lambda u: 0.0065*(u/0.66) if u < 0.66 else 0.0065 - 0.0085*sm(0.66, 1.0, u), blocky(0.0115, 0.0092, 0.003, 0.66)),
+    'BrowMLow':      brow_shape(lambda u: -0.001 + 0.002*sm(0, 0.3, u) - 0.0065*sm(0.45, 1.0, u), blocky(0.0110, 0.0098, 0.004, 0.5)),
+    'BrowMRising':   brow_shape(lambda u: -0.0015 + 0.0085*u, blocky(0.0118, 0.0088, 0.0035, 0.7)),
+    'BrowMHeavy':    brow_shape(lambda u: 0.0035*math.sin(math.pi*u) - 0.0015*u, lambda u: (0.0145 - 0.004*u)*(1 - 0.35*sm(0.8, 1.0, u))),
+    'BrowMHairy':    hairs(lambda u: 0.0045*math.sin(math.pi*min(1.0, u*1.1)) - 0.002*u, blocky(0.0115, 0.0095, 0.004, 0.7), n=60),
+    'BrowMGroomed':  hairs(lambda u: 0.0035*sm(0, 0.6, u) - 0.003*sm(0.75, 1.0, u), blocky(0.0090, 0.0082, 0.0035, 0.75), n=40, groomed=True),
+}
+BROWS.update(BROW_MEN)
 for nm, fn in BROWS.items(): piece(nm, fn, mat(nm, lin('#2a1d15'), 0.9))
 
 # the long beard: a full, tapering lock hanging from the chin

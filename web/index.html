@@ -4600,7 +4600,9 @@ const AV_OPTIONS = {
   eyes: [['normal','O‘rtacha'],['big','Katta'],['small','Kichik']],
   brows: [['thin','Ingichka'],['normal','O‘rtacha'],['thick','Qalin'],['arched','Kamonsimon'],['straight','To‘g‘ri'],['angled','Burchakli'],
     ['bushy','Quyuq'],['short','Kalta'],['uni','Qo‘shma qosh'],['natural','Tabiiy (yumshoq)'],
-    ['soft_angled','Yumshoq burchakli'],['flat','Tekis'],['hard_angled','Keskin burchakli'],['s_shaped','S-shaklli'],['rounded','Dumaloq kamon'],['exotic','Ekzotik (ko‘tarilgan)']],
+    ['soft_angled','Yumshoq burchakli'],['flat','Tekis'],['hard_angled','Keskin burchakli'],['s_shaped','S-shaklli'],['rounded','Dumaloq kamon'],['exotic','Ekzotik (ko‘tarilgan)'],
+    ['m_straight','Erkak: tekis qalin'],['m_soft_arch','Erkak: yengil kamon'],['m_angled','Erkak: burchakli'],['m_low','Erkak: dumi pastga tushgan'],
+    ['m_rising','Erkak: ko‘tarilgan'],['m_heavy','Erkak: og‘ir, keng'],['m_hairy','Erkak: tukli (tabiiy)'],['m_groomed','Erkak: tukli, taralgan']],
   beard: [['none','Yo‘q'],['stubble','Qirilmagan (soqol izi)'],['mustache','Mo‘ylov'],['goatee','Echki soqol va mo‘ylov'],['chin','Faqat iyakda'],
     ['short','Kalta soqol'],['full','Qalin soqol'],['long','Uzun soqol']],
   nose: [['normal','O‘rtacha'],['narrow','Ingichka'],['wide','Keng'],['long','Uzun']],
@@ -4700,7 +4702,8 @@ const AVATAR = {
     if (c.hair === 'bun') show.add('HairBun');
     const hairC = c.hair === 'bald' ? null : rgb(c.hairColor);
     for (const n of ['Hair', 'HairMid', 'HairLong', 'HairBun']) tint[n] = hairC || mul(c.skin, 0.93);
-    const BROW = { soft_angled: 'BrowSoftAngled', flat: 'BrowFlat', hard_angled: 'BrowHardAngled', s_shaped: 'BrowSShaped', rounded: 'BrowRounded', exotic: 'BrowExotic', natural: 'BrowNatural', thin: 'BrowThin', normal: 'BrowNormal', thick: 'BrowThick', arched: 'BrowArched', straight: 'BrowStraight', angled: 'BrowAngled', bushy: 'BrowBushy', short: 'BrowShort', uni: 'BrowUni' };
+    const BROW = { m_straight: 'BrowMStraight', m_soft_arch: 'BrowMSoftArch', m_angled: 'BrowMAngled', m_low: 'BrowMLow', m_rising: 'BrowMRising',
+      m_heavy: 'BrowMHeavy', m_hairy: 'BrowMHairy', m_groomed: 'BrowMGroomed', soft_angled: 'BrowSoftAngled', flat: 'BrowFlat', hard_angled: 'BrowHardAngled', s_shaped: 'BrowSShaped', rounded: 'BrowRounded', exotic: 'BrowExotic', natural: 'BrowNatural', thin: 'BrowThin', normal: 'BrowNormal', thick: 'BrowThick', arched: 'BrowArched', straight: 'BrowStraight', angled: 'BrowAngled', bushy: 'BrowBushy', short: 'BrowShort', uni: 'BrowUni' };
     show.add(BROW[c.brows]);
     for (const n of Object.values(BROW)) tint[n] = c.hair === 'bald' ? hex('#3a2a20') : mul(c.hairColor, 0.85);
     if (c.brows === 'natural'){ const h_ = c.hair === 'bald' ? hex('#3a2a20') : hex(c.hairColor), s_ = hex(c.skin); tint.BrowNatural = new C3(h_.r*0.7 + s_.r*0.3*0.55, h_.g*0.7 + s_.g*0.3*0.55, h_.b*0.7 + s_.b*0.3*0.55); }   // soft brows: a touch of skin through the hair
@@ -4884,6 +4887,7 @@ const AVED = {
     if (this.cfg[k] === v) return;
     const extra = (k === 'hairColor' && this.cfg.beardColor === this.cfg.hairColor) ? { beardColor: v } : {};   // the beard follows the hair until you colour it apart
     if (k === 'body' && v === 'f' && this.cfg.brows === 'normal') extra.brows = 'natural';                       // the feminine base face comes with soft brows
+    if (k === 'body' && v === 'm' && (this.cfg.brows === 'normal' || this.cfg.brows === 'natural')) extra.brows = 'm_soft_arch';   // and the masculine one with a fuller brow
     this.cfg = avClean({ ...this.cfg, [k]: v, ...extra });
     AVSTORE.saveDraft(this.cfg);
     if (k === 'body'){ try { await this.show(); } catch(_){ this.status('Bu obrazni yuklab bo‘lmadi. Internetni tekshirib, qayta tanlang.', true); } }
