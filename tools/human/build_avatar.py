@@ -1,8 +1,9 @@
 # Susambil player avatars: a customisable MakeHuman (MPFB, CC0) body for the avatar editor and the person you walk.
 # Unlike the crowd bodies (build.py) these keep full resolution and carry everything the editor switches or tints:
-#   morph targets   face_round/square/long/heart, nose_narrow/wide/long, mouth_small/wide/full, eyes_big/small
+#   morph targets   face_round/square/long/heart/diamond/triangle/rect/full/lean/chin, nose_narrow/wide/long, mouth_small/wide/full, eyes_big/small
 #   hair            Hair (short cap) · HairMid (to the collar) · HairLong (to the shoulders) · HairBun
-#   brows           BrowThin · BrowNormal · BrowThick
+#   brows           BrowThin · BrowNormal · BrowThick · BrowArched · BrowStraight · BrowAngled · BrowBushy · BrowShort · BrowUni
+#   beard           BeardStubble · Mustache · BeardGoatee · BeardShort · BeardFull · BeardLong (shells of the face skin, so they follow the face shapes)
 #   clothes         Shirt · Sleeve · PantsTop · PantsLow · Skirt · Jacket · Shoes
 #   accessories     GlassesRound · GlassesSquare · GlassesSun + Lens · HatDoppi + HatDoppiPattern · HatCap · HatWide
 # plus Skin (baked texture, tinted per player), Eyes (iris, tinted) and Sclera; and the idle / walk / run actions.
@@ -38,6 +39,12 @@ MORPHS = {
     'face_square': [('head/head-square', 1.0)],
     'face_long':   [('head/head-oval', 0.6), ('head/head-scale-vert-incr', 0.5)],
     'face_heart':  [('head/head-invertedtriangular', 1.0)],
+    'face_diamond':  [('head/head-diamond', 1.0)],
+    'face_triangle': [('head/head-triangular', 1.0), ('chin/chin-width-incr', 0.4)],
+    'face_rect':     [('head/head-rectangular', 1.0)],
+    'face_full':     [('head/head-fat-incr', 0.9), ('cheek/l-cheek-volume-incr', 0.8), ('cheek/r-cheek-volume-incr', 0.8)],
+    'face_lean':     [('head/head-fat-decr', 0.9), ('cheek/l-cheek-volume-decr', 0.8), ('cheek/r-cheek-volume-decr', 0.8), ('cheek/l-cheek-bones-incr', 0.6), ('cheek/r-cheek-bones-incr', 0.6)],
+    'face_chin':     [('chin/chin-prominent-incr', 0.8), ('chin/chin-width-incr', 0.6), ('chin/chin-bones-incr', 0.5), ('chin/chin-height-incr', 0.4)],
     'nose_narrow': [('nose/nose-scale-horiz-decr', 0.8), ('nose/nose-nostrils-width-decr', 0.5)],
     'nose_wide':   [('nose/nose-scale-horiz-incr', 0.8), ('nose/nose-flaring-incr', 0.6)],
     'nose_long':   [('nose/nose-scale-vert-incr', 0.8)],
@@ -102,12 +109,26 @@ sk = sk*(1 - 0.7*lips[..., None]) + np.array([226, 150, 150], np.float32)*0.7*li
 sk *= (1 - 0.12*lids[..., None]); sk = sk*(1 - 0.5*nails[..., None]) + np.array([255, 236, 230], np.float32)*0.5*nails[..., None]
 skin_png = WORK + 'skin_avatar.jpg'; Image.fromarray(np.clip(sk, 0, 255).astype(np.uint8)).save(skin_png, quality=88)
 
-NAMES = ['Skin', 'Shirt', 'Sleeve', 'PantsTop', 'PantsLow', 'Shoes', 'Hair', 'Eyes', 'Sclera', 'HairMid', 'HairLong', 'Skirt', 'Jacket']
+# beard: a fine light grain (tinted per player) and, for stubble, a dotted alpha
+BS = 512
+g = np.asarray(Image.fromarray((rng.random((BS//4, BS//4))*255).astype(np.uint8)).resize((BS, BS), Image.BILINEAR), np.float32)/255
+fine = rng.random((BS, BS)).astype(np.float32)
+bt = np.clip(0.78 + 0.22*(0.6*g + 0.4*fine), 0, 1)
+beard_png = WORK + 'beard_avatar.jpg'; Image.fromarray((bt*255).astype(np.uint8)).convert('RGB').save(beard_png, quality=70)
+dots = (fine > 0.55).astype(np.uint8)*255
+stub_png = WORK + 'stubble_avatar.png'; Image.fromarray(np.dstack([np.full((BS, BS), 242, np.uint8), dots]), 'LA').save(stub_png, optimize=True)
+NAMES = ['Skin', 'Shirt', 'Sleeve', 'PantsTop', 'PantsLow', 'Shoes', 'Hair', 'Eyes', 'Sclera', 'HairMid', 'HairLong', 'Skirt', 'Jacket',
+         'BeardStubble', 'Mustache', 'BeardGoatee', 'BeardShort', 'BeardFull']
 COL = {'Shirt': '#f2f0ea', 'Sleeve': '#f2f0ea', 'PantsTop': '#2c3e5c', 'PantsLow': '#2c3e5c', 'Shoes': '#1c1c1e', 'Hair': '#2a1d15', 'Eyes': '#3b2a1e',
        'Sclera': '#e8e2da', 'HairMid': '#2a1d15', 'HairLong': '#2a1d15', 'Skirt': '#5a3a6e', 'Jacket': '#3a4a5c'}
 MI = {n: i for i, n in enumerate(NAMES)}
 me.materials.clear()
-for n in NAMES: me.materials.append(mat(n, (1, 1, 1), 0.5, skin_png) if n == 'Skin' else mat(n, lin(COL[n]), 0.15 if n in ('Eyes', 'Sclera') else 0.8))
+BEARDS = ('BeardStubble', 'Mustache', 'BeardGoatee', 'BeardShort', 'BeardFull')
+for n in NAMES:
+    if n == 'Skin': me.materials.append(mat(n, (1, 1, 1), 0.5, skin_png))
+    elif n == 'BeardStubble': me.materials.append(mat(n, lin('#2a1d15'), 0.9, stub_png, alpha=True))
+    elif n in BEARDS: me.materials.append(mat(n, lin('#2a1d15'), 0.92, beard_png))
+    else: me.materials.append(mat(n, lin(COL[n]), 0.15 if n in ('Eyes', 'Sclera') else 0.8))
 
 # head landmarks (before editing)
 HB = rig.data.bones['head'].head_local
@@ -119,6 +140,20 @@ def centroid(tag):
     return c, min(v.y for v in vs)
 EYE_L, EYE_LF = centroid('helper-l-eye'); EYE_R, EYE_RF = centroid('helper-r-eye')
 HEAD_HW = max(abs(v.co.x) for v in me.vertices if vgrp[v.index] == 'body' and abs(v.co.z - (EYE_L.z + 0.01)) < 0.015 and v.co.y > HEADF and v.co.y < HEADB)
+# the face profile down the middle: nose tip, under the nose, chin
+prof = []
+for i in range(80):
+    z = EYE_L.z - 0.01 - i*0.002
+    fr = [v.co.y for v in me.vertices if vgrp[v.index] == 'body' and abs(v.co.x) < 0.006 and abs(v.co.z - z) < 0.0025 and v.co.y < HB.y]
+    if fr: prof.append((z, min(fr)))
+tip = min((p for p in prof if EYE_L.z - 0.075 < p[0] < EYE_L.z - 0.02), key=lambda p: p[1])
+NOSE_Z, NOSE_Y = tip
+NOSE_BASE = next(z for z, y in prof if z < NOSE_Z and y > NOSE_Y + 0.009)
+CHIN_Z = None
+for (z0, y0), (z1, y1) in zip(prof, prof[1:]):
+    if z0 < NOSE_Z - 0.035 and y1 - y0 > 0.02: CHIN_Z = z0; break
+CHIN_Y = min(y for z, y in prof if CHIN_Z <= z <= CHIN_Z + 0.03)
+print('profile nose', round(NOSE_Z, 3), 'base', round(NOSE_BASE, 3), 'chin', round(CHIN_Z, 3), round(CHIN_Y, 3), flush=True)
 print('head', round(ZTOP, 3), 'eyes', tuple(round(x, 3) for x in EYE_L), 'hw', round(HEAD_HW, 3), flush=True)
 
 def scalp(vs):
@@ -173,6 +208,58 @@ for v in bm.verts:
     if off:
         d = v.normal * off; v.co += d
         for lay in SHAPES: v[lay] += d            # keep the face morphs from pulling clothes back in
+# ---- beards: copies of the face skin, lifted off it ----
+uvl = bm.loops.layers.uv.active
+MASKS = {k: mask(f) for k, f in (('lips', 'mpfb_lips.jpg'), ('ears', 'mpfb_ears.jpg'), ('lids', 'mpfb_eyelids.jpg'), ('mouth', 'mpfb_inside-mouth.jpg'))}
+def mval(f, k):
+    u = sum(l[uvl].uv.x for l in f.loops)/len(f.loops); v = sum(l[uvl].uv.y for l in f.loops)/len(f.loops)
+    return MASKS[k][min(S - 1, max(0, int((1 - v)*S))), min(S - 1, max(0, int(u*S)))]
+skinf = [f for f in bm.faces if f.material_index == MI['Skin']]
+lipf = [f for f in skinf if mval(f, 'lips') > 0.5 and f.calc_center_median().y < HB.y - 0.06]
+LZ = [f.calc_center_median().z for f in lipf]
+MOUTH_TOP, MOUTH_BOT = max(LZ), min(LZ); MOUTH_Z = (MOUTH_TOP + MOUTH_BOT)/2
+MOUTH_HW = max(abs(f.calc_center_median().x) for f in lipf)
+print('mouth', round(MOUTH_TOP, 3), round(MOUTH_BOT, 3), 'hw', round(MOUTH_HW, 3), flush=True)
+def sst(a, b, x): t = min(1.0, max(0.0, (x - a)/(b - a))); return t*t*(3 - 2*t)
+def ang(c): return math.degrees(math.atan2(abs(c.x), -(c.y - HB.y)))
+def is_must(c):
+    ax = abs(c.x); droop = 0.013*sst(MOUTH_HW - 0.006, MOUTH_HW + 0.004, ax)
+    return ax < MOUTH_HW + 0.008 and MOUTH_TOP - 0.001 - droop < c.z < NOSE_BASE - 0.002 and c.y < HB.y - 0.06
+def is_goatee(c):
+    return abs(c.x) < MOUTH_HW*0.85 and CHIN_Z - 0.014 < c.z < MOUTH_BOT - 0.003 and c.y < CHIN_Y + 0.045
+def jaw(c, top_front, top_side, a0, a1):
+    a = ang(c)
+    if a > 100 or c.y > HB.y + 0.005: return False
+    top = top_front + (top_side - top_front)*sst(a0, a1, a)
+    if not (CHIN_Z - 0.018 < c.z < top): return False
+    if c.z < CHIN_Z + 0.004 and c.y > CHIN_Y + 0.05: return False          # only the front of the neck under the chin
+    return not is_must(c)
+REG = {
+    'Mustache':     is_must,
+    'BeardGoatee':  is_goatee,
+    'BeardShort':   lambda c: jaw(c, MOUTH_Z + 0.004, EYE_L.z - 0.04, 38, 72),
+    'BeardFull':    lambda c: jaw(c, NOSE_BASE - 0.004, EYE_L.z - 0.03, 22, 58),
+    'BeardStubble': lambda c: is_must(c) or jaw(c, NOSE_BASE - 0.004, EYE_L.z - 0.03, 22, 58),
+}
+THICK = {'BeardStubble': (0.0011, 0.0), 'Mustache': (0.0034, 0.0), 'BeardGoatee': (0.0050, 0.004), 'BeardShort': (0.0040, 0.002), 'BeardFull': (0.0075, 0.008)}
+good = [f for f in skinf if mval(f, 'lips') < 0.3 and mval(f, 'ears') < 0.3 and mval(f, 'lids') < 0.3 and mval(f, 'mouth') < 0.3]
+for name, test in REG.items():
+    src = [f for f in good if test(f.calc_center_median())]
+    dup = bmesh.ops.duplicate(bm, geom=src)
+    nf = [g for g in dup['geom'] if isinstance(g, bmesh.types.BMFace)]
+    nv = [g for g in dup['geom'] if isinstance(g, bmesh.types.BMVert)]
+    for f in nf: f.material_index = MI[name]
+    T, chin = THICK[name]
+    for v in nv:
+        edge = any(e.is_boundary for e in v.link_edges)
+        k = 1.0 if name == 'BeardStubble' else (0.3 if edge else 1.0)
+        extra = chin*sst(MOUTH_BOT, CHIN_Z - 0.005, v.co.z)*(0 if edge else 1)*(1 - sst(0.02, 0.05, abs(v.co.x)))
+        d = v.normal*(T*k + extra)
+        if extra: d += Vector((0, -extra*0.5, -extra*0.6))                  # the chin tuft hangs forward and down
+        v.co += d
+        for lay in SHAPES: v[lay] += d
+    print('beard', name, len(nf), 'faces', flush=True)
+bm.normal_update()
 bm.to_mesh(me); bm.free()
 for g in list(h.vertex_groups):
     if g.name not in BONES: h.vertex_groups.remove(g)
@@ -195,22 +282,68 @@ def piece(name, bmesh_fn, material):
     for p in m.polygons: p.use_smooth = True
     pieces.append(o); return o
 
-# brows: arched strips laid on the brow ridge
-def brow(width_m):
+# brows: strips laid on the brow ridge; shape = how high they arch, where the peak is, how long and how ragged
+def brow(width_m, arch=0.008, length=0.05, start=-0.024, slope=-0.004, peak=None, jag=0.0, join=False, rows=9):
+    rnd = np.random.default_rng(11)
     def fn(b):
+        inner = []
         for sgn, E in ((1, EYE_L), (-1, EYE_R)):
             pts = []
-            for i in range(9):
-                u = i/8; x = E.x + sgn*(-0.024 + 0.05*u); z = E.z + 0.021 + 0.008*math.sin(math.pi*min(1, u*1.2)) - 0.004*u
+            for i in range(rows):
+                u = i/(rows - 1); x = E.x + sgn*(start + length*u)
+                bump = arch*math.sin(math.pi*min(1, u*1.2)) if peak is None else arch*(u/peak if u < peak else max(0.0, 1 - (u - peak)/(1 - peak)*1.3))
+                z = E.z + 0.021 + bump + slope*u
                 p = on_skin(x, z)
-                if p: pts.append((p, 1 - 0.55*u**2))
-            rows = []
+                if p: pts.append((p, (1 - 0.55*u**2)*(1 + jag*(rnd.random() - 0.5)*2)))
+            rs = []
             for p, k in pts:
-                hw = width_m*k/2; rows.append((b.verts.new(p + Vector((0, 0, hw))), b.verts.new(p + Vector((0, -0.0004, -hw)))))
-            for a, c in zip(rows, rows[1:]): b.faces.new((a[0], c[0], c[1], a[1]))
+                hw = width_m*k/2; rs.append((b.verts.new(p + Vector((0, 0, hw))), b.verts.new(p + Vector((0, -0.0004, -hw)))))
+            for a, c in zip(rs, rs[1:]):
+                b.faces.new((a[0], c[0], c[1], a[1]))
+            if pts: inner.append(pts[0][0])
+        if join and len(inner) == 2:                                        # the two meet over the nose
+            rs = []
+            for i in range(7):
+                u = i/6; x = inner[1].x + (inner[0].x - inner[1].x)*u; z = inner[0].z - 0.0012*math.sin(math.pi*u)
+                p = on_skin(x, z)
+                if p: hw = width_m*0.42/2; rs.append((b.verts.new(p + Vector((0, 0, hw))), b.verts.new(p + Vector((0, -0.0004, -hw)))))
+            for a, c in zip(rs, rs[1:]): b.faces.new((a[0], c[0], c[1], a[1]))
     return fn
-for nm, w in (('BrowThin', 0.0042), ('BrowNormal', 0.0068), ('BrowThick', 0.0105)):
-    piece(nm, brow(w), mat(nm, lin('#2a1d15'), 0.9))
+BROWS = {
+    'BrowThin':     brow(0.0042),
+    'BrowNormal':   brow(0.0068),
+    'BrowThick':    brow(0.0105),
+    'BrowArched':   brow(0.0060, arch=0.0145, slope=-0.007),
+    'BrowStraight': brow(0.0075, arch=0.0015, slope=-0.001),
+    'BrowAngled':   brow(0.0072, arch=0.0120, peak=0.66, slope=-0.002),
+    'BrowBushy':    brow(0.0125, arch=0.0070, jag=0.35, rows=15),
+    'BrowShort':    brow(0.0070, length=0.036, start=-0.018),
+    'BrowUni':      brow(0.0085, arch=0.0060, join=True),
+}
+for nm, fn in BROWS.items(): piece(nm, fn, mat(nm, lin('#2a1d15'), 0.9))
+
+# the long beard: a full, tapering lock hanging from the chin
+def long_beard(b):
+    rnd = np.random.default_rng(5); N, K = 48, 14
+    rings = []
+    for k in range(K):
+        t = k/(K - 1); z = CHIN_Z + 0.014 - 0.115*t
+        hw = 0.046*(1 - 0.72*t**1.2) + 0.004; yc = CHIN_Y + 0.016 - 0.012*t; dep = 0.030*(1 - 0.6*t) + 0.004
+        ring = []
+        for i in range(N):
+            th = 2*math.pi*i/N; wob = 1 + 0.10*math.sin(9*th + 2.5*t) + 0.05*(rnd.random() - 0.5)    # locks of hair
+            sn = math.sin(th); y = yc - dep*sn*wob if sn > 0 else yc - 0.3*dep*sn
+            ring.append(b.verts.new((hw*math.cos(th)*wob, y, z)))
+        rings.append(ring)
+    for A, B_ in zip(rings, rings[1:]):
+        for i in range(N): b.faces.new((A[i], A[(i + 1) % N], B_[(i + 1) % N], B_[i]))
+    tipv = b.verts.new((0, CHIN_Y + 0.004, CHIN_Z + 0.014 - 0.13))
+    for i in range(N): b.faces.new((rings[-1][i], rings[-1][(i + 1) % N], tipv))
+    bmesh.ops.recalc_face_normals(b, faces=b.faces)
+    uv = b.loops.layers.uv.new('UVMap')
+    for f in b.faces:
+        for l in f.loops: l[uv].uv = (0.5 + l.vert.co.x*3, 0.5 + l.vert.co.z*3)
+piece('BeardLong', long_beard, mat('BeardLong', lin('#2a1d15'), 0.92, beard_png))
 
 # hair bun at the back of the crown
 def bun(b):

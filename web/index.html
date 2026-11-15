@@ -4558,9 +4558,13 @@ const AV_CLOTH = [['#f2f0ea','Oq'],['#16181c','Qora'],['#2c3e5c','To‘q ko‘k'
   ['#e08a2c','To‘q sariq'],['#f3c14b','Oltin'],['#7b5ea7','Binafsha'],['#b5577b','Gilos'],['#8a6f4f','Qahva'],['#9aa3ad','Kulrang'],['#c9b38a','Bej']];
 const AV_OPTIONS = {
   body: [['m','Erkakona'],['f','Ayolona'],['n','Neytral']],
-  face: [['oval','Oval'],['round','Dumaloq'],['square','To‘rtburchak'],['long','Cho‘ziq'],['heart','Yuraksimon']],
+  face: [['oval','Oval'],['round','Dumaloq'],['square','To‘rtburchak'],['long','Cho‘ziq'],['heart','Yuraksimon'],['diamond','Olmossimon'],
+    ['triangle','Keng jag‘li'],['rect','Uzunchoq to‘rtburchak'],['full','To‘la yonoqli'],['lean','Qotma, yonoq suyagi bo‘rtiq'],['chin','Kuchli iyakli']],
   eyes: [['normal','O‘rtacha'],['big','Katta'],['small','Kichik']],
-  brows: [['thin','Ingichka'],['normal','O‘rtacha'],['thick','Qalin']],
+  brows: [['thin','Ingichka'],['normal','O‘rtacha'],['thick','Qalin'],['arched','Kamonsimon'],['straight','To‘g‘ri'],['angled','Burchakli'],
+    ['bushy','Quyuq'],['short','Kalta'],['uni','Qo‘shma qosh']],
+  beard: [['none','Yo‘q'],['stubble','Qirilmagan (soqol izi)'],['mustache','Mo‘ylov'],['goatee','Echki soqol va mo‘ylov'],['chin','Faqat iyakda'],
+    ['short','Kalta soqol'],['full','Qalin soqol'],['long','Uzun soqol']],
   nose: [['normal','O‘rtacha'],['narrow','Ingichka'],['wide','Keng'],['long','Uzun']],
   mouth: [['normal','O‘rtacha'],['small','Kichik'],['wide','Keng'],['full','To‘la lablar']],
   hair: [['short','Qisqa'],['mid','O‘rtacha (yoqagacha)'],['long','Uzun (yelkagacha)'],['bun','Tugun'],['bald','Sochsiz']],
@@ -4568,7 +4572,7 @@ const AV_OPTIONS = {
   glasses: [['none','Yo‘q'],['round','Yumaloq'],['square','To‘rtburchak'],['sun','Quyosh ko‘zoynagi']],
   hat: [['none','Yo‘q'],['doppi','Do‘ppi'],['cap','Kepka'],['wide','Shlyapa']],
 };
-const AV_DEFAULT = { v: 1, body: 'n', face: 'oval', skin: '#c99a78', eyes: 'normal', eyeColor: '#4a3426', brows: 'normal', nose: 'normal', mouth: 'normal',
+const AV_DEFAULT = { v: 1, body: 'n', face: 'oval', skin: '#c99a78', eyes: 'normal', eyeColor: '#4a3426', brows: 'normal', beard: 'none', beardColor: '#2a1d15', nose: 'normal', mouth: 'normal',
   hair: 'short', hairColor: '#2a1d15', outfit: 'tee', top: '#f2f0ea', bottom: '#2c3e5c', outer: '#3a4a5c', shoes: '#1c1c1e', glasses: 'none', hat: 'none', hatColor: '#111111' };
 const HEX_RX = /^#[0-9a-f]{6}$/i;
 // keep only known fields and values (old or hand-edited data never breaks the editor)
@@ -4658,8 +4662,14 @@ const AVATAR = {
     if (c.hair === 'bun') show.add('HairBun');
     const hairC = c.hair === 'bald' ? null : rgb(c.hairColor);
     for (const n of ['Hair', 'HairMid', 'HairLong', 'HairBun']) tint[n] = hairC || mul(c.skin, 0.93);
-    show.add({ thin: 'BrowThin', normal: 'BrowNormal', thick: 'BrowThick' }[c.brows]);
-    for (const n of ['BrowThin', 'BrowNormal', 'BrowThick']) tint[n] = c.hair === 'bald' ? hex('#3a2a20') : mul(c.hairColor, 0.85);
+    const BROW = { thin: 'BrowThin', normal: 'BrowNormal', thick: 'BrowThick', arched: 'BrowArched', straight: 'BrowStraight', angled: 'BrowAngled', bushy: 'BrowBushy', short: 'BrowShort', uni: 'BrowUni' };
+    show.add(BROW[c.brows]);
+    for (const n of Object.values(BROW)) tint[n] = c.hair === 'bald' ? hex('#3a2a20') : mul(c.hairColor, 0.85);
+    // beard: a few pieces that add up (the goatee and the beards bring the moustache)
+    const BEARD = { none: [], stubble: ['BeardStubble'], mustache: ['Mustache'], goatee: ['Mustache', 'BeardGoatee'], chin: ['BeardGoatee'],
+      short: ['Mustache', 'BeardShort'], full: ['Mustache', 'BeardFull'], long: ['Mustache', 'BeardFull', 'BeardLong'] };
+    for (const n of BEARD[c.beard] || []) show.add(n);
+    for (const n of ['BeardStubble', 'Mustache', 'BeardGoatee', 'BeardShort', 'BeardFull', 'BeardLong']) tint[n] = n === 'BeardStubble' ? mul(c.beardColor, 0.8) : rgb(c.beardColor);
     // clothes
     const o = c.outfit;
     if (o !== 'tee' && o !== 'shorts') show.add('Sleeve');
@@ -4687,6 +4697,7 @@ const AVATAR = {
     for (const [n, list] of Object.entries(a.meshes)) for (const m of list){
       m.setEnabled(show.has(n));
       if (tint[n]) m.material.diffuseColor = tint[n];
+      if (n === 'BeardStubble' && m.material.alpha !== 0.42){ m.material.alpha = 0.42; m.material.transparencyMode = 2; }   // a shadow of hair, the skin shows through
     }
     // morph targets (face shape, nose, mouth, eye size)
     const on = new Set(['face_' + c.face, 'nose_' + c.nose, 'mouth_' + c.mouth, 'eyes_' + c.eyes]);
@@ -4705,6 +4716,7 @@ const AVED = {
     { id: 'skin', name: 'Teri', face: true, groups: [{ k: 'skin', label: 'Teri rangi', pal: AV_SKIN }] },
     { id: 'hair', name: 'Soch', face: true, groups: [{ k: 'hair', label: 'Turmak va uzunlik' }, { k: 'hairColor', label: 'Soch rangi', pal: AV_HAIR }] },
     { id: 'details', name: 'Yuz detallari', face: true, groups: [{ k: 'brows', label: 'Qosh' }, { k: 'nose', label: 'Burun' }, { k: 'mouth', label: 'Og‘iz' }] },
+    { id: 'beard', name: 'Soqol', face: true, groups: [{ k: 'beard', label: 'Soqol va mo‘ylov', hint: 'Har qanday obrazga tanlash mumkin.' }, { k: 'beardColor', label: 'Soqol rangi', pal: AV_HAIR, when: c => c.beard !== 'none' }] },
     { id: 'outfit', name: 'Kiyim', face: false, groups: [{ k: 'outfit', label: 'Uslub' }, { k: 'top', label: 'Ko‘ylak rangi', pal: AV_CLOTH }, { k: 'bottom', label: 'Shim / yubka rangi', pal: AV_CLOTH },
       { k: 'outer', label: 'Kurtka / chopon rangi', pal: AV_CLOTH, when: c => c.outfit === 'jacket' || c.outfit === 'chopon' }, { k: 'shoes', label: 'Oyoq kiyim rangi', pal: AV_CLOTH }] },
     { id: 'acc', name: 'Aksessuar', face: true, groups: [{ k: 'glasses', label: 'Ko‘zoynak' }, { k: 'hat', label: 'Bosh kiyim' }, { k: 'hatColor', label: 'Bosh kiyim rangi', pal: AV_CLOTH, when: c => c.hat !== 'none' }] },
@@ -4831,7 +4843,8 @@ const AVED = {
   },
   async set(k, v, fromPicker){
     if (this.cfg[k] === v) return;
-    this.cfg = avClean({ ...this.cfg, [k]: v });
+    const extra = (k === 'hairColor' && this.cfg.beardColor === this.cfg.hairColor) ? { beardColor: v } : {};   // the beard follows the hair until you colour it apart
+    this.cfg = avClean({ ...this.cfg, [k]: v, ...extra });
     AVSTORE.saveDraft(this.cfg);
     if (k === 'body'){ try { await this.show(); } catch(_){ this.status('Bu obrazni yuklab bo‘lmadi. Internetni tekshirib, qayta tanlang.', true); } }
     else if (this.cur) AVATAR.apply(this.cur, this.cfg);
@@ -4851,6 +4864,8 @@ const AVED = {
       outfit: pick(body === 'm' ? ['tee', 'shirt', 'jacket', 'chopon', 'shorts'] : ['tee', 'shirt', 'skirt', 'jacket', 'chopon']),
       top: pick(AV_CLOTH)[0], bottom: pick(AV_CLOTH)[0], outer: pick(AV_CLOTH)[0], shoes: pick(['#1c1c1e', '#16181c', '#8a6f4f', '#f2f0ea', '#2c3e5c'])
     };
+    c.beard = body === 'm' && Math.random() < 0.55 ? pick(['stubble', 'mustache', 'goatee', 'chin', 'short', 'full', 'long']) : 'none';
+    c.beardColor = c.hairColor;
     c.glasses = Math.random() < 0.25 ? pick(['round', 'square', 'sun']) : 'none';
     c.hat = Math.random() < 0.3 ? pick(['doppi', 'cap', 'wide']) : 'none';
     c.hatColor = c.hat === 'doppi' ? '#111111' : pick(AV_CLOTH)[0];

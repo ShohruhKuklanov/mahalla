@@ -10,11 +10,13 @@ export const AVATAR_VERSION = 1;
 export const avatarSchema = z.object({
   v: z.literal(AVATAR_VERSION).default(AVATAR_VERSION),
   body: z.enum(['m', 'f', 'n']).default('n'),                          // presentation: masculine / feminine / neutral
-  face: z.enum(['oval', 'round', 'square', 'long', 'heart']).default('oval'),
+  face: z.enum(['oval', 'round', 'square', 'long', 'heart', 'diamond', 'triangle', 'rect', 'full', 'lean', 'chin']).default('oval'),
   skin: hex.default('#c99a78'),
   eyes: z.enum(['normal', 'big', 'small']).default('normal'),
   eyeColor: hex.default('#4a3426'),
-  brows: z.enum(['thin', 'normal', 'thick']).default('normal'),
+  brows: z.enum(['thin', 'normal', 'thick', 'arched', 'straight', 'angled', 'bushy', 'short', 'uni']).default('normal'),
+  beard: z.enum(['none', 'stubble', 'mustache', 'goatee', 'chin', 'short', 'full', 'long']).default('none'),
+  beardColor: hex.default('#2a1d15'),
   nose: z.enum(['normal', 'narrow', 'wide', 'long']).default('normal'),
   mouth: z.enum(['normal', 'small', 'wide', 'full']).default('normal'),
   hair: z.enum(['short', 'mid', 'long', 'bun', 'bald']).default('short'),
