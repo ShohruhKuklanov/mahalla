@@ -214,11 +214,41 @@
   @media (prefers-reduced-motion:reduce){ #avChip.need{animation:none} }
   @media (max-width:520px){ #avChip span{display:none} #avChip.need span{display:inline} }
   body.walking #avChip{display:none}
+  /* ---------- city map ---------- */
+  #mapBtn{margin-left:8px;min-height:40px;padding:0 14px;font-weight:800;font-size:13px;color:var(--ink);pointer-events:auto}
+  @media (max-width:520px){ #mapBtn span{display:none} }
+  body.walking #mapBtn{display:none}
+  #miniMap{position:absolute;left:16px;bottom:16px;width:170px;height:170px;border-radius:50%;border:3px solid rgba(255,255,255,.85);box-shadow:0 8px 24px rgba(0,0,0,.4);pointer-events:auto;cursor:pointer;background:#1f2b25}
+  body.touch #miniMap{bottom:auto;top:150px;left:12px;width:116px;height:116px}
+  #mapFull{position:fixed;inset:0;z-index:30;background:rgba(8,10,16,.72);display:flex;align-items:center;justify-content:center;padding:12px}
+  #mapFull[hidden]{display:none}
+  .mp-box{position:relative;width:min(1180px,100%);height:min(820px,100%);display:grid;grid-template-columns:1fr 270px;background:#141821;border:1px solid var(--line);border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  #mapCanvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab;outline:none}
+  #mapCanvas:focus-visible{box-shadow:inset 0 0 0 3px #f3c14b}
+  .mp-side{display:flex;flex-direction:column;border-left:1px solid var(--line);min-height:0;color:#e8ecf3}
+  .mp-h{display:flex;align-items:center;gap:8px;padding:14px 14px 8px}
+  .mp-h h3{margin:0;font:800 18px/1.2 var(--display, system-ui);flex:1}
+  .mp-h button,.mp-tools button{min-width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font:800 13px/1 system-ui;padding:0 10px}
+  .mp-h button:focus-visible,.mp-tools button:focus-visible,#mapList button:focus-visible{outline:3px solid #f3c14b;outline-offset:1px}
+  .mp-tools{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px}
+  .mp-leg{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;padding:8px 14px;font-size:12px;color:#c3cad6;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .mp-leg i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+  #mapList{list-style:none;margin:0;padding:6px 8px 12px;overflow:auto;flex:1}
+  #mapList li.mh{padding:8px 6px;font-weight:800;font-size:13px;color:#f6e7c1}
+  #mapList button{display:block;width:100%;text-align:left;padding:8px 8px;border-radius:10px;background:none;border:0;color:#fff;font:700 14px/1.3 system-ui;cursor:pointer}
+  #mapList button b{font-weight:800}
+  #mapList button:hover{background:rgba(255,255,255,.07)}
+  #mapList button i{display:inline-block;width:10px;height:10px;border-radius:50%;background:#7fe0c9;margin-right:8px}
+  #mapList button i.d{background:#f3c14b}
+  #mapList button span{display:block;margin-left:18px;font-size:12px;font-weight:600;color:#9aa4b1}
+  .mp-tip{padding:8px 14px 12px;font-size:12px;color:#9aa4b1}
+  @media (max-width:760px){ .mp-box{grid-template-columns:1fr;grid-template-rows:1fr 40%} .mp-side{border-left:0;border-top:1px solid var(--line)} .mp-leg{display:none} }
   /* ---------- playing: context button, quest tracker, talk card, speedometer ---------- */
   #actBtn{position:absolute;right:18px;bottom:28px;min-width:64px;min-height:64px;max-width:min(320px,70vw);padding:0 20px;border-radius:32px;background:var(--gold);color:#1b1407;font-weight:800;font-size:15px;pointer-events:auto;box-shadow:0 10px 26px rgba(0,0,0,.35)}
   #actBtn:focus-visible,#walkHud button:focus-visible{outline:3px solid #fff;outline-offset:2px}
   #qTrack{position:absolute;left:12px;top:70px;max-width:min(320px,62vw);padding:10px 14px;border-radius:14px;background:rgba(18,20,40,.72);border:1px solid rgba(255,255,255,.12);pointer-events:none;backdrop-filter:blur(8px)}
   #qTrack .qt-t{font-weight:800;font-size:13px;color:var(--gold)} #qTrack .qt-s{font-size:13.5px;margin-top:3px} #qTrack .qt-d{font-size:12px;color:var(--muted);margin-top:2px}
+  #speedo[hidden],#miniMap[hidden]{display:none}
   #speedo{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);padding:8px 16px;border-radius:14px;background:rgba(18,20,40,.72);display:flex;align-items:baseline;gap:6px;pointer-events:none}
   #speedo b{font:800 26px/1 var(--display, Manrope);font-variant-numeric:tabular-nums} #speedo span{font-size:12px;color:var(--muted)}
   #dlg{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);width:min(520px,calc(100% - 24px));padding:16px 18px;border-radius:18px;background:rgba(18,22,30,.92);border:1px solid var(--line);pointer-events:auto;backdrop-filter:blur(12px)}
@@ -479,6 +509,7 @@
   </div>
   <button type="button" class="cap mini" id="chatBtn" aria-expanded="false" aria-controls="chatBox" title="Chat (T)">💬 <span>Chat</span><i id="chatBadge" hidden></i></button>
   <button type="button" class="cap mini" id="avChip" title="Obrazim" aria-label="Obrazim: 3D avatarni yaratish yoki o‘zgartirish">🧍 <span>Obrazim</span></button>
+  <button type="button" class="cap mini" id="mapBtn" title="Shahar xaritasi (M)" aria-label="Shahar xaritasi">🗺 <span>Xarita</span></button>
   <div class="spacer"></div>
   <div class="cap mini" id="fps">— fps</div>
 </div>
@@ -533,8 +564,21 @@
   <div class="ch-r">Hurmat bilan yozing. Havola va shaxsiy ma’lumot yubormang.</div>
 </div>
 <div id="chatMenu" hidden role="menu"></div>
+<div id="mapFull" hidden role="dialog" aria-modal="true" aria-labelledby="mapT">
+  <div class="mp-box">
+    <canvas id="mapCanvas" tabindex="0" role="img" aria-label="Shahar xaritasi. Sudrab suring, g‘ildirak yoki + / − bilan kattalashtiring, strelkalar bilan siljiting. Bosilgan joy belgi bo‘ladi."></canvas>
+    <div class="mp-side">
+      <div class="mp-h"><h3 id="mapT">🗺 Shahar xaritasi</h3><button type="button" id="mapClose" aria-label="Xaritani yopish">✕</button></div>
+      <div class="mp-tools"><button type="button" id="mapMe">📍 Meni ko‘rsat</button><button type="button" id="mapIn" aria-label="Kattalashtirish">＋</button><button type="button" id="mapOut" aria-label="Kichiklashtirish">－</button><button type="button" id="mapClear">Belgini o‘chirish</button></div>
+      <div class="mp-leg"><span><i style="background:#f3c14b;border-radius:2px"></i>Siz</span><span><i style="background:#7fe0c9"></i>Piyoda odam</span><span><i style="background:#f3c14b"></i>Mashinadagi</span><span><i style="background:#e9b949;border-radius:2px"></i>Diqqatga sazovor</span><span><i style="background:#5b8cff;border-radius:2px"></i>Sizning binoyingiz</span><span><i style="background:#2a6a96;border-radius:2px"></i>Daryo, dengiz</span></div>
+      <ul id="mapList" aria-live="polite"></ul>
+      <div class="mp-tip">Xaritaga bosing — o‘sha joy belgilanadi va piyoda yurganingizda oltin nur yo‘l ko‘rsatadi.</div>
+    </div>
+  </div>
+</div>
 <div id="walkHud">
-  <div class="wk-bar"><button id="walkExit" title="Piyoda rejimdan chiqish">✕ Chiqish</button><button id="walkSwap" title="Obrazni o‘zgartirish">👤 Obraz</button><button id="walkQuests" title="Vazifalar (Q)" aria-label="Vazifalar ro‘yxati">📜 Vazifalar</button><button id="walkChat" title="Chat (T)" aria-label="Chat">💬 Chat</button><button id="walkRun" title="Yugurish" aria-label="Yugurish">🏃</button><button id="walkJump" title="Sakrash (Tab)" aria-label="Sakrash">⤒ Sakrash</button></div>
+  <div class="wk-bar"><button id="walkExit" title="Piyoda rejimdan chiqish">✕ Chiqish</button><button id="walkSwap" title="Obrazni o‘zgartirish">👤 Obraz</button><button id="walkQuests" title="Vazifalar (Q)" aria-label="Vazifalar ro‘yxati">📜 Vazifalar</button><button id="walkChat" title="Chat (T)" aria-label="Chat">💬 Chat</button><button id="walkMap" title="Xarita (M)" aria-label="Shahar xaritasi">🗺 Xarita</button><button id="walkRun" title="Yugurish" aria-label="Yugurish">🏃</button><button id="walkJump" title="Sakrash (Tab)" aria-label="Sakrash">⤒ Sakrash</button></div>
+  <canvas id="miniMap" hidden role="img" aria-label="Kichik xarita: siz va atrofdagi odamlar. Bosing — katta xarita"></canvas>
   <div id="qTrack" hidden role="status" aria-live="polite"><div class="qt-t"></div><div class="qt-s"></div><div class="qt-d"></div></div>
   <div id="speedo" hidden aria-live="off"><b>0</b><span>km/soat</span></div>
   <button type="button" id="actBtn" hidden></button>
@@ -5179,6 +5223,12 @@ const PLAY = {
     if (s.t === 'drive') return null;
     const p = s.at(); return p ? { x: p.x, z: p.z } : null;
   },
+  // where the gold light points: the quest, else the person you asked the way to, else your map mark
+  goal(){
+    const t = this.target(); if (t) return t;
+    if (this.guide && this.npcs[this.guide]){ const n = this.npcs[this.guide]; return { x: n.x, z: n.z }; }
+    return this.waypoint || null;
+  },
   save(){ QSTORE.set(QSTORE.ACT, this.active); this.track(); },
   track(){
     const el = $('#qTrack'); if (!el) return;
@@ -5328,6 +5378,7 @@ const PLAY = {
     // the way: beacon at the goal, arrow over your head
     let tg = this.target();
     if (!tg && this.guide && this.npcs[this.guide]){ const n = this.npcs[this.guide]; tg = { x: n.x, z: n.z }; if (Math.hypot(n.x - WALK.x, n.z - WALK.z) < 4) this.guide = null; }
+    if (!tg && this.waypoint){ tg = this.waypoint; if (WALK.on && Math.hypot(tg.x - WALK.x, tg.z - WALK.z) < 8){ this.waypoint = null; tg = null; toast('📍 Belgilangan joyga yetib keldingiz'); } }
     const dist = tg ? Math.hypot(tg.x - WALK.x, tg.z - WALK.z) : 0;
     this.beacon.setEnabled(WALK.on && !!tg && dist > 6);
     if (tg){ this.beacon.position.set(tg.x, 30, tg.z); this.beacon.material.alpha = 0.22 + 0.1*Math.sin(t*3); }
@@ -5338,6 +5389,8 @@ const PLAY = {
       this.arrow.rotation.y = Math.atan2(tg.x - WALK.x, tg.z - WALK.z);
       const dEl = $('#qTrack .qt-d'); if (dEl) dEl.textContent = dist > 8 ? `${dist >= 1000 ? (dist/1000).toFixed(1) + ' km' : Math.round(dist) + ' m'}` : '';
     } else { const dEl = $('#qTrack .qt-d'); if (dEl) dEl.textContent = ''; }
+    if (this.waypoint && !this.active && !this.guide && WALK.on){ const el = $('#qTrack'); el.hidden = false; el.querySelector('.qt-t').textContent = '📍 Belgi'; el.querySelector('.qt-s').textContent = 'Xaritadagi belgiga boring'; }
+    else if (!this.active && !this.guide && WALK.on && $('#qTrack .qt-t').textContent === '📍 Belgi') $('#qTrack').hidden = true;
     if (this.guide && !this.active){ const el = $('#qTrack'); el.hidden = false; el.querySelector('.qt-t').textContent = '🧭 Yo‘l'; el.querySelector('.qt-s').textContent = NPCS[this.guide].name + ' oldiga boring'; }
     // the context button
     const n = this.near(), btn = $('#actBtn');
@@ -5597,6 +5650,226 @@ window.addEventListener('keydown', e => {
   if (e.repeat || AVED.open || (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'))) return;
   if (e.key === 't' || e.key === 'T' || e.key === '/'){ e.preventDefault(); CHAT.toggle(true); }
 });
+// =================== CITY MAP: the whole city, and who is out where ===================
+// A small map in the corner while you walk (north up, centred on you) and a full map (M or the 🗺 button) you can
+// drag and zoom. It shows streets, the river and the sea, the park, buildings and landmarks, the airport, port and
+// dealership; you (gold arrow), other players (teal; gold while driving), the quest people (!) and your goal.
+// Tap the full map to set a waypoint: the gold light and the arrow then lead you there.
+const MAP = (() => {
+  const B0 = { x0: X0 - 470, x1: DEALER.x1 + 60, z0: AIR.z - 120, z1: COAST_Z + 520 };
+  const PPM = 0.75;                                                     // base image: pixels per metre
+  let base = null;
+  const mx = x => (x - B0.x0)*PPM, my = z => (z - B0.z0)*PPM;
+  function build(){
+    const c = document.createElement('canvas'); c.width = Math.ceil((B0.x1 - B0.x0)*PPM); c.height = Math.ceil((B0.z1 - B0.z0)*PPM);
+    const g = c.getContext('2d');
+    const rect = (x0, z0, x1, z1, col) => { g.fillStyle = col; g.fillRect(mx(x0), my(z0), (x1 - x0)*PPM, (z1 - z0)*PPM); };
+    g.fillStyle = '#1f2b25'; g.fillRect(0, 0, c.width, c.height);                                   // land
+    rect(B0.x0, COAST_Z, B0.x1, B0.z1, '#1d4a6e');                                                   // the sea
+    for (let k = 0; k < 6; k++){ g.strokeStyle = `rgba(255,255,255,${0.04 + k*0.005})`; g.beginPath(); g.moveTo(0, my(COAST_Z + 30 + k*70)); g.lineTo(c.width, my(COAST_Z + 30 + k*70)); g.stroke(); }
+    // river outside the city
+    g.strokeStyle = '#2a6a96'; g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 28*PPM; g.beginPath();
+    RIVER_PATH.forEach((p, i) => i ? g.lineTo(mx(p.x), my(p.z)) : g.moveTo(mx(p.x), my(p.z))); g.stroke();
+    // port, airport, dealership
+    rect(PORT.x0, CITY_S + 1, PORT.x1, COAST_Z, '#4a5058');
+    rect(RW.x0 - 160, AIR.z - 140, RW.x1 + 160, CITY_N - 20, '#26382b');
+    rect(RW.x0, RW.z - RW.w/2, RW.x1, RW.z + RW.w/2, '#5d636c'); rect(APRON.x0, APRON.z0, APRON.x1, APRON.z1, '#555b63');
+    rect(DEALER.x0, DEALER.z0, DEALER.x1, DEALER.z1, '#5b6068');
+    // the city: streets under everything, blocks on top
+    rect(X0 - RD, Z0 - RD, X0 + W + RD, Z0 + D + RD, '#6b7280');
+    for (const bl of blocks){ const x0 = blockX(bl.bx), z0 = blockZ(bl.bz); rect(x0, z0, x0 + BLK, z0 + BLK, '#33413a'); rect(x0 + SW, z0 + SW, x0 + BLK - SW, z0 + BLK - SW, '#2b3832'); }
+    rect(parkMin.x, parkMin.z, parkMax.x, parkMax.z, '#2f6b3a');
+    for (const sp of smallParks){ const x0 = blockX(sp.bx), z0 = blockZ(sp.bz); rect(x0, z0, x0 + BLK, z0 + BLK, '#2f5f37'); }
+    g.fillStyle = '#7fc2e6'; g.beginPath(); g.arc(mx(parkC.x), my(parkC.z), 11*PPM, 0, Math.PI*2); g.fill();
+    // the river through the city
+    rect(X0 - RD - 2, RIVER_Z - RD/2, RIVER_X + RD/2, RIVER_Z + RD/2, '#2a6a96'); rect(RIVER_X - RD/2, RIVER_Z - RD/2, RIVER_X + RD/2, COAST_Z, '#2a6a96');
+    // buildings
+    for (const p of plots){
+      if (!p.tpl || p.inst == null) continue;
+      const f = plotFoot(p); if (!f) continue;
+      g.fillStyle = isLm(p) ? '#e9b949' : p.state === 'mine' ? '#5b8cff' : '#9aa4b1';
+      g.fillRect(mx(f.x0), my(f.z0), Math.max(2, (f.x1 - f.x0)*PPM), Math.max(2, (f.z1 - f.z0)*PPM));
+    }
+    base = c;
+  }
+  const labels = () => [
+    { x: parkC.x, z: parkC.z + 4, t: 'Markaziy bog‘' }, { x: (PORT.x0 + RIVER_X)/2, z: (CITY_S + COAST_Z)/2, t: 'Port' },
+    { x: 0, z: APRON.z0 + 40, t: 'Aeroport' }, { x: (DEALER.x0 + DEALER.x1)/2, z: DEALER.z0 - 10, t: 'Avtosalon' },
+    ...plots.filter(p => isLm(p)).map(p => { const b = bpos(p); return { x: b.x, z: b.z, lm: true, t: TPL[p.tpl].name.replace(/ \(.*\)$/, '').replace(/ nusxasi$/, '') }; }),
+  ];
+  // the moving things, in world coordinates
+  function people(){
+    const out = [];
+    for (const o of OTHERS.values()) if (o.s) out.push({ x: o.x, z: o.z, yaw: o.yaw, nick: o.nick || '…', drive: o.s.mode === 'drive', id: o.id });
+    return out;
+  }
+  function me(){
+    if (WALK.on) return { x: DRIVE.on ? DRIVE.x : WALK.x, z: DRIVE.on ? DRIVE.z : WALK.z, yaw: DRIVE.on ? DRIVE.h : WALK.yaw, walking: true };
+    return { x: camera.target.x, z: camera.target.z, yaw: Math.atan2(-Math.cos(camera.alpha), -Math.sin(camera.alpha)), walking: false };
+  }
+  // draw the map onto ctx: view centre (cx, cz) in metres, scale in px per metre
+  function draw(ctx, W_, H_, cx, cz, scale, full){
+    if (!base) build();
+    const s = scale/PPM, ox = W_/2 - mx(cx)*s, oy = H_/2 - my(cz)*s;
+    ctx.save(); ctx.fillStyle = '#1f2b25'; ctx.fillRect(0, 0, W_, H_);
+    ctx.imageSmoothingEnabled = true; ctx.drawImage(base, ox, oy, base.width*s, base.height*s);
+    const P = (x, z) => [ox + mx(x)*s, oy + my(z)*s];
+    const taken = [];                                             // label boxes already drawn: later ones that overlap are skipped
+    const free = (x0, y0, x1, y1) => { for (const b of taken) if (x0 < b[2] && x1 > b[0] && y0 < b[3] && y1 > b[1]) return false; taken.push([x0, y0, x1, y1]); return true; };
+    const placeLabels = () => {
+      ctx.font = '700 12px Manrope, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      for (const l of labels()){
+        const [x, y0] = P(l.x, l.z), y = y0 + (l.lm ? 18 : 0); if (x < -80 || y < -20 || x > W_ + 80 || y > H_ + 20) continue;
+        const w = ctx.measureText(l.t).width; if (!free(x - w/2 - 3, y - 12, x + w/2 + 3, y + 4)) continue;
+        ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText(l.t, x + 1, y + 1); ctx.fillStyle = l.lm ? '#f6e7c1' : '#ffffff'; ctx.fillText(l.t, x, y);
+      }
+    };
+    // quest people and the goal
+    if (PLAY.ready) for (const n of Object.values(PLAY.npcs)){
+      const [x, y] = P(n.x, n.z), want = (PLAY.step() && PLAY.step().t === 'talk' && PLAY.step().npc === n.id) ? '?' : PLAY.available(n.id) ? '!' : '';
+      if (!want) continue;
+      ctx.fillStyle = want === '!' ? '#f3c14b' : '#7fe0c9'; ctx.beginPath(); ctx.arc(x, y, full ? 8 : 6, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#1b1407'; ctx.font = `900 ${full ? 11 : 9}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(want, x, y + 0.5);
+    }
+    const tg = PLAY.ready ? PLAY.goal() : null;
+    if (tg){ const [x, y] = P(tg.x, tg.z); ctx.strokeStyle = '#f3c14b'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, full ? 10 : 7, 0, Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fillStyle = '#f3c14b'; ctx.fill(); }
+    // other players
+    ctx.textBaseline = 'alphabetic';
+    for (const p of people()){
+      const [x, y] = P(p.x, p.z);
+      if (x < -60 || y < -30 || x > W_ + 60 || y > H_ + 30) continue;
+      ctx.fillStyle = p.drive ? '#f3c14b' : '#7fe0c9'; ctx.strokeStyle = '#0b0e14'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, full ? 6 : 4.5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      if (full || scale > 0.9){
+        ctx.font = '800 11px Manrope, system-ui, sans-serif'; ctx.textAlign = 'center';
+        const w = ctx.measureText(p.nick).width + 10; taken.push([x - w/2, y - 22, x + w/2, y + 6]); ctx.fillStyle = 'rgba(18,20,40,.82)'; ctx.fillRect(x - w/2, y - 22, w, 15);
+        ctx.fillStyle = '#fff'; ctx.fillText(p.nick, x, y - 11);
+      }
+    }
+    if (full) placeLabels();
+    // you
+    const m = me(), [x, y] = P(m.x, m.z);
+    ctx.restore(); ctx.save();
+    const a = Math.atan2(Math.cos(m.yaw), Math.sin(m.yaw));        // screen angle of the heading (x right, z down)
+    ctx.translate(x, y); ctx.rotate(a);
+    ctx.fillStyle = '#f3c14b'; ctx.strokeStyle = '#0b0e14'; ctx.lineWidth = 2;
+    ctx.beginPath(); const r = full ? 11 : 9; ctx.moveTo(r, 0); ctx.lineTo(-r*0.7, r*0.65); ctx.lineTo(-r*0.35, 0); ctx.lineTo(-r*0.7, -r*0.65); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    return { ox, oy, s };
+  }
+  // ---- the mini map ----
+  const mini = $('#miniMap'), mctx = mini.getContext('2d');
+  let mt = 0;
+  function frame(dt){
+    if (WALK.on !== !mini.hidden) mini.hidden = !WALK.on;
+    if (!WALK.on) return;
+    mt -= dt; if (mt > 0) return; mt = 0.08;
+    const dpr = Math.min(2, window.devicePixelRatio || 1), sz = mini.clientWidth || 170;
+    if (mini.width !== Math.round(sz*dpr)){ mini.width = mini.height = Math.round(sz*dpr); }
+    mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const m = me(); draw(mctx, sz, sz, m.x, m.z, DRIVE.on ? 0.42 : 0.7, false);
+  }
+  // ---- the full map ----
+  const fullEl = $('#mapFull'), cv = $('#mapCanvas'), fctx = cv.getContext('2d');
+  const V = { cx: 0, cz: 0, s: 0.4, drag: null, pts: new Map(), last: null };
+  let raf = 0, paintT = 0, skipN = 0;
+  function fit(){ const r = cv.getBoundingClientRect(); V.s = Math.min(r.width/(B0.x1 - B0.x0), r.height/(B0.z1 - B0.z0))*1.05; V.cx = (B0.x0 + B0.x1)/2; V.cz = (B0.z0 + B0.z1)/2 - 80; }
+  function paint(){
+    if (fullEl.hidden){ raf = 0; return; }
+    if (performance.now() - paintT < 90){ raf = requestAnimationFrame(paint); return; }
+    paintT = performance.now();
+    const r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (cv.width !== Math.round(r.width*dpr) || cv.height !== Math.round(r.height*dpr)){ cv.width = Math.round(r.width*dpr); cv.height = Math.round(r.height*dpr); }
+    fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    V.last = draw(fctx, r.width, r.height, V.cx, V.cz, V.s, true);
+    raf = requestAnimationFrame(paint);
+  }
+  // the people list: rows are kept and only their text changes, so focus and clicks are not lost
+  const rows = new Map();
+  function list(){
+    const ps = people(), el = $('#mapList');
+    let head = el.querySelector('li.mh');
+    if (!head){ head = document.createElement('li'); head.className = 'mh'; el.prepend(head); }
+    const ht = ps.length ? `Hozir shaharda: ${ps.length} kishi` : 'Hozir shaharda boshqa hech kim yurmayapti';
+    if (head.textContent !== ht) head.textContent = ht;
+    const seen = new Set();
+    for (const p of ps){
+      seen.add(p.id);
+      let r = rows.get(p.id);
+      if (!r){
+        const li = document.createElement('li'), b = document.createElement('button'); b.type = 'button';
+        const dot = document.createElement('i'), nm = document.createElement('b'), sub = document.createElement('span');
+        b.append(dot, nm, sub); li.appendChild(b); el.appendChild(li);
+        r = { li, dot, nm, sub, b }; rows.set(p.id, r);
+        b.onclick = () => { const o = OTHERS.get(p.id); if (o){ V.cx = o.x; V.cz = o.z; V.s = Math.max(V.s, 1.4); } };
+      }
+      const st = `${p.drive ? 'mashinada' : 'piyoda'} · ${where(p.x, p.z)}`;
+      if (r.nm.textContent !== p.nick) r.nm.textContent = p.nick;
+      if (r.sub.textContent !== st) r.sub.textContent = st;
+      r.dot.className = p.drive ? 'd' : '';
+      r.b.setAttribute('aria-label', `${p.nick}, ${st}. Xaritada ko‘rsatish`);
+    }
+    for (const [id, r] of rows) if (!seen.has(id)){ r.li.remove(); rows.delete(id); }
+  }
+  // a rough place name for a position
+  function where(x, z){
+    if (z > COAST_Z - 120 && x < PORT.x1) return 'portda';
+    if (z < CITY_N) return 'aeroport tomonda';
+    if (x > DEALER.x0 - 20) return 'avtosalon yonida';
+    if (inPark(x, z)) return 'markaziy bog‘da';
+    let best = null, bd = 160;
+    for (const p of plots) if (isLm(p)){ const b = bpos(p), d = Math.hypot(b.x - x, b.z - z); if (d < bd){ bd = d; best = TPL[p.tpl].name.replace(/ \(.*\)$/, ''); } }
+    if (best) return best + ' yonida';
+    const d = plotAtPoint(x, z); return d && DISTRICTS[d.district] ? DISTRICTS[d.district] : 'shaharda';
+  }
+  let listT = 0;
+  function open(){
+    if (!fullEl.hidden) return;
+    back = document.activeElement; keys.clear();
+    if (!base) build();
+    fullEl.hidden = false; fit();
+    const m = me(); if (WALK.on){ V.cx = m.x; V.cz = m.z; V.s = 0.9; }
+    list(); listT = setInterval(list, 1500);
+    if (!raf) raf = requestAnimationFrame(paint);
+    setTimeout(() => $('#mapClose').focus(), 30);
+  }
+  let back = null;
+  function close(){ if (fullEl.hidden) return; fullEl.hidden = true; clearInterval(listT); keys.clear(); if (back && back.focus) back.focus(); }
+  // drag, pinch, wheel; a tap sets a waypoint
+  const toWorld = (px, py) => { const r = cv.getBoundingClientRect(), L = V.last; if (!L) return null; return { x: B0.x0 + ((px - r.left) - L.ox)/L.s/PPM, z: B0.z0 + ((py - r.top) - L.oy)/L.s/PPM }; };
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); V.pts.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY }); });
+  cv.addEventListener('pointermove', e => {
+    const p = V.pts.get(e.pointerId); if (!p) return;
+    if (V.pts.size === 1){ V.cx -= (e.clientX - p.x)/V.s; V.cz -= (e.clientY - p.y)/V.s; }
+    else if (V.pts.size === 2){ const [a, b] = [...V.pts.values()], d0 = Math.hypot(a.x - b.x, a.y - b.y); p.x = e.clientX; p.y = e.clientY; const [a2, b2] = [...V.pts.values()], d1 = Math.hypot(a2.x - b2.x, a2.y - b2.y); if (d0 > 10) V.s = clamp(V.s*d1/d0, 0.12, 4); return; }
+    p.x = e.clientX; p.y = e.clientY;
+  });
+  const up = e => {
+    const p = V.pts.get(e.pointerId); V.pts.delete(e.pointerId);
+    if (p && V.pts.size === 0 && Math.hypot(e.clientX - p.x0, e.clientY - p.y0) < 6){
+      const w = toWorld(e.clientX, e.clientY);
+      if (w){ PLAY.waypoint = w; toast(WALK.on ? `Belgilandi: ${where(w.x, w.z)} — oltin nur sizni boshlab boradi` : `Belgilandi: ${where(w.x, w.z)}. Piyoda yurganingizda yo‘l ko‘rsatiladi`); }
+    }
+  };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => { e.preventDefault(); const k = Math.exp(-e.deltaY*0.0015), w0 = toWorld(e.clientX, e.clientY); V.s = clamp(V.s*k, 0.12, 4); if (w0){ const r = cv.getBoundingClientRect(); V.cx = w0.x - ((e.clientX - r.left) - r.width/2)/V.s; V.cz = w0.z - ((e.clientY - r.top) - r.height/2)/V.s; } }, { passive: false });
+  cv.addEventListener('keydown', e => {
+    const st = 40/V.s;
+    if (e.key === 'ArrowLeft') V.cx -= st; else if (e.key === 'ArrowRight') V.cx += st; else if (e.key === 'ArrowUp') V.cz -= st; else if (e.key === 'ArrowDown') V.cz += st;
+    else if (e.key === '+' || e.key === '=') V.s = clamp(V.s*1.25, 0.12, 4); else if (e.key === '-') V.s = clamp(V.s/1.25, 0.12, 4); else return;
+    e.preventDefault(); e.stopPropagation();
+  });
+  $('#mapClose').onclick = close;
+  $('#mapMe').onclick = () => { const m = me(); V.cx = m.x; V.cz = m.z; V.s = Math.max(V.s, 1); };
+  $('#mapIn').onclick = () => { V.s = clamp(V.s*1.4, 0.12, 4); };
+  $('#mapOut').onclick = () => { V.s = clamp(V.s/1.4, 0.12, 4); };
+  $('#mapClear').onclick = () => { PLAY.waypoint = null; toast('Belgi olib tashlandi'); };
+  fullEl.addEventListener('keydown', e => { if (e.key === 'Escape' || ((e.key === 'm' || e.key === 'M') && e.target.tagName !== 'INPUT')){ e.preventDefault(); e.stopPropagation(); close(); } });
+  for (const ev of ['keydown', 'keyup']) fullEl.addEventListener(ev, e => { if (e.key !== 'Escape') e.stopPropagation(); });
+  $('#mapBtn').onclick = open; $('#walkMap').onclick = open; mini.onclick = open;
+  window.addEventListener('keydown', e => { if ((e.key === 'm' || e.key === 'M') && !e.repeat && !AVED.open && !(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'))){ e.preventDefault(); fullEl.hidden ? open() : close(); } });
+  return { skip: () => !fullEl.hidden && (++skipN % 4 !== 0), frame, open, close, people, where, draw, get isOpen(){ return !fullEl.hidden; }, V, rebuild: () => { base = null; } };
+})();
 // the demo residents say something now and then (offline only)
 const DEMO_LINES = ['Salom! Bugun havo ajoyib.', 'Chorsuga kim boradi?', 'Favvora yonida uchrashamizmi?', 'Yangi mashinani avtosalonda ko‘rdingizmi?', 'Kechqurun ko‘chalar juda chiroyli yonadi.', 'Karim akaning vazifasini bajardim!'];
 let demoChatT = 9;
@@ -6547,6 +6820,7 @@ const keys = new Set();
 window.addEventListener('keydown', e=>{ if (e.target.tagName==='INPUT') return; keys.add(e.key.toLowerCase()); });
 window.addEventListener('keyup', e=>keys.delete(e.key.toLowerCase()));
 function keyboard(dt){
+  MAP.frame(dt);
   if (WALK.on){ walkUpdate(dt); return; }
   if (!keys.size) return;
   const sp = camera.radius*1.2*dt, a = camera.alpha;
@@ -6698,6 +6972,7 @@ scene.onBeforeRenderObservable.add(()=>{
   updateSignals(dt); updateCars(dt); updateDrives(dt); updatePeople(dt); updateShips(dt); updateFlights(dt); updateLOD(dt);
   presenceSend(dt); demoWalkers(dt); updateOthers(dt); demoChat(dt); CHAT.frame();
   // fps + auto quality
+  if (MAP.isOpen){ fpsAcc = fpsN = fpsT = 0; return; }        // the 3D view runs slowly behind the map on purpose
   fpsAcc += engine.getFps(); fpsN++; fpsT += dt; adaptResolution(dt);
   if (fpsT > 0.5){
     const f = fpsAcc/fpsN; fpsHist.push(f); if (fpsHist.length>8) fpsHist.shift();
@@ -7014,10 +7289,10 @@ applyQuality(autoStart());
 updateCoins(); updateSky();
 scene.executeWhenReady(()=>{ boot().catch(e=>{ console.error(e); $('#loader').classList.add('hide'); }); });
 setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ $('#loadMsg').textContent='Yuklanish uzoq davom etmoqda… Internet yoki brauzerni tekshiring (Chrome / Safari yangi versiyasi).'; } }, 15000);
-engine.runRenderLoop(()=>scene.render());
+engine.runRenderLoop(()=>{ if (!MAP.skip()) scene.render(); });
 window.addEventListener('resize', ()=>engine.resize());
-document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>{ if (!MAP.skip()) scene.render(); }); } });
+window.__mahalla = { MAP, trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
