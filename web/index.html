@@ -2163,7 +2163,14 @@ seawall.material = concrete;
   const sw2 = seawall.clone('seawall2'); sw2.scaling.x = (L1 - b)/(L1 - L0); sw2.position.x = (b + L1)/2;
 }
 const portConcrete = stdMat('portConc',{dt:noiseTex('pc','#9d9a93',0.16,128,2)}); portConcrete.diffuseTexture.uScale = portConcrete.diffuseTexture.vScale = 40;
-const flatBox = (name, x0, x1, z0, z1, y, h, mat) => { const m = B.MeshBuilder.CreateBox(name,{width:x1-x0, height:h, depth:z1-z0},scene); m.position.set((x0+x1)/2, y+h/2, (z0+z1)/2); m.material = mat; m.isPickable = false; m.receiveShadows = true; return m; };
+// every flat slab is also remembered for walking: low ones are ground to stand on, tall ones are walls
+const GROUND_RECTS = [], WALL_RECTS = [];
+const flatBox = (name, x0, x1, z0, z1, y, h, mat) => {
+  const m = B.MeshBuilder.CreateBox(name,{width:x1-x0, height:h, depth:z1-z0},scene); m.position.set((x0+x1)/2, y+h/2, (z0+z1)/2); m.material = mat; m.isPickable = false; m.receiveShadows = true;
+  if (y + h <= 1.5 && y + h > -0.5) GROUND_RECTS.push({ x0, x1, z0, z1, top: y + h });
+  else if (y <= 0.6 && h >= 2) WALL_RECTS.push({ x0, x1, z0, z1 });
+  return m;
+};
 const whiteM = stdMat('whiteM',{diffuse:hex('#f2f2ee'), spec:new C3(.3,.3,.3)});
 const PORT = { x0: X0-60, x1: 160, zq: COAST_Z };            // container terminal west, promenade + cruise pier east
 flatBox('portYard', PORT.x0, RIVER_X-RD/2, CITY_S+1, COAST_Z, 0, 0.3, portConcrete);
@@ -3579,7 +3586,7 @@ const DLR = (() => {
   flatBox('dlrLotSlab', x0, x1, z0, z1, 0, 0.1, lotM);
   for (const z of [-24, -12, 0, 12, 24]) add(box(9, 0.02, 0.18, x0 + 11.5, 0.11, cz + z), lineM);
   // showroom: polished floor, glass on three sides, solid back wall, roof slab with a deep canopy to the west
-  add(box(SX1 - SX0, 0.3, SZ1 - SZ0, (SX0 + SX1)/2, 0.15, cz), floorM);
+  add(box(SX1 - SX0, 0.3, SZ1 - SZ0, (SX0 + SX1)/2, 0.15, cz), floorM); GROUND_RECTS.push({ x0: SX0, x1: SX1, z0: cz - (SZ1 - SZ0)/2, z1: cz + (SZ1 - SZ0)/2, top: 0.3 });
   add(box(0.5, H, SZ1 - SZ0, SX1 - 0.25, H/2, cz), whiteM, true);                                   // back wall
   add(box(0.08, 4.2, 30, SX1 - 0.55, 3.6, cz), darkM);                                                // dark feature panel on it
   const roof = add(box(SX1 - SX0 + 5, 0.7, SZ1 - SZ0 + 1.2, (SX0 + SX1)/2 - 2.5, H + 0.35, cz), whiteM);
@@ -4283,13 +4290,25 @@ function realLook(p, shirt, pants, skin){
 // "Piyoda yurish": a person appears where you look; W/S (or the joystick) walks, A/D turns, Shift runs; the camera
 // follows from behind and can be swung round by dragging. Buildings and water stop you; you step up kerbs.
 const WALK = { jy: 0, vy: 0, on: false, k: 'm', av: null, x: 0, z: 0, y: 0.3, yaw: 0, speed: 0, run: false, camT: 0, joy: { x: 0, y: 0, id: null }, saved: null, w: { idle: 1, walk: 0, run: 0 } };
+// the height of what is underfoot, from the same shapes the city is drawn with: roads, kerbed blocks and the plot pads
+// on them, the park lawns and paths, and every slab (port, promenade, airfield, garden, the showroom floor …)
+const SMALL_PARK = new Set(smallParks.map(sp => sp.bx*1000 + sp.bz));
+const PAD_HALF = (P - 0.6)/2;
 function walkGround(x, z){
+  let y = (x > X0 - RD && x < X0 + W + RD && z > Z0 - RD && z < Z0 + D + RD) ? 0.05 : -0.02;   // the road sheet, else the plain
+  if (x > parkMin.x && x < parkMax.x && z > parkMin.z && z < parkMax.z)
+    return (Math.abs(x - parkC.x) < 2.5 || Math.abs(z - parkC.z) < 2.5) ? 0.36 : 0.32;
   const gx = Math.floor((x - X0)/PITCH), gz = Math.floor((z - Z0)/PITCH);
   if (gx >= 0 && gz >= 0 && gx < GX && gz < GZ){
     const lx = x - blockX(gx), lz = z - blockZ(gz);
-    if (lx < BLK && lz < BLK) return (lx > SW && lx < BLK - SW && lz > SW && lz < BLK - SW) ? 0.42 : 0.3;
+    if (lx < BLK && lz < BLK){
+      if (SMALL_PARK.has(gx*1000 + gz)) return 0.32;
+      const p = plotAtPoint(x, z);
+      return (p && Math.abs(x - p.x) < PAD_HALF && Math.abs(z - p.z) < PAD_HALF) ? 0.42 : 0.3;
+    }
   }
-  return 0.07;
+  for (const r of GROUND_RECTS) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1 && r.top > y) y = r.top;
+  return y;
 }
 const onBridge = (x, z) => {
   const kx = Math.round((x - (X0 - RD/2))/PITCH), kz = Math.round((z - (Z0 - RD/2))/PITCH);
@@ -4362,6 +4381,8 @@ function walkBlocked(x, z, fx, fz){
   if (z > COAST_Z - 3) return true;                                        // the sea
   if (onRiverRoad(x, z) && !onBridge(x, z)) return true;                   // the river, except on the bridges
   if (dealerWall(x, z, fx, fz)) return true;
+  if (Math.hypot(x - parkC.x, z - parkC.z) < 11 + BODY_R) return true;        // the fountain's basin
+  for (const r of WALL_RECTS) if (x > r.x0 - BODY_R && x < r.x1 + BODY_R && z > r.z0 - BODY_R && z < r.z1 + BODY_R) return true;   // warehouses, terminals, hangars
   return !!buildingAt(x, z);
 }
 // doors drawn on the buildings round the walker (only while walking)
@@ -7322,7 +7343,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>{ if (!MAP.skip()) scene.render(); });
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>{ if (!MAP.skip()) scene.render(); }); } });
-window.__mahalla = { MAP, trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { walkGround, MAP, trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
