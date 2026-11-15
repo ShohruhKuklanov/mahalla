@@ -542,7 +542,7 @@
   <div id="qLog" hidden role="dialog" aria-labelledby="qLogT"><div class="ql-h"><h3 id="qLogT">Vazifalar</h3><button type="button" id="qLogClose" aria-label="Yopish">✕</button></div><ul id="qLogList"></ul><p class="ql-n">Odamlar tepasidagi <b>!</b> — sizga vazifasi bor, <b>?</b> — sizni kutyapti. Oltin nur va bosh ustidagi strelka yo‘l ko‘rsatadi.</p></div>
   <div id="qDone" hidden role="alert"><div class="qd-k">🎉 Vazifa bajarildi</div><div class="qd-t"></div><div class="qd-r"></div><div class="qd-e"></div><div class="qd-b"><button type="button" class="btn qd-x" hidden>Qayta urinish</button><button type="button" class="btn qd-c">Yopish</button></div></div>
   <div id="inside" hidden><div class="in-k">🚪 Siz ichkaridasiz</div><b id="inName"></b><div id="inSub"></div><div class="in-row"><button id="inOut">🚪 Tashqariga chiqish</button><button id="inInfo">ℹ️ Bino haqida</button></div></div>
-  <div id="walkHint">W / ↑ — oldinga · S / ↓ — orqaga · A D — burilish · Shift — yugurish · Tab — sakrash · E — gaplashish / mashina · Q — vazifalar · sichqoncha — kamera · gamepad ham ishlaydi</div>
+  <div id="walkHint">W / ↑ — oldinga · S / ↓ — orqaga · A D — burilish · Shift — yugurish · Tab — sakrash · Enter / E — mashinaga o‘tirish, gaplashish / mashina · Q — vazifalar · sichqoncha — kamera · gamepad ham ishlaydi</div>
   <div id="joy"><i></i></div>
 </div>
 
@@ -3881,7 +3881,7 @@ function updateCars(dt){
   for (const c of cars){
     const buf = c.ck.buf, o = c.slot*16;
     const along = c.start + c.pos, x = c.alongX ? along : c.line, z = c.alongX ? c.line : along;
-    const hide = c.gi >= carsVisible || (x > parkMin.x-2 && x < parkMax.x+2 && z > parkMin.z-2 && z < parkMax.z+2);
+    const hide = c.taken || c.gi >= carsVisible || (x > parkMin.x-2 && x < parkMax.x+2 && z > parkMin.z-2 && z < parkMax.z+2);
     const th = c.alongX ? (c.dir > 0 ? Math.PI/2 : -Math.PI/2) : (c.dir > 0 ? 0 : Math.PI), cs = Math.cos(th), sn = Math.sin(th), k = hide ? 0 : 1;
     buf[o]=cs*k; buf[o+1]=0; buf[o+2]=-sn*k; buf[o+3]=0;
     buf[o+4]=0; buf[o+5]=k; buf[o+6]=0; buf[o+7]=0;
@@ -4914,7 +4914,7 @@ function carHits(x, z, h){
   for (const [px, pz] of carPoints(x, z, h)) if (carSpotBlocked(px, pz)) return 'wall';
   // traffic
   for (const c of cars){
-    if (c.gi >= carsVisible) continue;
+    if (c.taken || c.gi >= carsVisible) continue;
     const along = c.start + c.pos, cx = c.alongX ? along : c.line, cz2 = c.alongX ? c.line : along;
     if (Math.abs(cx - x) < c.half + 2.4 && Math.abs(cz2 - z) < c.half + 2.4){
       const ax = c.alongX ? c.half : 1.0, az = c.alongX ? 1.0 : c.half;
@@ -4932,44 +4932,113 @@ function drivableNodes(){
   const out = [];
   for (const c of CARS.values()) if (c.node && c.node.isEnabled() && !c.drive) out.push(c.node);
   for (const n of DLR.carNodes()) if (n && n.isEnabled() && n.parent !== DLR.spin) out.push(n);
+  for (const n of DROPPED) if (n.isEnabled()) out.push(n);
   return out;
+}
+// any car in the street can be taken too: the traffic car stops, leaves the traffic, and a drivable copy takes its place
+const DROPPED = [];                                  // cars you took from the traffic and left somewhere (up to 6)
+const trafficPos = c => { const along = c.start + c.pos; return c.alongX ? { x: along, z: c.line, h: c.dir > 0 ? Math.PI/2 : -Math.PI/2 } : { x: c.line, z: along, h: c.dir > 0 ? 0 : Math.PI }; };
+function trafficNear(x, z, r){
+  let best = null, bd = r;
+  for (const c of cars){
+    if (c.taken || c.gi >= carsVisible || c.ck.k.kind === 'bus') continue;
+    const p = trafficPos(c), d = Math.hypot(p.x - x, p.z - z);
+    if (d < bd){ bd = d; best = c; }
+  }
+  return best;
+}
+function takeTraffic(c){
+  c.taken = true; c.v = 0;
+  for (const lane of lanes.values()){ const i = lane.indexOf(c); if (i >= 0){ lane.splice(i, 1); break; } }
+  const cb = c.ck.k.parts[0]._userThinInstanceBuffersStorage.data, ca = cb.instanceColor || cb.color;
+  const col = new C3(ca[c.slot*4], ca[c.slot*4 + 1], ca[c.slot*4 + 2]).toHexString().toLowerCase();
+  const p = trafficPos(c);
+  const n = CAR_MODELS.tracker.make({ owner: { id: 'tc' + c.gi }, model: 'tracker', color: col, plate: { region: '01', text: 'SHAHAR', kind: 'custom' } });
+  n.position.set(p.x, 0.02, p.z); n.rotation.y = p.h; n.metadata.traffic = c;
+  DROPPED.push(n);
+  while (DROPPED.length > 6){ const old = DROPPED.find(x => x !== n && !(x.metadata && x.metadata.playerDriven)); if (!old) break; DROPPED.splice(DROPPED.indexOf(old), 1); disposeCar(old); }
+  return n;
 }
 function nearestCar(x, z, r){
   let best = null, bd = r;
   for (const n of drivableNodes()){ const p = n.getAbsolutePosition(), d = Math.hypot(p.x - x, p.z - z); if (d < bd){ bd = d; best = n; } }
+  if (!best){ const t = trafficNear(x, z, r + 0.6); if (t) return { traffic: t }; }
   return best;
 }
-function enterCar(node){
-  if (DRIVE.on || !node) return;
+// the driver's door: a panel in the car's colour that swings open on its front hinge while you get in or out
+const CAR_DOOR = (() => {
+  const d = B.MeshBuilder.CreateBox('carDoorAnim', { width: 0.07, height: 0.82, depth: 1.12 }, scene);
+  d.setPivotPoint(new V3(0, 0, 0.56)); d.isPickable = false; d.setEnabled(false);
+  const m = new B.StandardMaterial('carDoorAnimM', scene); m.specularColor = new C3(.7, .7, .7); m.specularPower = 90; d.material = m;
+  return { mesh: d,
+    attach(node){ const col = node.metadata && node.metadata.dto ? hex(node.metadata.dto.color) : new C3(.8, .8, .8); m.diffuseColor = col; d.parent = node; d.position.set(-0.93, 0.86, 0.02); d.rotation.set(0, 0, 0); d.setEnabled(true); if (shadowGen) shadowGen.addShadowCaster(d, false); },
+    open(k){ d.rotation.y = 1.15*k; },
+    detach(){ d.setEnabled(false); d.parent = null; } };
+})();
+const doorSpot = (x, z, h, out = 1.25) => { const fx = Math.sin(h), fz = Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h); return { x: x - rx*out + fx*0.15, z: z - rz*out + fz*0.15, rx, rz }; };
+function enterCar(target){
+  if (DRIVE.on || !target) return;
+  const node = target.traffic ? takeTraffic(target.traffic) : target;
   const entry = [...CARS.values()].find(c => c.node === node) || null;
   if (entry) entry.player = true;
   node.metadata = node.metadata || {}; node.metadata.playerDriven = true;
   const p = node.getAbsolutePosition();
   Object.assign(DRIVE, { on: true, node, entry, x: p.x, z: p.z, h: node.rotation.y, v: 0, steer: 0, odo: 0 });
-  // the walk to the driver's door, then in
-  WALK.av.node.setEnabled(false); WALK.speed = 0;
-  camera.radius = 8.5; camera.beta = 1.22; WALK.camT = 0;
+  // walk to the driver's door, open it, sit in, close it (about a second); then the car is yours
+  const ds = doorSpot(p.x, p.z, DRIVE.h);
+  DRIVE.anim = { kind: 'in', t: 0, fx: WALK.x, fz: WALK.z, dx: ds.x, dz: ds.z, yaw: Math.atan2(ds.rx, ds.rz) };
+  CAR_DOOR.attach(node); WALK.speed = 0;
   document.body.classList.add('driving'); $('#speedo').hidden = false;
-  toast('Mashinadasiz: W/S — gaz/tormoz, A/D — rul, Probel — qo‘l tormozi');
 }
 function exitCar(){
-  if (!DRIVE.on) return;
+  if (!DRIVE.on || DRIVE.anim) return;
   if (Math.abs(DRIVE.v) > 3){ toast('Avval to‘xtang'); return; }
+  DRIVE.v = 0;
   // out through the driver's (left) door, or the other side if a wall is there
-  const fx = Math.sin(DRIVE.h), fz = Math.cos(DRIVE.h), rx = Math.cos(DRIVE.h), rz = -Math.sin(DRIVE.h);
-  let ex = DRIVE.x - rx*1.6 + fx*0.3, ez = DRIVE.z - rz*1.6 + fz*0.3;
-  if (walkBlocked(ex, ez)){ ex = DRIVE.x + rx*1.6 + fx*0.3; ez = DRIVE.z + rz*1.6 + fz*0.3; }
-  if (walkBlocked(ex, ez)){ const s = walkSpawnPoint(ex, ez); ex = s.x; ez = s.z; }
+  let ds = doorSpot(DRIVE.x, DRIVE.z, DRIVE.h), sx = ds.x, sz = ds.z;
+  if (walkBlocked(sx, sz)){ const o = doorSpot(DRIVE.x, DRIVE.z, DRIVE.h, -1.25); sx = o.x; sz = o.z; }
+  if (walkBlocked(sx, sz)){ const s = walkSpawnPoint(sx, sz); sx = s.x; sz = s.z; }
+  DRIVE.anim = { kind: 'out', t: 0, sx, sz, ex: sx - ds.rx*0.6, ez: sz - ds.rz*0.6, yaw: Math.atan2(-ds.rx, -ds.rz) };
+  if (walkBlocked(DRIVE.anim.ex, DRIVE.anim.ez)){ DRIVE.anim.ex = sx; DRIVE.anim.ez = sz; }
+  CAR_DOOR.attach(DRIVE.node);
+}
+function exitCarDone(){
+  const a = DRIVE.anim;
   DRIVE.node.metadata.playerDriven = false;
   if (DRIVE.entry) DRIVE.entry.player = false;
   for (const wh of (DRIVE.node.metadata.wheels || [])) wh.w.rotation.y = wh.sd*Math.PI/2;
-  DRIVE.on = false; DRIVE.node = null; DRIVE.v = 0;
-  WALK.x = ex; WALK.z = ez; WALK.y = walkGround(ex, ez); WALK.yaw = Math.atan2(-rx, -rz);
-  WALK.av.node.setEnabled(true); WALK.av.node.position.set(WALK.x, WALK.y, WALK.z);
+  DRIVE.on = false; DRIVE.node = null; DRIVE.v = 0; DRIVE.anim = null; CAR_DOOR.detach();
+  WALK.x = a.ex; WALK.z = a.ez; WALK.y = walkGround(a.ex, a.ez); WALK.yaw = a.yaw;
   camera.radius = 4.6; camera.beta = 1.28;
   document.body.classList.remove('driving'); $('#speedo').hidden = true;
 }
+// getting in / out, step by step
+function driveAnim(dt){
+  const a = DRIVE.anim, av = WALK.av; a.t += dt;
+  const ease = u => u*u*(3 - 2*u), seg = (t0, t1) => clamp((a.t - t0)/(t1 - t0), 0, 1);
+  const setW = (idle, walk) => { WALK.w.idle = idle; WALK.w.walk = walk; WALK.w.run = 0; for (const [n, g] of Object.entries(av.groups)) g.weight = WALK.w[n]; };
+  if (a.kind === 'in'){
+    // 0–0.5 s walk to the door · 0.5–0.9 open · 0.9 sit in · 0.9–1.25 close
+    const u = ease(seg(0, 0.5));
+    WALK.x = lerp(a.fx, a.dx, u); WALK.z = lerp(a.fz, a.dz, u);
+    let dy = a.yaw - WALK.yaw; while (dy > Math.PI) dy -= 2*Math.PI; while (dy < -Math.PI) dy += 2*Math.PI; WALK.yaw += dy*Math.min(1, dt*10);
+    av.node.setEnabled(a.t < 0.9); av.node.position.set(WALK.x, walkGround(WALK.x, WALK.z), WALK.z); av.node.rotation.y = WALK.yaw;
+    setW(u < 1 ? 0 : 1, u < 1 ? 1 : 0);
+    CAR_DOOR.open(a.t < 0.9 ? ease(seg(0.5, 0.9)) : 1 - ease(seg(0.9, 1.25)));
+    camera.target.set(lerp(WALK.x, DRIVE.x, ease(seg(0.5, 1.25))), 1.3, lerp(WALK.z, DRIVE.z, ease(seg(0.5, 1.25))));
+    camera.radius += (8.5 - camera.radius)*Math.min(1, dt*2);
+    if (a.t >= 1.25){ DRIVE.anim = null; CAR_DOOR.detach(); av.node.setEnabled(false); WALK.camT = 0; toast('Mashinadasiz: W/S — gaz/tormoz, A/D — rul, Probel — qo‘l tormozi, Enter — tushish'); }
+  } else {
+    // 0–0.35 open · 0.35 step out · 0.35–0.75 a step away · 0.75–1.1 close
+    CAR_DOOR.open(a.t < 0.75 ? ease(seg(0, 0.35)) : 1 - ease(seg(0.75, 1.1)));
+    const u = ease(seg(0.35, 0.75));
+    if (a.t >= 0.35){ av.node.setEnabled(true); WALK.x = lerp(a.sx, a.ex, u); WALK.z = lerp(a.sz, a.ez, u); WALK.yaw = a.yaw; av.node.position.set(WALK.x, walkGround(WALK.x, WALK.z), WALK.z); av.node.rotation.y = WALK.yaw; setW(u < 1 ? 0 : 1, u < 1 ? 1 : 0); }
+    camera.radius += (4.6 - camera.radius)*Math.min(1, dt*2);
+    if (a.t >= 1.1) exitCarDone();
+  }
+}
 function driveUpdate(dt){
+  if (DRIVE.anim){ driveAnim(dt); return; }
   let thr = 0, st = 0, hand = false;
   if (keys.has('w') || keys.has('arrowup')) thr += 1; if (keys.has('s') || keys.has('arrowdown')) thr -= 1;
   if (keys.has('a') || keys.has('arrowleft')) st -= 1; if (keys.has('d') || keys.has('arrowright')) st += 1;
@@ -5123,13 +5192,13 @@ const PLAY = {
   },
   // the context action: talk, get in, get out
   near(){
-    if (DRIVE.on) return { kind: 'exit', label: '🚪 Mashinadan tushish' };
+    if (DRIVE.on) return DRIVE.anim ? null : { kind: 'exit', label: '🚪 Mashinadan tushish (Enter)' };
     if (WALK.inside || this.dlg) return null;
     let best = null, bd = 3.2;
     for (const n of Object.values(this.npcs)){ const d = Math.hypot(n.x - WALK.x, n.z - WALK.z); if (d < bd){ bd = d; best = n; } }
     if (best) return { kind: 'talk', npc: best, label: `💬 ${best.name} bilan gaplashish` };
     const car = nearestCar(WALK.x, WALK.z, 3.4);
-    if (car) return { kind: 'car', car, label: '🚗 Mashina haydash' };
+    if (car) return { kind: 'car', car, label: '🚗 Mashina haydash (Enter)' };
     return null;
   },
   action(){
@@ -5288,7 +5357,8 @@ $('#qDone .qd-c').onclick = () => { $('#qDone').hidden = true; };
 window.addEventListener('keydown', e => {
   if (!WALK.on || AVED.open || e.repeat || (e.target && e.target.tagName === 'INPUT')) return;
   const k = e.key.toLowerCase();
-  if (k === 'e' || k === 'f' || (k === 'enter' && !(e.target && e.target.tagName === 'BUTTON'))){ e.preventDefault(); PLAY.action(); }
+  const inUi = e.target && e.target.closest && (e.target.closest('#dlg') || e.target.closest('#qLog') || e.target.closest('#chatBox') || e.target.closest('#inside') || e.target.closest('#qDone'));
+  if (k === 'e' || k === 'f' || (k === 'enter' && !inUi)){ e.preventDefault(); if (e.target && e.target.blur && e.target.tagName === 'BUTTON') e.target.blur(); PLAY.action(); }
   if (k === 'q' || k === 'j'){ e.preventDefault(); PLAY.logOpen ? PLAY.closeLog() : PLAY.openLog(); }
   if (k === 'escape' && (PLAY.dlg || PLAY.logOpen)){ e.stopImmediatePropagation(); PLAY.dlgClose(); PLAY.closeLog(); }
 }, true);
@@ -6947,7 +7017,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>scene.render());
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>scene.render()); } });
-window.__mahalla = { CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
