@@ -227,6 +227,11 @@ G = {
     stance=0.33, lean=9.0, prot=7.0, obl=4.5, shift=0.01, arm=(28, -3), elbow=(84, 10), across=0.04, head=0.5),
 }
 SIDE = 0.13 if KIND in ('male', 'm') else 0.10              # hands hang slightly away from the hips
+# the MakeHuman rest pose stands with the feet far apart; bring the legs in so the ankles sit just inside the hips
+_th, _an = B_LEG = (RMAT['thigh_l'].translation, RMAT['foot_l'].translation)
+ADDUCT = math.degrees(math.atan2(_an.x - _th.x*0.62, _th.z - _an.z))
+print('legs: hip x', round(_th.x, 3), 'ankle x', round(_an.x, 3), 'adduct', round(ADDUCT, 1), flush=True)
+def legs_in(sd): return Ry(ADDUCT if sd == 'l' else -ADDUCT)
 def gait(name, t):
     g = G[name]; W = {}
     rot = g['prot']*math.cos(2*math.pi*t)                    # the right hip comes forward with the right foot
@@ -240,8 +245,8 @@ def gait(name, t):
     for sd, off in (('r', 0.0), ('l', 0.5)):
         tp = t + off
         hip, knee, ank, toe = g['hip'](tp), g['knee'](tp), g['ankle'](tp), g['toe'](tp)
-        W['thigh_' + sd] = Rx(-hip)
-        W['calf_' + sd] = Rx(-hip + knee)
+        W['thigh_' + sd] = legs_in(sd) @ Rx(-hip)
+        W['calf_' + sd] = legs_in(sd) @ Rx(-hip + knee)
         W['foot_' + sd] = Rx(-hip + knee - ank)
         W['ball_' + sd] = Rx(-hip + knee - ank - toe)
         # the arm on this side swings with the opposite leg, a moment behind it
@@ -301,6 +306,8 @@ def make_idle(frames):
     for f in range(frames + 1):
         t = f/frames; b = 1.5*math.sin(2*math.pi*t); sway = 0.006*math.sin(2*math.pi*t*0.5)
         W = {'spine_03': Rx(b*0.6), 'spine_02': Rx(b*0.3), 'head': Rx(-b*0.3) @ Rz(1.5*math.sin(2*math.pi*t*0.5))}
+        for sd in ('l', 'r'):                                     # standing: legs together, knees soft, feet flat
+            W['thigh_' + sd] = legs_in(sd) @ Rx(-2); W['calf_' + sd] = legs_in(sd) @ Rx(1); W['foot_' + sd] = I; W['ball_' + sd] = I
         for sd in ('l', 'r'):
             sg = 1 if sd == 'l' else -1; Dc = W['spine_03']; up_t = Vector((sg*SIDE, 0.04, -1))
             W['upperarm_' + sd] = aim(Dc, 'upperarm_' + sd, Dc @ up_t)

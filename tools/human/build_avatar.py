@@ -717,11 +717,12 @@ if len(sys.argv) > 3:
         if m and m.name.startswith('Shirt'): m.diffuse_color = (0.9, 0.9, 0.88, 1)
         if m and m.name.startswith('Sleeve'): m.diffuse_color = (0.75, 0.8, 0.9, 1)
         if m and m.name.startswith('PantsLow'): m.diffuse_color = (0.1, 0.2, 0.45, 1)
+    rig.animation_data.action = bpy.data.actions['idle']; sc.frame_set(1)
     cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam; cam.data.type = 'ORTHO'
     sc.render.resolution_x, sc.render.resolution_y = 520, 520
     views = [('head_front', (0, HY - 0.6, ZTOP - 0.12), (90, 0, 0), 0.32), ('head_side', (0.6, HY, ZTOP - 0.12), (90, 0, 90), 0.36), ('head_34', (0.45, HY - 0.45, ZTOP - 0.12), (90, 0, 45), 0.36),
              ('head_back', (0, HY + 0.6, ZTOP - 0.12), (90, 0, 180), 0.36), ('torso', (0, -1.5, NECK_Z - 0.35), (90, 0, 0), 0.9),
-             ('legs', (0.0, -1.5, 0.45), (90, 0, 0), 1.0), ('arm', (0.9, -0.05, NECK_Z - 0.4), (90, 0, 90), 0.9)]
+             ('legs', (0.0, -1.5, 0.45), (90, 0, 0), 1.0), ('back', (0.0, 2.5, 0.9), (90, 0, 180), 2.0), ('arm', (0.9, -0.05, NECK_Z - 0.4), (90, 0, 90), 0.9)]
     if len(sys.argv) > 5: views = [v for v in views if v[0] in sys.argv[5].split(',')]
     for nm, loc, rot, sca in views:
         cam.location = loc; cam.rotation_euler = tuple(math.radians(x) for x in rot); cam.data.ortho_scale = sca
