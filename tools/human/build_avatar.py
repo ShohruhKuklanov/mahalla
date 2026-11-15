@@ -30,6 +30,17 @@ P = dict(m=dict(gender=1.0, age=0.5, muscle=0.58, weight=0.5, height=0.58, asian
 for k, v in P.items(): HOP.set_value(k, v, entity_reference=h)
 TargetService.reapply_macro_details(h)
 bpy.context.view_layer.objects.active = h; h.select_set(True)
+# the feminine face follows classical proportions (measured on a reference: forehead, nose and lower face in near-equal
+# thirds, the lower one a little longer; eyes one eye-width apart; a narrow nose; an oval face tapering to a soft chin;
+# high cheekbones and full lips)
+FACE_F = {'nose/nose-scale-vert-decr': 0.25, 'nose/nose-point-width-decr': 0.45, 'nose/nose-scale-horiz-decr': 0.2, 'nose/nose-width1-decr': 0.3,
+          'mouth/mouth-trans-up': 0.3, 'chin/chin-height-incr': 0.45, 'chin/chin-prominent-incr': 0.3, 'chin/chin-width-decr': 0.15,
+          'eyes/l-eye-trans-out': 0.35, 'eyes/r-eye-trans-out': 0.35,
+          'cheek/l-cheek-bones-incr': 0.4, 'cheek/r-cheek-bones-incr': 0.4, 'cheek/l-cheek-volume-decr': 0.25, 'cheek/r-cheek-volume-decr': 0.25,
+          'mouth/mouth-upperlip-volume-incr': 0.35, 'mouth/mouth-lowerlip-volume-incr': 0.45, 'mouth/mouth-cupidsbow-incr': 0.4,
+          'eyebrows/eyebrows-angle-up': 0.3}
+if KIND == 'f':
+    for i, (p, w) in enumerate(FACE_F.items()): TargetService.load_target(h, TGT + p + '.target.gz', weight=w, name=f'ff{i}')
 if h.data.shape_keys: bpy.ops.object.shape_key_remove(all=True, apply_mix=True)
 
 # ---------- face morphs (each one a mix of MakeHuman targets) ----------
@@ -220,7 +231,8 @@ earf = [f for f in bm.faces if f[CAT] == 6]
 EA = sorted(hang(f.calc_center_median()) for f in earf); EZ = sorted(f.calc_center_median().z for f in earf)
 EA0, EA1 = EA[int(len(EA)*0.05)], EA[int(len(EA)*0.95)]; EZ0, EZ1 = EZ[int(len(EZ)*0.05)], EZ[int(len(EZ)*0.97)]
 print('ear angle', round(EA0), round(EA1), 'z', round(EZ0, 3), round(EZ1, 3), flush=True)
-HL = [(0, -0.058), (30, -0.064), (55, -0.078), (EA0 - 14, -0.096), (EA0 - 6, (EZ0 + EZ1)/2 - ZTOP), (EA0 + 2, EZ1 + 0.006 - ZTOP),
+HF = (-0.038, -0.045) if KIND == 'f' else (-0.058, -0.064)          # a higher forehead line on the feminine face
+HL = [(0, HF[0]), (30, HF[1]), (55, -0.078), (EA0 - 14, -0.096), (EA0 - 6, (EZ0 + EZ1)/2 - ZTOP), (EA0 + 2, EZ1 + 0.006 - ZTOP),
       ((EA0 + EA1)/2, EZ1 + 0.012 - ZTOP), (EA1 + 3, EZ1 + 0.004 - ZTOP), (EA1 + 18, EZ0 - 0.012 - ZTOP), (150, -0.170), (180, -0.180)]
 # a monotone cubic through the points (Fritsch-Carlson): smooth, and never overshooting into the ear or the eyes
 _X = [a for a, _ in HL]; _Y = [h for _, h in HL]
@@ -391,6 +403,7 @@ def piece(name, bmesh_fn, material):
     for p in m.polygons: p.use_smooth = True
     pieces.append(o); return o
 
+BROW_DZ = 0.0165 if KIND == 'f' else 0.021                          # how far above the eye the brow starts
 # brows: strips laid on the brow ridge; shape = how high they arch, where the peak is, how long and how ragged
 def brow(width_m, arch=0.008, length=0.05, start=-0.024, slope=-0.004, peak=None, jag=0.0, join=False, rows=9):
     rnd = np.random.default_rng(11)
@@ -401,7 +414,7 @@ def brow(width_m, arch=0.008, length=0.05, start=-0.024, slope=-0.004, peak=None
             for i in range(rows):
                 u = i/(rows - 1); x = E.x + sgn*(start + length*u)
                 bump = arch*math.sin(math.pi*min(1, u*1.2)) if peak is None else arch*(u/peak if u < peak else max(0.0, 1 - (u - peak)/(1 - peak)*1.3))
-                z = E.z + 0.021 + bump + slope*u
+                z = E.z + BROW_DZ + bump + slope*u
                 p = on_skin(x, z)
                 if p: pts.append((p, (1 - 0.55*u**2)*(1 + jag*(rnd.random() - 0.5)*2)))
             rs = []
@@ -642,7 +655,7 @@ if len(sys.argv) > 3:
         if m and m.name.startswith('PantsLow'): m.diffuse_color = (0.1, 0.2, 0.45, 1)
     cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam; cam.data.type = 'ORTHO'
     sc.render.resolution_x, sc.render.resolution_y = 520, 520
-    views = [('head_side', (0.6, HY, ZTOP - 0.12), (90, 0, 90), 0.36), ('head_34', (0.45, HY - 0.45, ZTOP - 0.12), (90, 0, 45), 0.36),
+    views = [('head_front', (0, HY - 0.6, ZTOP - 0.12), (90, 0, 0), 0.32), ('head_side', (0.6, HY, ZTOP - 0.12), (90, 0, 90), 0.36), ('head_34', (0.45, HY - 0.45, ZTOP - 0.12), (90, 0, 45), 0.36),
              ('head_back', (0, HY + 0.6, ZTOP - 0.12), (90, 0, 180), 0.36), ('torso', (0, -1.5, NECK_Z - 0.35), (90, 0, 0), 0.9),
              ('legs', (0.0, -1.5, 0.45), (90, 0, 0), 1.0), ('arm', (0.9, -0.05, NECK_Z - 0.4), (90, 0, 90), 0.9)]
     for nm, loc, rot, sca in views:

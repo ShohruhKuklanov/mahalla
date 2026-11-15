@@ -4799,7 +4799,7 @@ const AVED = {
       cv.addEventListener('keydown', e => { if (e.key === 'ArrowLeft'){ this.cam.alpha += 0.25; e.preventDefault(); } if (e.key === 'ArrowRight'){ this.cam.alpha -= 0.25; e.preventDefault(); } });
     }
     this.eng.resize();
-    this.eng.runRenderLoop(() => { if (this.cur && this.cur.root){ const t = this.view === 'face' ? new V3(0, 1.62, 0) : new V3(0, 0.95, 0); this.cam.target = V3.Lerp(this.cam.target, t, 0.12); this.cam.radius += ((this.view === 'face' ? 0.95 : 3.4) - this.cam.radius)*0.08*(this._zoomT > 0 ? 1 : 0); if (this._zoomT > 0) this._zoomT--; } this.sc.render(); });
+    this.eng.runRenderLoop(() => { if (this.cur && this.cur.root){ const hy = { m: 1.64, f: 1.375, n: 1.46 }[this.cfg && this.cfg.body] || 1.62, t = this.view === 'face' ? new V3(0, hy, 0) : new V3(0, hy*0.58, 0); /* each body's own face height */ this.cam.target = V3.Lerp(this.cam.target, t, 0.12); this.cam.radius += ((this.view === 'face' ? 0.95 : 3.4) - this.cam.radius)*0.08*(this._zoomT > 0 ? 1 : 0); if (this._zoomT > 0) this._zoomT--; } this.sc.render(); });
   },
   async show(){
     const k = this.cfg.body;

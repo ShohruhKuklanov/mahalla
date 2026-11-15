@@ -21,6 +21,15 @@ P = dict(male=dict(gender=1.0, age=0.52, muscle=0.62, weight=0.52, height=0.6, a
 for k, v in P.items(): HOP.set_value(k, v, entity_reference=h)
 TargetService.reapply_macro_details(h)
 bpy.context.view_layer.objects.active = h; h.select_set(True)
+# the same feminine face as the player avatars (tools/human/build_avatar.py)
+FACE_F = {'nose/nose-scale-vert-decr': 0.25, 'nose/nose-point-width-decr': 0.45, 'nose/nose-scale-horiz-decr': 0.2, 'nose/nose-width1-decr': 0.3,
+          'mouth/mouth-trans-up': 0.3, 'chin/chin-height-incr': 0.45, 'chin/chin-prominent-incr': 0.3, 'chin/chin-width-decr': 0.15,
+          'eyes/l-eye-trans-out': 0.35, 'eyes/r-eye-trans-out': 0.35,
+          'cheek/l-cheek-bones-incr': 0.4, 'cheek/r-cheek-bones-incr': 0.4, 'cheek/l-cheek-volume-decr': 0.25, 'cheek/r-cheek-volume-decr': 0.25,
+          'mouth/mouth-upperlip-volume-incr': 0.35, 'mouth/mouth-lowerlip-volume-incr': 0.45, 'mouth/mouth-cupidsbow-incr': 0.4,
+          'eyebrows/eyebrows-angle-up': 0.3}
+if KIND == 'female':
+    for i, (p, w) in enumerate(FACE_F.items()): TargetService.load_target(h, '/home/claude/makehumancommunity/mpfb2/src/mpfb/data/targets/' + p + '.target.gz', weight=w, name=f'ff{i}')
 if h.data.shape_keys:
     bpy.ops.object.shape_key_remove(all=True, apply_mix=True)
 print('STEP rig = HumanService.a', flush=True); rig = HumanService.add_builtin_rig(h, 'game_engine')
