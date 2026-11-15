@@ -432,6 +432,33 @@ def brow(width_m, arch=0.008, length=0.05, start=-0.024, slope=-0.004, peak=None
                 if p: hw = width_m*0.42/2; rs.append((b.verts.new(p + Vector((0, 0, hw))), b.verts.new(p + Vector((0, -0.0004, -hw)))))
             for a, c in zip(rs, rs[1:]): b.faces.new((a[0], c[0], c[1], a[1]))
     return fn
+# the classic brow shapes: a height curve and a thickness curve along the brow, from the head (u = 0, by the nose)
+# to the tail (u = 1)
+def brow_shape(hfn, wfn, rows=19, start=-0.025, length=0.053):
+    def fn(b):
+        for sgn, E in ((1, EYE_L), (-1, EYE_R)):
+            rs = []
+            for i in range(rows):
+                u = i/(rows - 1); x = E.x + sgn*(start + length*u); z = E.z + BROW_DZ + hfn(u)
+                p = on_skin(x, z)
+                if not p: continue
+                hw = wfn(u)/2; rs.append((b.verts.new(p + Vector((0, 0, hw))), b.verts.new(p + Vector((0, -0.0004, -hw)))))
+            for a_, c in zip(rs, rs[1:]): b.faces.new((a_[0], c[0], c[1], a_[1]))
+    return fn
+def sm(a, b_, x): t = min(1.0, max(0.0, (x - a)/(b_ - a))); return t*t*(3 - 2*t)
+def head_tail(w0, w1, tail=0.0018, t0=0.55):
+    """thick at the head, thinning along the body, a fine tail"""
+    return lambda u: (w0 + (w1 - w0)*u/t0 if u < t0 else w1 + (tail - w1)*sm(t0, 1.0, u)) * (0.75 + 0.25*sm(0.0, 0.08, u))
+BROW_SHAPES = {
+    'BrowSoftAngled': brow_shape(lambda u: 0.0095*(u/0.64) if u < 0.64 else 0.0095 - 0.0115*sm(0.64, 1.0, u)*(1 - 0.25*(1 - sm(0.64, 0.74, u))),
+                                 head_tail(0.0085, 0.0068, t0=0.62)),
+    'BrowFlat':       brow_shape(lambda u: 0.0025*sm(0.0, 0.5, u) - 0.0045*sm(0.78, 1.0, u), head_tail(0.0085, 0.0080, 0.0025, t0=0.78)),
+    'BrowHardAngled': brow_shape(lambda u: 0.0125*(u/0.62) if u < 0.62 else 0.0125 - 0.0135*(u - 0.62)/0.38, head_tail(0.0080, 0.0062, t0=0.62)),
+    'BrowSShaped':    brow_shape(lambda u: -0.0025*(1 - sm(0.0, 0.22, u)) + 0.0105*math.sin(math.pi*min(1.0, max(0.0, (u - 0.05)/0.95))**0.85) - 0.003*sm(0.8, 1.0, u),
+                                 lambda u: (0.0098 - 0.004*sm(0.0, 0.25, u) + 0.0012*math.sin(math.pi*u)) * (1 - 0.7*sm(0.75, 1.0, u))),
+    'BrowRounded':    brow_shape(lambda u: 0.0115*math.sin(math.pi*u)**0.9 - 0.002*u, head_tail(0.0078, 0.0070, 0.0022, t0=0.6)),
+    'BrowExotic':     brow_shape(lambda u: -0.0015 + 0.0175*u**1.15, lambda u: 0.0092*(1 - 0.72*u) * (0.8 + 0.2*sm(0.0, 0.08, u)), start=-0.024, length=0.056),
+}
 BROWS = {
     'BrowThin':     brow(0.0042),
     'BrowNormal':   brow(0.0068),
@@ -444,6 +471,7 @@ BROWS = {
     'BrowUni':      brow(0.0085, arch=0.0060, join=True),
     'BrowNatural':  brow(0.0066, arch=0.0045, slope=-0.0035, start=-0.026, length=0.052, rows=11),
 }
+BROWS.update(BROW_SHAPES)
 for nm, fn in BROWS.items(): piece(nm, fn, mat(nm, lin('#2a1d15'), 0.9))
 
 # the long beard: a full, tapering lock hanging from the chin
@@ -648,6 +676,7 @@ if len(sys.argv) > 3:
     for m in h.data.materials:
         if m: m.diffuse_color = (*m.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value[:3], 1)
     show = {'Skin', 'Eyes', 'Sclera', 'Shoes', 'Hair', 'Shirt', 'Sleeve', 'PantsTop', 'PantsLow', 'BrowNormal'} | set(sys.argv[4].split(',') if len(sys.argv) > 4 else [])
+    if any(n.startswith('Brow') for n in show - {'BrowNormal'}): show.discard('BrowNormal')
     hide = [i for i, m in enumerate(h.data.materials) if m and m.name.split('.')[0] not in show]
     bm2 = bmesh.new(); bm2.from_mesh(h.data); bmesh.ops.delete(bm2, geom=[f for f in bm2.faces if f.material_index in hide], context='FACES'); bm2.to_mesh(h.data); bm2.free()
     for m in h.data.materials:
@@ -660,6 +689,7 @@ if len(sys.argv) > 3:
     views = [('head_front', (0, HY - 0.6, ZTOP - 0.12), (90, 0, 0), 0.32), ('head_side', (0.6, HY, ZTOP - 0.12), (90, 0, 90), 0.36), ('head_34', (0.45, HY - 0.45, ZTOP - 0.12), (90, 0, 45), 0.36),
              ('head_back', (0, HY + 0.6, ZTOP - 0.12), (90, 0, 180), 0.36), ('torso', (0, -1.5, NECK_Z - 0.35), (90, 0, 0), 0.9),
              ('legs', (0.0, -1.5, 0.45), (90, 0, 0), 1.0), ('arm', (0.9, -0.05, NECK_Z - 0.4), (90, 0, 90), 0.9)]
+    if len(sys.argv) > 5: views = [v for v in views if v[0] in sys.argv[5].split(',')]
     for nm, loc, rot, sca in views:
         cam.location = loc; cam.rotation_euler = tuple(math.radians(x) for x in rot); cam.data.ortho_scale = sca
         sc.render.filepath = PV.replace('.png', f'_{nm}.png'); bpy.ops.render.render(write_still=True)
