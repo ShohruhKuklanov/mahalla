@@ -4139,7 +4139,25 @@ function updatePeople(dt){
 // from a baked bone texture, so dozens of walkers cost a few draw calls. The same bodies give the person you steer.
 const HUMAN = { kinds: {}, ready: false, loading: null, SLOTS: 40, time: 0 };
 const HUMAN_ANIMS = ['walk', 'run', 'idle'];
-const HUMAN_WALK_MS = 1.26, HUMAN_RUN_MS = 3.3;            // ground speed of the walk / run cycles at their own pace
+// metres covered by one full walk / run cycle of each body (measured in tools/human/build.py: the standing foot's slide)
+const GAIT = { m: { walk: 1.30, run: 2.51 }, f: { walk: 1.024, run: 1.978 }, n: { walk: 1.117, run: 2.148 } };
+const GAIT_FRAMES = { walk: 32, run: 20 };
+// the legs follow the ground: one shared stride phase drives walk and run together, so blending them never tangles
+// the feet and the soles do not slide whatever the speed
+function gaitPlay(a, st, sp, dt, body, back, air){
+  const G = GAIT[body] || GAIT.n, ww = st.w.walk || 0, wr = st.w.run || 0;
+  const L = ww + wr > 0.01 ? (ww*G.walk + wr*G.run)/(ww + wr) : G.walk;
+  let rate = air ? 0 : sp/L; if (back) rate = -rate;
+  st.ph = (((st.ph || 0) + rate*dt) % 1 + 1) % 1;
+  for (const n of ['walk', 'run']){
+    const g = a.groups[n]; if (!g) continue;
+    const span = g.to - g.from, want = g.from + st.ph*span;
+    g.speedRatio = rate*span/60 || 0.0001;
+    const an = g.animatables && g.animatables[0], cur = an ? an.masterFrame : null;
+    const off = cur == null ? span : Math.abs(cur - want);
+    if (off > 1 && off < span - 1) g.goToFrame(want);
+  }
+}
 const HAIR_REAL = ['#16110e','#1c1714','#2b1d14','#3b2a1e','#55391f','#6e4e30','#2a2a2a','#8d8d8d'];
 const SKIN_BASE = { m: [197, 146, 112], f: [214, 165, 132] };   // the tone baked into each body's skin texture
 function humanStdMat(pm, tag){
@@ -4247,7 +4265,7 @@ function updateRealPeople(dt){
         _hs.set(p.scale, p.scale, p.scale); B.Quaternion.RotationYawPitchRollToRef(p.yaw, 0, 0, _hq); _ht.set(p.x, p.y - 0.01, p.z);
         B.Matrix.ComposeToRef(_hs, _hq, _ht, _hw); H.M.multiplyToRef(_hw, _hm); _hm.multiplyToRef(H.Mi, _hw); _hw.copyToArray(mb, i*16);
         const r = H.ranges[p.moving ? 'walk' : 'idle'];
-        vb[i*4] = r.from; vb[i*4 + 1] = r.to; vb[i*4 + 2] = (p.i*7.31) % r.n; vb[i*4 + 3] = p.moving ? 30*p.v/HUMAN_WALK_MS : 30;
+        vb[i*4] = r.from; vb[i*4 + 1] = r.to; vb[i*4 + 2] = (p.i*7.31) % r.n; vb[i*4 + 3] = p.moving ? GAIT_FRAMES.walk*p.v/((GAIT[H.k] || GAIT.m).walk*p.scale) : 30;
         if (cb){ const c = p.real3[m.metadata.part]; cb[i*4] = c[0]; cb[i*4 + 1] = c[1]; cb[i*4 + 2] = c[2]; cb[i*4 + 3] = 1; }
       }
       m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('bakedVertexAnimationSettingsInstanced'); if (cb) m.thinInstanceBufferUpdated(ub.instanceColor ? 'instanceColor' : 'color');
@@ -4476,13 +4494,13 @@ function walkUpdate(dt){
     const a = camera.alpha, fx = -Math.cos(a), fz = -Math.sin(a), rx = fz, rz = -fx;   // right of the view (left-handed: facing +z, right is +x)
     jx = fx*(-WALK.joy.y) + rx*WALK.joy.x; jz = fz*(-WALK.joy.y) + rz*WALK.joy.x;
     const L = Math.hypot(jx, jz); dirx = jx/L; dirz = jz/L;
-    want = (run || jm > 0.92 ? 4.2 : 1.6)*Math.min(1, jm);
+    want = (run || jm > 0.92 ? 3.9 : 1.45)*Math.min(1, jm);
     let dy = Math.atan2(dirx, dirz) - WALK.yaw; while (dy > Math.PI) dy -= 2*Math.PI; while (dy < -Math.PI) dy += 2*Math.PI;
     WALK.yaw += dy*Math.min(1, dt*9);
   } else {
     WALK.yaw += turn*dt*(run ? 2.2 : 2.6);
     dirx = Math.sin(WALK.yaw); dirz = Math.cos(WALK.yaw);
-    if (f > 0) want = run ? 4.2 : 1.6; else if (f < 0){ want = 1.0; back = true; }
+    if (f > 0) want = run ? 3.9 : 1.45; else if (f < 0){ want = 1.0; back = true; }
     if (PLAY.dlg || PLAY.logOpen) want = 0;
   }
   WALK.speed += (want - WALK.speed)*Math.min(1, dt*(want > WALK.speed ? 5 : 8));
@@ -4504,9 +4522,7 @@ function walkUpdate(dt){
   const wr = clamp((sp - 1.7)/2.2, 0, 1), wi = clamp(1 - sp/0.9, 0, 1);
   const tgt = { idle: wi, walk: (1 - wi)*(1 - wr), run: (1 - wi)*wr };
   for (const [n, g] of Object.entries(av.groups)){ WALK.w[n] += (tgt[n] - WALK.w[n])*Math.min(1, dt*10); g.weight = WALK.w[n]; }
-  av.groups.walk.speedRatio = clamp(sp/HUMAN_WALK_MS, 0.6, 1.5)*(back ? -1 : 1);
-  av.groups.run.speedRatio = clamp(sp/HUMAN_RUN_MS, 0.8, 1.4);
-  if (WALK.jy > 0){ av.groups.walk.speedRatio = 0.15; av.groups.run.speedRatio = 0.15; }   // legs hold the stride in the air
+  gaitPlay(av, WALK, sp, dt, (av.cfg && av.cfg.body) || WALK.k, back, WALK.jy > 0);   // in the air the legs hold the stride
   // the camera: behind the head; it swings back behind you a moment after you stop dragging it
   camera.target.set(WALK.x, WALK.y + 1.5, WALK.z);
   if (!gest && performance.now() > WALK.camT && (sp > 0.3 || turn)){
@@ -5519,8 +5535,7 @@ function updateOthers(dt){
       const sp = Math.abs(o.s.speed), wr = clamp((sp - 1.7)/2.2, 0, 1), wi = clamp(1 - sp/0.9, 0, 1);
       const tgt = { idle: wi, walk: (1 - wi)*(1 - wr), run: (1 - wi)*wr };
       for (const [n, g] of Object.entries(o.a.groups)){ o.w[n] += (tgt[n] - o.w[n])*Math.min(1, dt*8); g.weight = o.w[n]; }
-      if (o.a.groups.walk) o.a.groups.walk.speedRatio = clamp(sp/HUMAN_WALK_MS, 0.6, 1.5);
-      if (o.a.groups.run) o.a.groups.run.speedRatio = clamp(sp/HUMAN_RUN_MS, 0.8, 1.4);
+      gaitPlay(o.a, o, sp, dt, o.k, o.s.speed < 0, false);
     }
     // their car, while they drive
     const ck = driving ? (o.s.carModel || 'tracker') + (o.s.carColor || '#f2f3f1') : null;

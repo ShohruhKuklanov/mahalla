@@ -135,8 +135,13 @@ print('tris', sum(len(p.vertices) - 2 for p in me.polygons))
 # ---------- animations ----------
 # Armature axes: +X = the character's left, -Y = forward, +Z = up.
 # Every bone is driven by its world (armature-space) rotation delta D; the local pose is L = R^-1 Dp^-1 D R.
+# Walk and run follow measured human gait curves (hip, knee, ankle and toe angles over one stride, heel strike at 0),
+# with the pelvis turning, tilting and shifting over the standing leg, the chest turning against it and the arms
+# swinging opposite the legs. The body's height is solved every frame so the standing foot rests on the ground:
+# that gives the natural rise and fall of a walk, and the push-off, flight and landing of a run.
 bpy.context.view_layer.objects.active = rig; bpy.ops.object.mode_set(mode='POSE')
 REST = {b.name: b.matrix_local.to_quaternion() for b in rig.data.bones}
+RMAT = {b.name: b.matrix_local.copy() for b in rig.data.bones}
 RDIR = {b.name: (b.tail_local - b.head_local).normalized() for b in rig.data.bones}
 PARENT = {b.name: (b.parent.name if b.parent else None) for b in rig.data.bones}
 ORDER = [b.name for b in rig.data.bones]          # parents come before children
@@ -150,7 +155,7 @@ def aim(D, bone, target):
     """world delta that turns `bone` (already carried by its parent delta D) to point along target"""
     cur = D @ RDIR[bone]
     return cur.rotation_difference(target.normalized()) @ D
-def apply(frame, W, bob=0.0):
+def pose(W, loc):
     D = {}
     for bn in ORDER:
         p = PARENT[bn]; Dp = D.get(p, I) if p else I
@@ -158,48 +163,149 @@ def apply(frame, W, bob=0.0):
         if bn in KEYED:
             pb = rig.pose.bones[bn]; pb.rotation_mode = 'QUATERNION'
             r = REST[bn]; pb.rotation_quaternion = r.inverted() @ Dp.inverted() @ D[bn] @ r
-            pb.keyframe_insert('rotation_quaternion', frame=frame)
-    pb = rig.pose.bones['pelvis']; pb.location = REST['pelvis'].to_matrix().inverted() @ Vector((0, 0, bob)); pb.keyframe_insert('location', frame=frame)
-SIDE = 0.13 if KIND == 'male' else 0.10              # hands hang slightly away from the hips
-def gait(ph, amp, bend, lean, elbow, bob, arm_amp, breath=0.0):
-    s = math.sin(2*math.pi*ph); c = math.cos(2*math.pi*ph)
-    tw = 5*s*(amp/30)
-    W = {}
-    W['pelvis'] = Rz(tw)
-    W['spine_01'] = Rz(tw*0.5) @ Rx(lean*0.4)
-    W['spine_02'] = Rz(-tw*0.2) @ Rx(lean*0.75)
-    W['spine_03'] = Rz(-tw*0.6) @ Rx(lean + breath)
-    W['neck_01'] = Rz(-tw*0.3) @ Rx(lean*0.4)
-    W['head'] = Rz(-tw*0.1) @ Rx(-breath*0.5)
-    for side, sg in (('l', 1), ('r', -1)):
-        sw = amp*s*sg                                   # + = this leg in front
-        ph_side = 2*math.pi*ph + (0 if sg > 0 else math.pi)
-        knee = bend*max(0.0, math.cos(ph_side + 0.5))**2 + 3 + 6*max(0.0, math.sin(ph_side - 2.0))*(bend/42)
-        W['thigh_' + side] = Rx(-sw)
-        W['calf_' + side] = Rx(knee - sw)
-        W['foot_' + side] = Rx(-0.35*sw + 0.25*max(0.0, -sw) * (1 if knee > 20 else 0))
-        W['ball_' + side] = W['foot_' + side]
-        # arms swing opposite to the leg on the same side
-        asw = -arm_amp*s*sg
+    rig.pose.bones['pelvis'].location = REST['pelvis'].to_matrix().inverted() @ loc
+    for bn, ang in FINGERS.items():                              # relaxed hands: fingers gently curled
+        pb = rig.pose.bones[bn]; pb.rotation_mode = 'QUATERNION'; pb.rotation_quaternion = Quaternion(CURL_AXIS, math.radians(ang))
+FINGERS = {}
+for f, a0 in (('index', 14), ('middle', 18), ('ring', 22), ('pinky', 26), ('thumb', 8)):
+    for k, m in (('01', 1.0), ('02', 1.2), ('03', 0.9)):
+        for sd in ('l', 'r'):
+            if f'{f}_{k}_{sd}' in rig.pose.bones: FINGERS[f'{f}_{k}_{sd}'] = a0*m
+CURL_AXIS = Vector((1, 0, 0))
+def key(frame):
+    for bn in FINGERS: rig.pose.bones[bn].keyframe_insert('rotation_quaternion', frame=frame)
+    for bn in KEYED: rig.pose.bones[bn].keyframe_insert('rotation_quaternion', frame=frame)
+    rig.pose.bones['pelvis'].keyframe_insert('location', frame=frame)
+
+# where each foot meets the ground: the heel, the ball and the tip of the toes (each in its bone's own frame)
+GROUND = min(v.co.z for v in h.data.vertices)
+CONTACT = {}
+for sd in ('l', 'r'):
+    fh, bh, bt = RMAT['foot_' + sd].translation, RMAT['ball_' + sd].translation, rig.data.bones['ball_' + sd].tail_local
+    heel = Vector((fh.x, fh.y + 0.035, GROUND)); pad = Vector((bh.x, bh.y, GROUND)); tip = Vector((bt.x, bt.y, GROUND))
+    CONTACT[sd] = [('foot_' + sd, RMAT['foot_' + sd].inverted() @ heel), ('foot_' + sd, RMAT['foot_' + sd].inverted() @ pad),
+                   ('ball_' + sd, RMAT['ball_' + sd].inverted() @ tip)]
+def contacts(sd):
+    bpy.context.view_layer.update()
+    return [rig.pose.bones[bn].matrix @ p for bn, p in CONTACT[sd]]
+
+def curve(pts):
+    """a smooth periodic curve through (phase, value) points (Catmull-Rom over one cycle)"""
+    pts = sorted(pts); n = len(pts)
+    def f(t):
+        t %= 1.0
+        i = max(k for k in range(n) if pts[k][0] <= t) if t >= pts[0][0] else n - 1
+        p0, p1, p2, p3 = (pts[(i + k) % n] for k in (-1, 0, 1, 2))
+        t1 = p1[0]; t2 = p2[0] + (1 if p2[0] <= t1 else 0); tt = t + (1 if t < t1 else 0)
+        u = (tt - t1)/(t2 - t1)
+        a, b, c, d = p0[1], p1[1], p2[1], p3[1]
+        return 0.5*((2*b) + (-a + c)*u + (2*a - 5*b + 4*c - d)*u*u + (-a + 3*b - 3*c + d)*u**3)
+    return f
+# joint angles over one stride of the right leg (degrees; + = hip flexed forward, knee bent, ankle toes-up, toes bent up)
+G = {
+  'walk': dict(
+    hip=curve([(0, 28), (0.12, 24), (0.3, 6), (0.5, -11), (0.6, -4), (0.75, 22), (0.88, 30)]),
+    knee=curve([(0, 4), (0.13, 17), (0.38, 4), (0.5, 9), (0.62, 40), (0.72, 60), (0.84, 32), (0.95, 3)]),
+    ankle=curve([(0, -1), (0.07, -6), (0.3, 7), (0.48, 10), (0.62, -16), (0.72, -3), (0.88, 1)]),
+    toe=curve([(0, 0), (0.44, 0), (0.54, 22), (0.6, 32), (0.67, 4), (0.75, 0)]),
+    stance=0.6, lean=2.5, prot=4.0, obl=3.5, shift=0.014, arm=(13, 2), elbow=(14, 14), across=0.0, head=0.8),
+  'run': dict(
+    hip=curve([(0, 36), (0.16, 12), (0.33, -20), (0.5, 8), (0.75, 52), (0.9, 42)]),
+    knee=curve([(0, 22), (0.13, 44), (0.33, 20), (0.5, 85), (0.65, 110), (0.82, 62), (0.94, 28)]),
+    ankle=curve([(0, 2), (0.13, 17), (0.33, -26), (0.5, -6), (0.8, 6)]),
+    toe=curve([(0, 0), (0.24, 0), (0.3, 28), (0.38, 4), (0.45, 0)]),
+    stance=0.33, lean=9.0, prot=7.0, obl=4.5, shift=0.01, arm=(28, -3), elbow=(84, 10), across=0.04, head=0.5),
+}
+SIDE = 0.13 if KIND in ('male', 'm') else 0.10              # hands hang slightly away from the hips
+def gait(name, t):
+    g = G[name]; W = {}
+    rot = g['prot']*math.cos(2*math.pi*t)                    # the right hip comes forward with the right foot
+    obl = g['obl']*math.sin(2*math.pi*(t + 0.1))             # the hip over the swinging leg dips
+    W['pelvis'] = Rz(rot) @ Ry(obl)
+    W['spine_01'] = Rz(rot*0.4) @ Ry(obl*0.3) @ Rx(g['lean']*0.3)
+    W['spine_02'] = Rz(-rot*0.3) @ Rx(g['lean']*0.7)
+    W['spine_03'] = Rz(-rot*0.9) @ Ry(-obl*0.2) @ Rx(g['lean'])
+    W['neck_01'] = Rz(-rot*0.4) @ Rx(g['lean']*0.3)
+    W['head'] = Rz(-rot*0.1*g['head']) @ Rx(-g['lean']*0.15)              # the eyes stay level and ahead
+    for sd, off in (('r', 0.0), ('l', 0.5)):
+        tp = t + off
+        hip, knee, ank, toe = g['hip'](tp), g['knee'](tp), g['ankle'](tp), g['toe'](tp)
+        W['thigh_' + sd] = Rx(-hip)
+        W['calf_' + sd] = Rx(-hip + knee)
+        W['foot_' + sd] = Rx(-hip + knee - ank)
+        W['ball_' + sd] = Rx(-hip + knee - ank - toe)
+        # the arm on this side swings with the opposite leg, a moment behind it
+        sg = 1 if sd == 'l' else -1
+        A, A0 = g['arm']; sw = A0 - A*math.cos(2*math.pi*(tp - 0.04))       # + = arm forward
+        fw = max(0.0, sw/A)
         Dc = W['spine_03']
-        up_t = Rx(asw) @ Vector((sg*SIDE, 0.04, -1))
-        W['upperarm_' + side] = aim(Dc, 'upperarm_' + side, Dc @ up_t)
-        el = elbow + (10 if asw < 0 else 2) * abs(math.sin(ph_side)) * (arm_amp/18)
+        up_t = Rx(-sw) @ Vector((sg*(SIDE - g['across']*fw), 0.04, -1))
+        W['upperarm_' + sd] = aim(Dc, 'upperarm_' + sd, Dc @ up_t)
+        E0, E1 = g['elbow']; el = E0 + E1*fw
         lo_t = Rx(-el) @ up_t
-        W['lowerarm_' + side] = aim(W['upperarm_' + side], 'lowerarm_' + side, Dc @ lo_t)
-        W['hand_' + side] = aim(W['lowerarm_' + side], 'hand_' + side, Dc @ (Rx(-el - 4) @ up_t))
-    return W, bob*(abs(c) - 1)
-def make_action(name, frames, fn):
+        if g['across']: lo_t = lo_t + Vector((-sg*0.25*g['across']*10*fw, 0, 0))
+        W['lowerarm_' + sd] = aim(W['upperarm_' + sd], 'lowerarm_' + sd, Dc @ lo_t)
+        W['hand_' + sd] = aim(W['lowerarm_' + sd], 'hand_' + sd, Dc @ (Rx(-el - 6) @ up_t))
+    shift = -g['shift']*math.sin(2*math.pi*t)                # the body sways over the standing foot
+    return W, shift
+def stance(name, sd, t):
+    tp = (t + (0.5 if sd == 'l' else 0.0)) % 1.0
+    return tp < G[name]['stance']
+def make_gait(name, frames):
+    """pose every frame, then lift or lower the body so the standing foot is on the ground"""
     act = bpy.data.actions.new(name); rig.animation_data_create(); rig.animation_data.action = act
-    for f in range(frames + 1):
-        W, bob = fn(f/frames); apply(f + 1, W, bob)
+    lift, poses, track = [], [], []
+    for f in range(frames):
+        t = f/frames; W, shift = gait(name, t)
+        pose(W, Vector((shift, 0, 0)))
+        on = [sd for sd in ('l', 'r') if stance(name, sd, t)]
+        pts = {sd: contacts(sd) for sd in ('l', 'r')}
+        if on:
+            low = min(p.z for sd in on for p in pts[sd]); lift.append(GROUND - low)
+        else: lift.append(None)
+        # how fast the ground slides under the standing foot (sets the speed this cycle covers)
+        track.append((t, pts['r'][1].y if 0.12 <= t <= G[name]['stance'] - 0.12 else None))
+        poses.append((W, shift))
+    # flight (run): a ballistic arc between take-off and landing
+    n = frames
+    for f in range(n):
+        if lift[f] is not None: continue
+        a = f
+        while lift[(a - 1) % n] is None: a -= 1
+        b = f
+        while lift[b % n] is None: b += 1
+        za, zb = lift[(a - 1) % n], lift[b % n]; L = b - a + 1; u = (f - a + 1)/L
+        hgt = 9.8*(L/30.0)**2/8                                # peak of a jump that lasts the whole flight
+        lift[f] = za + (zb - za)*u + 4*0.55*hgt*u*(1 - u)
+    for f, (W, shift) in enumerate(poses):
+        pose(W, Vector((shift, 0, lift[f]))); key(f + 1)
+    pose(poses[0][0], Vector((poses[0][1], 0, lift[0]))); key(frames + 1)
     act.use_fake_user = True
     tr = rig.animation_data.nla_tracks.new(); tr.name = name; tr.strips.new(name, 1, act); rig.animation_data.action = None
-    return act
+    st = [(t, y) for t, y in track if y is not None]
+    span = st[-1][0] - st[0][0]; dy = st[-1][1] - st[0][1]
+    speed = dy/(span*frames/30.0)
+    print(f'GAIT {name}: cycle {frames/30:.3f}s stride {speed*frames/30:.3f} m speed {speed:.3f} m/s bob {max(lift)-min(lift):.3f} m', flush=True)
+def make_idle(frames):
+    act = bpy.data.actions.new('idle'); rig.animation_data_create(); rig.animation_data.action = act
+    for f in range(frames + 1):
+        t = f/frames; b = 1.5*math.sin(2*math.pi*t); sway = 0.006*math.sin(2*math.pi*t*0.5)
+        W = {'spine_03': Rx(b*0.6), 'spine_02': Rx(b*0.3), 'head': Rx(-b*0.3) @ Rz(1.5*math.sin(2*math.pi*t*0.5))}
+        for sd in ('l', 'r'):
+            sg = 1 if sd == 'l' else -1; Dc = W['spine_03']; up_t = Vector((sg*SIDE, 0.04, -1))
+            W['upperarm_' + sd] = aim(Dc, 'upperarm_' + sd, Dc @ up_t)
+            lo_t = Rx(-10) @ up_t
+            W['lowerarm_' + sd] = aim(W['upperarm_' + sd], 'lowerarm_' + sd, Dc @ lo_t)
+            W['hand_' + sd] = aim(W['lowerarm_' + sd], 'hand_' + sd, Dc @ (Rx(-14) @ up_t))
+        pose(W, Vector((sway, 0, 0))); key(f + 1)
+    act.use_fake_user = True
+    tr = rig.animation_data.nla_tracks.new(); tr.name = 'idle'; tr.strips.new('idle', 1, act); rig.animation_data.action = None
+print('BONES', [b.name for b in rig.data.bones if 'hand' in b.name or '_01_l' in b.name], flush=True)
 print('STEP anim', flush=True)
-make_action('walk', 32, lambda t: gait(t, 22, 42, 3, 14, 0.022, 18))
-make_action('run', 20, lambda t: gait(t, 36, 80, 9, 72, 0.045, 26))
-make_action('idle', 90, lambda t: gait(0, 0, 0, 0, 8, 0, 0, breath=1.5*math.sin(2*math.pi*t)))
+make_gait('walk', 32)
+make_gait('run', 20)
+make_idle(90)
+for pb in rig.pose.bones: pb.rotation_quaternion = Quaternion(); pb.location = Vector()
 bpy.ops.object.mode_set(mode='OBJECT')
 bpy.context.scene.render.fps = 30
 
@@ -207,16 +313,20 @@ bpy.context.scene.render.fps = 30
 print('STEP if PREVIEW:', flush=True)
 
 if PREVIEW:
-    sc = bpy.context.scene; sc.render.engine = 'BLENDER_EEVEE_NEXT' if 'BLENDER_EEVEE_NEXT' in [e.identifier for e in bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items] else 'CYCLES'
-    if sc.render.engine == 'CYCLES': sc.cycles.samples = 24
-    sc.render.resolution_x, sc.render.resolution_y = 900, 900
-    rig.animation_data.action = bpy.data.actions['walk']; sc.frame_set(9)
-    w = bpy.data.worlds.new('w'); w.use_nodes = True; w.node_tree.nodes['Background'].inputs[0].default_value = (0.75, 0.8, 0.85, 1); w.node_tree.nodes['Background'].inputs[1].default_value = 0.9; sc.world = w
-    sun = bpy.data.objects.new('sun', bpy.data.lights.new('sun', 'SUN')); sun.data.energy = 3.5; sun.rotation_euler = (math.radians(50), 0, math.radians(30)); sc.collection.objects.link(sun)
-    cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam; cam.data.lens = 60
-    for i, (pos, rot) in enumerate([((3.6, -0.0, 1.0), (math.radians(88), 0, math.radians(90))), ((0.9, -3.4, 1.05), (math.radians(87), 0, math.radians(15)))]):
-        cam.location = pos; cam.rotation_euler = rot
-        sc.render.filepath = PREVIEW.replace('.png', f'_{i}.png'); bpy.ops.render.render(write_still=True)
+    # side-view strips of the walk and the run (Workbench: quick), one picture per few frames, with the ground line
+    sc = bpy.context.scene; sc.render.engine = 'BLENDER_WORKBENCH'
+    sc.render.resolution_x, sc.render.resolution_y = 260, 420
+    bpy.ops.mesh.primitive_plane_add(size=6, location=(0, 0, GROUND))
+    cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam
+    cam.data.type = 'ORTHO'; cam.data.ortho_scale = 2.1; cam.location = (4, -0.1, 0.95); cam.rotation_euler = (math.radians(90), 0, math.radians(90))
+    rig.animation_data.action = bpy.data.actions['idle']; sc.frame_set(1)
+    cam.data.ortho_scale = 0.5; cam.location = (4, -0.0, 0.85); sc.render.filepath = PREVIEW.replace('.png', '_hand.png'); bpy.ops.render.render(write_still=True)
+    cam.location = (-0.0, -4, 0.85); cam.rotation_euler = (math.radians(90), 0, 0); cam.location.x = 0.2; sc.render.filepath = PREVIEW.replace('.png', '_hand2.png'); bpy.ops.render.render(write_still=True)
+    cam.data.ortho_scale = 2.1; cam.location = (4, -0.1, 0.95); cam.rotation_euler = (math.radians(90), 0, math.radians(90))
+    for act, fr in (('walk', 32), ('run', 20)):
+        rig.animation_data.action = bpy.data.actions[act]
+        for k in range(8):
+            sc.frame_set(1 + round(k*fr/8)); sc.render.filepath = PREVIEW.replace('.png', f'_{act}{k}.png'); bpy.ops.render.render(write_still=True)
     rig.animation_data.action = None
 
 # ---------- export ----------
