@@ -169,28 +169,136 @@ def hair_part(vs):
     return None
 
 bm = bmesh.new(); bm.from_mesh(me); bm.verts.ensure_lookup_table(); bm.faces.ensure_lookup_table()
+# ---- every visible edge (hairline, collar, cuffs, waist, hems, shoe tops) is cut along a smooth line through the mesh,
+#      not along the existing triangles, so no edge is a staircase; skin under the clothes is kept up to a margin ----
+CAT = bm.faces.layers.int.new('cat')
+uvl = bm.loops.layers.uv.active
+EARM = mask('mpfb_ears.jpg')
+def fuv(f, M):
+    u = sum(l[uvl].uv.x for l in f.loops)/len(f.loops); v = sum(l[uvl].uv.y for l in f.loops)/len(f.loops)
+    return M[min(S - 1, max(0, int((1 - v)*S))), min(S - 1, max(0, int(u*S)))]
+for f in bm.faces:
+    tags = {vgrp[v.index] for v in f.verts}
+    t = next(iter(tags)) if len(tags) == 1 else 'mixed'
+    f[CAT] = {'helper-tights': 1, 'helper-skirt': 2, 'helper-hair': 3, 'helper-l-eye': 4, 'helper-r-eye': 4, 'body': 5}.get(t, 0)
+    if f[CAT] == 5 and fuv(f, EARM) > 0.35: f[CAT] = 6                        # the ears: always skin
+
+B_ = {b.name: (b.head_local.copy(), b.tail_local.copy()) for b in rig.data.bones}
+def bdir(n): return (B_[n][1] - B_[n][0]).normalized()
+def segd(p, n):
+    a, b = B_[n]; ab = b - a; t = max(0.0, min(1.0, (p - a).dot(ab)/ab.length_squared)); return (a + ab*t - p).length
+LIMBS = {}
+for sd in ('l', 'r'):
+    LIMBS['upperarm_' + sd] = 'arm_' + sd; LIMBS['lowerarm_' + sd] = 'arm_' + sd; LIMBS['hand_' + sd] = 'arm_' + sd
+    LIMBS['thigh_' + sd] = 'leg_' + sd; LIMBS['calf_' + sd] = 'leg_' + sd; LIMBS['foot_' + sd] = 'leg_' + sd; LIMBS['ball_' + sd] = 'leg_' + sd
+for n in ('pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'head', 'clavicle_l', 'clavicle_r'): LIMBS[n] = 'torso'
+def region(p): return LIMBS[min(LIMBS, key=lambda n: segd(p, n))]
+
+# the lines
+NK = B_['neck_01'][0]; NECK_Z = NK.z
+def collar(p):
+    r = math.hypot(p.x, p.y - NK.y)
+    if r > 0.105: return -1.0
+    c = -(p.y - NK.y)/max(r, 1e-6)                                           # 1 = front, -1 = back
+    return p.z - (NECK_Z - 0.012 - 0.038*max(0.0, c)**1.5 + 0.014*max(0.0, -c))
+WAIST_Z = (B_['pelvis'][0].z + B_['spine_01'][0].z)/2 + 0.035
+def waist(p): return p.z - WAIST_Z
+def plane(P, n): return lambda p: (p - P).dot(n)
+CUT = {}
+for sd in ('l', 'r'):
+    du, dl, dt, dc = bdir('upperarm_' + sd), bdir('lowerarm_' + sd), bdir('thigh_' + sd), bdir('calf_' + sd)
+    CUT['elbow_' + sd] = plane(B_['lowerarm_' + sd][0] - du*0.01, du)
+    CUT['wrist_' + sd] = plane(B_['hand_' + sd][0] - dl*0.018, dl)
+    CUT['knee_' + sd] = plane(B_['calf_' + sd][0] - dt*0.01, dt)
+    CUT['ankle_' + sd] = plane(B_['foot_' + sd][0] - dc*0.045, dc)
+    CUT['shoe_' + sd] = plane(B_['foot_' + sd][0] - dc*0.03, dc)
+
+# the hairline, going round the head: high on the forehead, down at the sideburn, over the ear, low at the nape
+HY = (HEADF + HEADB)/2
+def hang(p): return math.degrees(math.atan2(abs(p.x), -(p.y - HY)))
+earf = [f for f in bm.faces if f[CAT] == 6]
+EA = sorted(hang(f.calc_center_median()) for f in earf); EZ = sorted(f.calc_center_median().z for f in earf)
+EA0, EA1 = EA[int(len(EA)*0.05)], EA[int(len(EA)*0.95)]; EZ0, EZ1 = EZ[int(len(EZ)*0.05)], EZ[int(len(EZ)*0.97)]
+print('ear angle', round(EA0), round(EA1), 'z', round(EZ0, 3), round(EZ1, 3), flush=True)
+HL = [(0, -0.058), (30, -0.064), (55, -0.078), (EA0 - 14, -0.096), (EA0 - 6, (EZ0 + EZ1)/2 - ZTOP), (EA0 + 2, EZ1 + 0.006 - ZTOP),
+      ((EA0 + EA1)/2, EZ1 + 0.012 - ZTOP), (EA1 + 3, EZ1 + 0.004 - ZTOP), (EA1 + 18, EZ0 - 0.012 - ZTOP), (150, -0.170), (180, -0.180)]
+# a monotone cubic through the points (Fritsch-Carlson): smooth, and never overshooting into the ear or the eyes
+_X = [a for a, _ in HL]; _Y = [h for _, h in HL]
+_D = [(_Y[k + 1] - _Y[k])/(_X[k + 1] - _X[k]) for k in range(len(HL) - 1)]
+_M = [_D[0]] + [0.0 if _D[k - 1]*_D[k] <= 0 else 2/(1/_D[k - 1] + 1/_D[k]) for k in range(1, len(HL) - 1)] + [_D[-1]]
+_M[0] = 0.0; _M[-1] = 0.0                                               # level at the front and the back (the head is symmetric)
+def hairline_z(a):
+    a = min(180.0, max(0.0, a))
+    k = max(i for i in range(len(HL) - 1) if _X[i] <= a) if a < _X[-1] else len(HL) - 2
+    hh = _X[k + 1] - _X[k]; t = (a - _X[k])/hh
+    h00, h10, h01, h11 = 2*t**3 - 3*t**2 + 1, t**3 - 2*t**2 + t, -2*t**3 + 3*t**2, t**3 - t**2
+    return ZTOP + h00*_Y[k] + h10*hh*_M[k] + h01*_Y[k + 1] + h11*hh*_M[k + 1]
+def scalp_f(p): return p.z - hairline_z(hang(p)) if p.z > ZTOP - 0.26 else -1.0
+
+def iso_cut(faces, fn):
+    """split the faces along fn = 0 (new vertices sit on the line, with UVs, weights and face shapes interpolated)"""
+    val = {}
+    def sv(v):
+        if v not in val: val[v] = fn(v.co)
+        return val[v]
+    # triangles first, where the line passes: a triangle is cut by a line in exactly two places
+    cross = [f for f in faces if f.is_valid and len(f.verts) > 3 and min(sv(v) for v in f.verts) < 0 < max(sv(v) for v in f.verts)]
+    tri = bmesh.ops.triangulate(bm, faces=cross)['faces'] if cross else []
+    faces = [f for f in faces if f.is_valid] + list(tri)
+    on = set()
+    for e in {e for f in faces if f.is_valid for e in f.edges}:
+        if not e.is_valid: continue
+        a, b = e.verts; sa, sb = sv(a), sv(b)
+        if abs(sa) < 1e-6: on.add(a)
+        if abs(sb) < 1e-6: on.add(b)
+        if sa*sb < 0 and abs(sa) > 1e-6 and abs(sb) > 1e-6:
+            ne, nv = bmesh.utils.edge_split(e, a, sa/(sa - sb)); val[nv] = 0.0; on.add(nv)
+    for f in list({f for v in on for f in v.link_faces}):
+        vs = [v for v in f.verts if v in on]
+        if len(vs) == 2 and not any(e for e in f.edges if set(e.verts) == set(vs)):
+            try: bmesh.ops.connect_verts(bm, verts=vs)
+            except Exception: pass
+def faces_of(cat, reg=None):
+    return [f for f in bm.faces if f[CAT] == cat and (reg is None or region(f.calc_center_median()) == reg)]
+
+tights = faces_of(1)
+iso_cut(tights, collar); iso_cut(faces_of(1), waist)
+for sd in ('l', 'r'):
+    arm = faces_of(1, 'arm_' + sd); iso_cut(arm, CUT['elbow_' + sd]); iso_cut(faces_of(1, 'arm_' + sd), CUT['wrist_' + sd])
+    leg = faces_of(1, 'leg_' + sd); iso_cut(leg, CUT['knee_' + sd]); iso_cut(faces_of(1, 'leg_' + sd), CUT['ankle_' + sd])
+    iso_cut(faces_of(5, 'leg_' + sd), CUT['shoe_' + sd])
+iso_cut([f for f in bm.faces if f[CAT] == 5 and f.calc_center_median().z > ZTOP - 0.27], scalp_f)
+# long hair: smooth ends
+HAIR_CUTS = [lambda p: p.z - (ZTOP - 0.24), lambda p: p.z - (ZTOP - 0.36), lambda p: (HB.y - 0.01 - p.y) if p.z < ZTOP - 0.05 else -1.0]
+for fn in HAIR_CUTS: iso_cut(faces_of(3), fn)
+
 kill, shirtish = [], []
 for f in bm.faces:
-    tags = {vgrp[v.index] for v in f.verts}; doms = [vdom[v.index] for v in f.verts]
-    t = next(iter(tags)) if len(tags) == 1 else 'mixed'
-    if t == 'helper-tights':
-        cnt = lambda S_: sum(d in S_ for d in doms)
-        groups = [('Shirt', TORSO), ('Sleeve', FORE), ('PantsTop', HIPS), ('PantsLow', CALF)]
-        if not all(d in TORSO | FORE | HIPS | CALF for d in doms): kill.append(f); continue
-        best = max(groups, key=lambda g: cnt(g[1]))[0]
-        f.material_index = MI[best]
-        if best in ('Shirt', 'Sleeve'): shirtish.append(f)
-    elif t == 'helper-skirt': f.material_index = MI['Skirt']
-    elif t == 'helper-hair':
-        hp = hair_part(f.verts)
-        if hp: f.material_index = MI[hp]
-        else: kill.append(f)
-    elif t in ('helper-l-eye', 'helper-r-eye'):
-        f.material_index = MI['Eyes'] if f.normal.y < -0.80 else MI['Sclera']
-    elif t == 'body':
-        if all(d in TORSO | HIPS for d in doms): kill.append(f)                 # always under a top and trousers
-        elif all(d in FEET for d in doms): f.material_index = MI['Shoes']
-        else: f.material_index = MI['Hair'] if scalp(f.verts) else MI['Skin']
+    c = f.calc_center_median(); cat = f[CAT]
+    if cat == 1:
+        reg = region(c); sd = reg[-1]
+        if reg == 'torso':
+            if collar(c) > 0: kill.append(f); continue
+            m = 'Shirt' if waist(c) > 0 else 'PantsTop'
+        elif reg.startswith('arm'):
+            if CUT['wrist_' + sd](c) > 0: kill.append(f); continue
+            m = 'Sleeve' if CUT['elbow_' + sd](c) > 0 else 'Shirt'
+        else:
+            if CUT['ankle_' + sd](c) > 0: kill.append(f); continue
+            m = 'PantsLow' if CUT['knee_' + sd](c) > 0 else ('Shirt' if waist(c) > 0 else 'PantsTop')
+        f.material_index = MI[m]
+        if m in ('Shirt', 'Sleeve'): shirtish.append(f)
+    elif cat == 2: f.material_index = MI['Skirt']
+    elif cat == 3: kill.append(f)                       # the helper strands go: longer hair is a solid fall built below
+    elif cat == 4: f.material_index = MI['Eyes'] if f.normal.y < -0.80 else MI['Sclera']
+    elif cat in (5, 6):
+        reg = region(c); sd = reg[-1]
+        if cat == 5 and reg.startswith('leg') and CUT['shoe_' + sd](c) > 0: f.material_index = MI['Shoes']; continue
+        # skin that is always under clothes goes (with a margin, so no gap shows at a collar or a hem)
+        if reg == 'torso' and collar(c) < -0.03 and c.z < NECK_Z - 0.02 and c.z > B_['thigh_l'][0].z - 0.12: kill.append(f); continue
+        if reg.startswith('arm') and CUT['elbow_' + sd](c) < -0.04: kill.append(f); continue
+        if reg.startswith('leg') and CUT['knee_' + sd](c) < -0.04: kill.append(f); continue
+        f.material_index = MI['Hair'] if (cat == 5 and scalp_f(c) > 0) else MI['Skin']
     else: kill.append(f)
 # the jacket: a second, looser layer over the top and sleeves
 dup = bmesh.ops.duplicate(bm, geom=shirtish)
@@ -205,6 +313,7 @@ for v in bm.verts:
     mats = {f.material_index for f in v.link_faces}
     if not mats or MI['Skin'] in mats: continue
     off = max(OFF.get(m, 0.0) for m in mats)
+    if mats == {MI['Hair']}: off *= min(1.0, max(0.0, scalp_f(v.co)/0.02))      # the hair thins out to the hairline
     if off:
         d = v.normal * off; v.co += d
         for lay in SHAPES: v[lay] += d            # keep the face morphs from pulling clothes back in
@@ -345,6 +454,53 @@ def long_beard(b):
         for l in f.loops: l[uv].uv = (0.5 + l.vert.co.x*3, 0.5 + l.vert.co.z*3)
 piece('BeardLong', long_beard, mat('BeardLong', lin('#2a1d15'), 0.92, beard_png))
 
+# longer hair: a solid fall of hair from the crown, lying on the head, then hanging straight (never back in),
+# resting on the back and shoulders; light grooves for locks and an uneven, layered lower edge
+def hair_fall(z_from, z_to, overlap, a0=None):
+    def fn(b):
+        A0 = a0 or EA1 + 3; NA, NZ = 40, 16
+        def surf_r(th, z):
+            d = Vector((math.sin(math.radians(th)), -math.cos(math.radians(th)), 0))
+            hit = bvh.ray_cast(Vector((0, HY, z)) + d*0.6, -d, 0.6)
+            return (hit[0] - Vector((0, HY, z))).length if hit[0] is not None else 0.05
+        grid = []
+        for i in range(NA + 1):
+            u = i/NA; th = A0 + (360 - 2*A0)*u; tha = th if th <= 180 else 360 - th; sg = 1 if th <= 180 else -1
+            d = Vector((sg*math.sin(math.radians(tha)), -math.cos(math.radians(tha)), 0))
+            z0, z1 = z_from(tha), z_to(tha)
+            # the outline of the hair down this line: start from the crown so it never tucks in under the head
+            zs = [ZTOP - 0.03 - k*0.006 for k in range(int((ZTOP - 0.03 - z1)/0.006) + 2)]
+            rr, run = {}, 0.0
+            for z in zs:
+                run = max(run, surf_r(tha, z) + 0.011); rr[z] = run
+            def r_at(z):
+                k = min(len(zs) - 1, max(0, int((ZTOP - 0.03 - z)/0.006))); return rr[zs[k]]
+            groove = 1 + 0.03*math.sin(math.radians(th)*14)
+            row = []
+            for k in range(NZ + 1):
+                t = k/NZ; z = z0 + (z1 - z0)*t + (overlap if k == 0 else 0)
+                row.append(b.verts.new(Vector((0, HY, z)) + d*r_at(z)*(groove if z < ZTOP - 0.08 else 1 + (groove - 1)*0.3)))
+            grid.append(row)
+        for i in range(NA):
+            for k in range(NZ): b.faces.new((grid[i][k], grid[i + 1][k], grid[i + 1][k + 1], grid[i][k + 1]))
+        out = sum((f.calc_center_median() - Vector((0, HY, f.calc_center_median().z))).dot(f.normal) for f in b.faces)
+        if out < 0: bmesh.ops.reverse_faces(b, faces=b.faces)
+        inner = bmesh.ops.duplicate(b, geom=list(b.faces))                     # an inside, seen from below or the front
+        bmesh.ops.reverse_faces(b, faces=[g for g in inner['geom'] if isinstance(g, bmesh.types.BMFace)])
+        uv = b.loops.layers.uv.new('UVMap')
+        for f in b.faces:
+            for l in f.loops: l[uv].uv = (0.5, 0.5)
+    return fn
+def lock(th, k): return 0.010*math.sin(math.radians(th)*k) + 0.006*math.sin(math.radians(th)*k*2.3 + 1)
+def mid_end(th):   # just below the ear at the sides, to the collar at the back
+    s_ = min(1.0, max(0.0, (th - EA1)/45)); s_ = s_*s_*(3 - 2*s_)
+    return (EZ0 - 0.03) + ((ZTOP - 0.245) - (EZ0 - 0.03))*s_ + lock(th, 23)
+def long_end(th):  # down the back to the shoulder blades, shorter towards the sides
+    s_ = min(1.0, max(0.0, (th - 112)/45)); s_ = s_*s_*(3 - 2*s_)
+    return (mid_end(th) - 0.01) + ((ZTOP - 0.37) - (mid_end(th) - 0.01))*s_ + lock(th, 19)
+piece('HairFallMid', hair_fall(lambda th: ZTOP - 0.035, mid_end, 0.0), h.data.materials[MI['HairMid']])
+piece('HairFallLong', hair_fall(lambda th: mid_end(th), long_end, 0.012, a0=112), h.data.materials[MI['HairLong']])
+
 # hair bun at the back of the crown
 def bun(b):
     bmesh.ops.create_uvsphere(b, u_segments=20, v_segments=12, radius=0.052)
@@ -470,6 +626,29 @@ src = open('/home/claude/human/build.py').read()
 a = src.index('# ---------- animations'); b = src.index('# ---------- optional preview')
 exec(src[a:b])
 
+# ---------- optional check renders: python3.11 run.py build_avatar.py m out.glb /tmp/check.png ----------
+if len(sys.argv) > 3:
+    PV = sys.argv[3]; sc = bpy.context.scene; sc.render.engine = 'BLENDER_WORKBENCH'
+    sc.display.shading.light = 'STUDIO'; sc.display.shading.color_type = 'MATERIAL'
+    for m in h.data.materials:
+        if m: m.diffuse_color = (*m.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value[:3], 1)
+    show = {'Skin', 'Eyes', 'Sclera', 'Shoes', 'Hair', 'Shirt', 'Sleeve', 'PantsTop', 'PantsLow', 'BrowNormal'} | set(sys.argv[4].split(',') if len(sys.argv) > 4 else [])
+    hide = [i for i, m in enumerate(h.data.materials) if m and m.name.split('.')[0] not in show]
+    bm2 = bmesh.new(); bm2.from_mesh(h.data); bmesh.ops.delete(bm2, geom=[f for f in bm2.faces if f.material_index in hide], context='FACES'); bm2.to_mesh(h.data); bm2.free()
+    for m in h.data.materials:
+        if m and m.name.startswith('Skin'): m.diffuse_color = (0.8, 0.55, 0.42, 1)
+        if m and m.name.startswith('Shirt'): m.diffuse_color = (0.9, 0.9, 0.88, 1)
+        if m and m.name.startswith('Sleeve'): m.diffuse_color = (0.75, 0.8, 0.9, 1)
+        if m and m.name.startswith('PantsLow'): m.diffuse_color = (0.1, 0.2, 0.45, 1)
+    cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); sc.collection.objects.link(cam); sc.camera = cam; cam.data.type = 'ORTHO'
+    sc.render.resolution_x, sc.render.resolution_y = 520, 520
+    views = [('head_side', (0.6, HY, ZTOP - 0.12), (90, 0, 90), 0.36), ('head_34', (0.45, HY - 0.45, ZTOP - 0.12), (90, 0, 45), 0.36),
+             ('head_back', (0, HY + 0.6, ZTOP - 0.12), (90, 0, 180), 0.36), ('torso', (0, -1.5, NECK_Z - 0.35), (90, 0, 0), 0.9),
+             ('legs', (0.0, -1.5, 0.45), (90, 0, 0), 1.0), ('arm', (0.9, -0.05, NECK_Z - 0.4), (90, 0, 90), 0.9)]
+    for nm, loc, rot, sca in views:
+        cam.location = loc; cam.rotation_euler = tuple(math.radians(x) for x in rot); cam.data.ortho_scale = sca
+        sc.render.filepath = PV.replace('.png', f'_{nm}.png'); bpy.ops.render.render(write_still=True)
+    os._exit(0)
 # ---------- export ----------
 for o in bpy.data.objects: o.select_set(o.name in ('Body', 'Rig'))
 bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True, export_animations=True, export_animation_mode='NLA_TRACKS',
