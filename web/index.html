@@ -5210,29 +5210,59 @@ function exitCarDone(){
   CARFX.stop();
 }
 // ---------- engine sound, gears, nitro and the feeling of speed ----------
-// The engine is synthesised (Web Audio): its firing note follows the revs through six gears, the filter opens with the
-// throttle, wind rises with speed, and nitro adds a rushing hiss. Nitro (Shift or N, gamepad X, the 🔥 button) lifts the
-// top speed from 180 to 300 km/h while the tank lasts; the view widens, the screen streaks and the exhausts burn blue.
+// The engine is synthesised (Web Audio), shaped after real engine types: a small three-cylinder turbo, a four,
+// a German straight-six, an Audi-style five-cylinder turbo, a cross-plane V8 biturbo (AMG-style burble and crackle on
+// lift-off), and an electric motor's whine. Each car has its own; V while driving tries the others. The firing note
+// follows the revs through the gears, the filter opens with the throttle, wind rises with speed, and nitro (Shift or
+// N, gamepad X, the 🔥 button) lifts the top speed from 180 to 300 km/h; the view widens, the screen streaks and the
+// exhausts burn blue.
+const ENGINES = {
+  i3t: { name: '3 silindrli turbo', idle: 900, red: 6200, orders: [[1.5, 'square', .5], [3, 'sawtooth', .3], [0.75, 'triangle', .25]], am: [.75, .25], f0: 220, fk: .13, q: 3, turbo: true },
+  i4:  { name: '4 silindrli', idle: 850, red: 6800, orders: [[2, 'sawtooth', .55], [1, 'square', .3], [4, 'sawtooth', .16]], f0: 260, fk: .16, q: 2.2 },
+  i6:  { name: 'Qatorli 6 silindr (nemis sport-sedan uslubi)', idle: 750, red: 7200, orders: [[3, 'sawtooth', .5], [6, 'sawtooth', .28], [1.5, 'triangle', .22], [9, 'sawtooth', .08]], f0: 340, fk: .2, q: 3.5 },
+  i5:  { name: '5 silindrli turbo (nemis kvattro uslubi)', idle: 800, red: 7000, orders: [[2.5, 'sawtooth', .5], [1.25, 'square', .32], [5, 'sawtooth', .18], [7.5, 'triangle', .08]], am: [.5, .22], f0: 280, fk: .17, q: 3, turbo: true },
+  v8:  { name: 'V8 biturbo (nemis AMG uslubi)', idle: 700, red: 7000, orders: [[4, 'sawtooth', .42], [2, 'square', .36], [1, 'sawtooth', .3], [.5, 'square', .22]], am: [.5, .38], f0: 200, fk: .13, q: 2, crackle: true },
+  ev:  { name: 'Elektr motor', electric: true, f0: 900, fk: 0, q: 1 },
+};
+const ENGINE_OF = { tracker: 'i3t', coupe: 'i6', gtpro: 'v8', roadster: 'i5', kometa: 'ev' };
 const CARFX = (() => {
   const GEARS = [38, 70, 105, 145, 195, 250, 305];                 // top of each gear, km/h
-  const S = { ctx: null, on: false, rpm: 850, gear: 1, nitro: 1, boost: false, shiftT: 0, fov0: 0.8, flames: null, shake: 0, len: 4.4 };
+  const S = { ctx: null, on: false, rpm: 850, gear: 1, nitro: 1, boost: false, shiftT: 0, fov0: 0.8, flames: null, shake: 0, len: 4.4,
+              eng: 'i4', voices: [], crackT: 0, prevThr: 0 };
   function audio(){
     if (S.ctx) return S.ctx;
     if (window.__noAudio) return null;
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
     const c = new AC(), out = c.createGain(); out.gain.value = 0; out.connect(c.destination);
     const filt = c.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 600; filt.Q.value = 2.2;
-    const eng = c.createGain(); eng.gain.value = 0.5; filt.connect(eng); eng.connect(out);
-    const mk = (type, gain, detune) => { const o = c.createOscillator(), g = c.createGain(); o.type = type; o.detune.value = detune || 0; g.gain.value = gain; o.connect(g); g.connect(filt); o.start(); return o; };
-    const o1 = mk('sawtooth', 0.55), o2 = mk('square', 0.35), o3 = mk('sawtooth', 0.18, 7);
-    // noise: wind with speed, a hiss with nitro
+    const engG = c.createGain(); engG.gain.value = 0.5; filt.connect(engG); engG.connect(out);
+    const amp = c.createGain(); amp.gain.value = 1; amp.connect(filt);                         // the engine's voices meet here
+    const lfo = c.createOscillator(), lfoG = c.createGain(); lfoG.gain.value = 0; lfo.connect(lfoG); lfoG.connect(amp.gain); lfo.start();   // uneven firing: the burble
+    // noise: wind with speed, a hiss with nitro, pops from the exhaust
     const nb = c.createBuffer(1, c.sampleRate*2, c.sampleRate), d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
     const ns = c.createBufferSource(); ns.buffer = nb; ns.loop = true; ns.start();
     const wf = c.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 500; wf.Q.value = 0.6; const wg = c.createGain(); wg.gain.value = 0; ns.connect(wf); wf.connect(wg); wg.connect(out);
     const hf = c.createBiquadFilter(); hf.type = 'highpass'; hf.frequency.value = 1800; const hg = c.createGain(); hg.gain.value = 0; ns.connect(hf); hf.connect(hg); hg.connect(out);
-    S.ctx = c; Object.assign(S, { out, filt, eng, o1, o2, o3, wg, wf, hg });
+    const pf = c.createBiquadFilter(); pf.type = 'bandpass'; pf.frequency.value = 900; pf.Q.value = 0.9; const pg = c.createGain(); pg.gain.value = 0; ns.connect(pf); pf.connect(pg); pg.connect(out);
+    const tw = c.createOscillator(), tg = c.createGain(); tw.type = 'sine'; tg.gain.value = 0; tw.connect(tg); tg.connect(out); tw.start();   // turbo whistle
+    S.ctx = c; Object.assign(S, { out, filt, engG, amp, lfo, lfoG, wg, wf, hg, pg, pf, tw, tg });
     document.addEventListener('visibilitychange', () => { if (!S.ctx) return; document.hidden ? S.ctx.suspend() : (S.on && S.ctx.resume()); });
     return c;
+  }
+  function voice(kind){
+    const c = S.ctx; if (!c) return;
+    for (const v of S.voices){ try { v.o.stop(); } catch (e){} v.o.disconnect(); v.g.disconnect(); }
+    S.voices = []; S.eng = kind; const E = ENGINES[kind];
+    if (E.electric){
+      for (const [mult, gain] of [[1, .4], [2, .16], [3.02, .07]]){ const o = c.createOscillator(), g = c.createGain(); o.type = 'sine'; g.gain.value = gain; o.connect(g); g.connect(S.amp); o.start(); S.voices.push({ o, g, order: mult }); }
+    } else for (const [order, type, gain] of E.orders){ const o = c.createOscillator(), g = c.createGain(); o.type = type; g.gain.value = gain; o.connect(g); g.connect(S.amp); o.start(); S.voices.push({ o, g, order }); }
+    S.filt.Q.value = E.q;
+    const am = E.am ? E.am[1] : 0; S.lfoG.gain.value = am; S.amp.gain.value = 1 - am;
+  }
+  function engineFor(node){
+    const dto = node.metadata && node.metadata.dto, id = dto && dto.owner && String(dto.owner.id);
+    if (id && id.startsWith('tc')) return ['i4', 'i6', 'i5', 'v8'][(parseInt(id.slice(2), 10) || 0) % 4];   // traffic cars differ
+    return ENGINE_OF[dto && dto.model] || 'i4';
   }
   function flames(){
     if (S.flames) return S.flames;
@@ -5248,7 +5278,12 @@ const CARFX = (() => {
   function start(node){
     S.on = true; S.rpm = 850; S.gear = 1; S.fov0 = camera.fov;
     try { const bv = node.getHierarchyBoundingVectors(true); S.len = clamp(Math.max(bv.max.x - bv.min.x, bv.max.z - bv.min.z), 3.6, 6); } catch (e){ S.len = 4.4; }
-    const c = audio(); if (c){ c.resume(); S.out.gain.cancelScheduledValues(c.currentTime); S.out.gain.setTargetAtTime(0.22, c.currentTime + 0.6, 0.25); }   // the engine starts as you sit in
+    S.eng = engineFor(node);
+    const c = audio(); if (c){ c.resume(); voice(S.eng); S.out.gain.cancelScheduledValues(c.currentTime); S.out.gain.setTargetAtTime(0.22, c.currentTime + 0.6, 0.25); }   // the engine starts as you sit in
+  }
+  function next(){
+    const ks = Object.keys(ENGINES), k = ks[(ks.indexOf(S.eng) + 1) % ks.length];
+    S.eng = k; if (S.ctx) voice(k); toast('Dvigatel ovozi: ' + ENGINES[k].name);
   }
   function stop(){
     S.on = false; S.boost = false; camera.fov = S.fov0;
@@ -5279,22 +5314,35 @@ const CARFX = (() => {
     if (S.nitro <= 0.01) S.empty = true; else if (S.nitro >= 0.3) S.empty = false;   // an empty tank must refill a third first
     S.boost = wantBoost && !S.empty && D.v > 2 && thr >= 0;
     S.nitro = clamp(S.nitro + (S.boost ? -0.25 : 0.085)*dt, 0, 1);
-    // gears and revs
-    const top = GEARS[S.gear - 1], low = S.gear > 1 ? GEARS[S.gear - 2] : 0;
-    if (kmh > top*0.97 && S.gear < GEARS.length){ S.gear++; S.shiftT = 0.12; }
-    else if (S.gear > 1 && kmh < low*0.82){ S.gear--; S.shiftT = 0.08; }
-    const g0 = S.gear > 1 ? GEARS[S.gear - 2]*0.55 : 0, g1 = GEARS[S.gear - 1];
-    let want = kmh < 4 ? 850 + Math.max(0, thr)*2600 : 1500 + (kmh - g0)/(g1 - g0)*5400 + Math.max(0, thr)*300;
-    if (D.v < -0.5) want = 1200 + Math.abs(D.v)*3.6*120;
-    S.rpm += (want - S.rpm)*Math.min(1, dt*(S.shiftT > 0 ? 18 : 7)); S.shiftT -= dt;
+    // gears and revs (an electric car has one gear)
+    const E = ENGINES[S.eng] || ENGINES.i4, idle = E.idle || 800;
+    if (E.electric){ S.gear = 1; S.rpm = 400 + kmh*45; }
+    else {
+      const top = GEARS[S.gear - 1], low = S.gear > 1 ? GEARS[S.gear - 2] : 0;
+      if (kmh > top*0.97 && S.gear < GEARS.length){ S.gear++; S.shiftT = 0.12; }
+      else if (S.gear > 1 && kmh < low*0.82){ S.gear--; S.shiftT = 0.08; }
+      const g0 = S.gear > 1 ? GEARS[S.gear - 2]*0.55 : 0, g1 = GEARS[S.gear - 1], span = (E.red || 7000) - 1500;
+      let want = kmh < 4 ? idle + Math.max(0, thr)*2600 : 1500 + (kmh - g0)/(g1 - g0)*span*0.94 + Math.max(0, thr)*300;
+      if (D.v < -0.5) want = 1200 + Math.abs(D.v)*3.6*120;
+      S.rpm += (want - S.rpm)*Math.min(1, dt*(S.shiftT > 0 ? 18 : 7)); S.shiftT -= dt;
+    }
+    // lifting off at high revs: a few pops from the exhaust (the V8)
+    if (E.crackle && S.prevThr > 0.5 && thr <= 0 && S.rpm > 3200) S.crackT = 0.9;
+    S.prevThr = thr; S.crackT -= dt;
     if (S.ctx && S.on){
-      const t = S.ctx.currentTime, f = S.rpm/30;                   // four cylinders: two firings a turn
-      S.o1.frequency.setTargetAtTime(f, t, 0.03); S.o2.frequency.setTargetAtTime(f*0.5, t, 0.03); S.o3.frequency.setTargetAtTime(f*2, t, 0.03);
-      const load = Math.max(0, thr) + (S.boost ? 0.6 : 0);
-      S.filt.frequency.setTargetAtTime(260 + S.rpm*0.16 + load*900, t, 0.05);
-      S.eng.gain.setTargetAtTime((S.shiftT > 0 ? 0.25 : 0.45 + 0.35*load)*(0.7 + S.rpm/7000*0.5), t, 0.04);
+      const t = S.ctx.currentTime, crank = S.rpm/60, load = Math.max(0, thr) + (S.boost ? 0.6 : 0);
+      for (const v of S.voices) v.o.frequency.setTargetAtTime(E.electric ? (120 + kmh*9)*v.order : crank*v.order, t, 0.03);
+      if (E.am) S.lfo.frequency.setTargetAtTime(crank*E.am[0], t, 0.05);
+      S.filt.frequency.setTargetAtTime(E.electric ? 2400 : E.f0 + S.rpm*E.fk + load*900, t, 0.05);
+      const base = E.electric ? 0.08 + Math.min(0.3, kmh/600) + load*0.06 : (S.shiftT > 0 ? 0.25 : 0.45 + 0.35*load)*(0.7 + S.rpm/7000*0.5);
+      S.engG.gain.setTargetAtTime(base, t, 0.04);
       S.wg.gain.setTargetAtTime(Math.min(0.5, (kmh/300)**2*0.55), t, 0.1); S.wf.frequency.setTargetAtTime(350 + kmh*4, t, 0.2);
       S.hg.gain.setTargetAtTime(S.boost ? 0.16 : 0, t, S.boost ? 0.05 : 0.25);
+      S.tw.frequency.setTargetAtTime(1800 + S.rpm*0.55, t, 0.1); S.tg.gain.setTargetAtTime(E.turbo ? 0.012 + 0.03*Math.max(0, thr)*S.rpm/7000 : 0, t, 0.15);
+      if (S.crackT > 0 && Math.random() < dt*16){                   // one pop
+        S.pf.frequency.setValueAtTime(500 + Math.random()*900, t);
+        S.pg.gain.cancelScheduledValues(t); S.pg.gain.setValueAtTime(0.55 + Math.random()*0.4, t); S.pg.gain.exponentialRampToValueAtTime(0.001, t + 0.05 + Math.random()*0.04);
+      }
     }
     // the feeling of speed: a wider view, a little shake, streaks across the screen, blue fire from the exhausts
     const k = clamp((kmh - 90)/210, 0, 1);
@@ -5321,7 +5369,8 @@ const CARFX = (() => {
   const nb = $('#nitroBtn'); let held = false;
   const on = e => { e.preventDefault(); held = true; nb.classList.add('on'); }, off = () => { held = false; nb.classList.remove('on'); };
   nb.addEventListener('pointerdown', on); nb.addEventListener('pointerup', off); nb.addEventListener('pointercancel', off); nb.addEventListener('pointerleave', off);
-  return { start, stop, update, get touchHeld(){ return held; }, S };
+  window.addEventListener('keydown', e => { if (DRIVE.on && !DRIVE.anim && (e.key === 'v' || e.key === 'V') && !(e.target && e.target.tagName === 'INPUT')) next(); });
+  return { start, stop, update, next, get touchHeld(){ return held; }, S };
 })();
 
 // getting in / out, step by step
