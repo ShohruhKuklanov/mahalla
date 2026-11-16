@@ -251,7 +251,15 @@
   #qTrack .qt-t{font-weight:800;font-size:13px;color:var(--gold)} #qTrack .qt-s{font-size:13.5px;margin-top:3px} #qTrack .qt-d{font-size:12px;color:var(--muted);margin-top:2px}
   #speedo[hidden],#miniMap[hidden]{display:none}
   #speedo{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);padding:8px 16px;border-radius:14px;background:rgba(18,20,40,.72);display:flex;align-items:baseline;gap:6px;pointer-events:none}
-  #speedo b{font:800 26px/1 var(--display, Manrope);font-variant-numeric:tabular-nums} #speedo span{font-size:12px;color:var(--muted)}
+  #speedo b{font:800 26px/1 var(--display, Manrope);font-variant-numeric:tabular-nums;min-width:2.2em;text-align:right} #speedo span{font-size:12px;color:var(--muted)}
+  #speedo em{font:800 13px/1 system-ui;font-style:normal;color:var(--gold);border:1px solid rgba(243,193,75,.5);border-radius:6px;padding:3px 6px;margin-left:4px}
+  #nitroBar{align-self:center;width:70px;height:8px;border-radius:5px;background:rgba(255,255,255,.12);overflow:hidden;margin-left:6px}
+  #nitroBar s{display:block;height:100%;width:100%;background:linear-gradient(90deg,#3aa0ff,#9fe3ff);text-decoration:none}
+  #speedo.boost #nitroBar s{background:linear-gradient(90deg,#ff7a1a,#ffd36b)} #speedo.boost{box-shadow:0 0 0 2px rgba(255,140,40,.6)}
+  #speedLines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:none}
+  body.driving #speedLines{display:block}
+  #nitroBtn{display:none;position:absolute;right:18px;bottom:110px;width:78px;height:78px;border-radius:50%;border:2px solid rgba(255,160,60,.7);background:rgba(40,20,10,.7);color:#fff;font:800 13px system-ui;pointer-events:auto;touch-action:none}
+  body.driving.touch #nitroBtn{display:block} #nitroBtn.on{background:rgba(255,120,30,.75)}
   #dlg{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);width:min(520px,calc(100% - 24px));padding:16px 18px;border-radius:18px;background:rgba(18,22,30,.92);border:1px solid var(--line);pointer-events:auto;backdrop-filter:blur(12px)}
   #dlg .dlg-n{font-weight:800;color:var(--gold);margin-bottom:6px} #dlg .dlg-t{font-size:15px;line-height:1.45}
   #dlg .dlg-b{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center} #dlg .dlg-sub{width:100%;font-size:12.5px;color:#7fe0c9;font-weight:700}
@@ -581,7 +589,9 @@
   <div class="wk-bar"><button id="walkExit" title="Piyoda rejimdan chiqish">✕ Chiqish</button><button id="walkSwap" title="Obrazni o‘zgartirish">👤 Obraz</button><button id="walkQuests" title="Vazifalar (Q)" aria-label="Vazifalar ro‘yxati">📜 Vazifalar</button><button id="walkChat" title="Chat (T)" aria-label="Chat">💬 Chat</button><button id="walkMap" title="Xarita (M)" aria-label="Shahar xaritasi">🗺 Xarita</button><button id="walkRun" title="Yugurish" aria-label="Yugurish">🏃</button><button id="walkJump" title="Sakrash (Tab)" aria-label="Sakrash">⤒ Sakrash</button></div>
   <canvas id="miniMap" hidden role="img" aria-label="Kichik xarita: siz va atrofdagi odamlar. Bosing — katta xarita"></canvas>
   <div id="qTrack" hidden role="status" aria-live="polite"><div class="qt-t"></div><div class="qt-s"></div><div class="qt-d"></div></div>
-  <div id="speedo" hidden aria-live="off"><b>0</b><span>km/soat</span></div>
+  <div id="speedo" hidden aria-live="off"><b>0</b><span>km/soat</span><em id="gear" title="Uzatma">1</em><div id="nitroBar" title="Nitro (Shift yoki N)"><s></s></div></div>
+  <canvas id="speedLines" aria-hidden="true"></canvas>
+  <button type="button" id="nitroBtn" aria-label="Nitro">🔥 Nitro</button>
   <button type="button" id="actBtn" hidden></button>
   <div id="dlg" hidden role="dialog" aria-labelledby="dlgName" aria-describedby="dlgText"><div class="dlg-n" id="dlgName"></div><div class="dlg-t" id="dlgText"></div><div class="dlg-b" id="dlgBtns"></div></div>
   <div id="qLog" hidden role="dialog" aria-labelledby="qLogT"><div class="ql-h"><h3 id="qLogT">Vazifalar</h3><button type="button" id="qLogClose" aria-label="Yopish">✕</button></div><ul id="qLogList"></ul><p class="ql-n">Odamlar tepasidagi <b>!</b> — sizga vazifasi bor, <b>?</b> — sizni kutyapti. Oltin nur va bosh ustidagi strelka yo‘l ko‘rsatadi.</p></div>
@@ -5174,6 +5184,7 @@ function enterCar(target){
   DRIVE.anim = { kind: 'in', t: 0, fx: WALK.x, fz: WALK.z, dx: ds.x, dz: ds.z, yaw: Math.atan2(ds.rx, ds.rz) };
   CAR_DOOR.attach(node); WALK.speed = 0;
   document.body.classList.add('driving'); $('#speedo').hidden = false;
+  CARFX.start(node);
 }
 function exitCar(){
   if (!DRIVE.on || DRIVE.anim) return;
@@ -5196,7 +5207,123 @@ function exitCarDone(){
   WALK.x = a.ex; WALK.z = a.ez; WALK.y = walkGround(a.ex, a.ez); WALK.yaw = a.yaw;
   camera.radius = 4.6; camera.beta = 1.28;
   document.body.classList.remove('driving'); $('#speedo').hidden = true;
+  CARFX.stop();
 }
+// ---------- engine sound, gears, nitro and the feeling of speed ----------
+// The engine is synthesised (Web Audio): its firing note follows the revs through six gears, the filter opens with the
+// throttle, wind rises with speed, and nitro adds a rushing hiss. Nitro (Shift or N, gamepad X, the 🔥 button) lifts the
+// top speed from 180 to 300 km/h while the tank lasts; the view widens, the screen streaks and the exhausts burn blue.
+const CARFX = (() => {
+  const GEARS = [38, 70, 105, 145, 195, 250, 305];                 // top of each gear, km/h
+  const S = { ctx: null, on: false, rpm: 850, gear: 1, nitro: 1, boost: false, shiftT: 0, fov0: 0.8, flames: null, shake: 0, len: 4.4 };
+  function audio(){
+    if (S.ctx) return S.ctx;
+    if (window.__noAudio) return null;
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+    const c = new AC(), out = c.createGain(); out.gain.value = 0; out.connect(c.destination);
+    const filt = c.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 600; filt.Q.value = 2.2;
+    const eng = c.createGain(); eng.gain.value = 0.5; filt.connect(eng); eng.connect(out);
+    const mk = (type, gain, detune) => { const o = c.createOscillator(), g = c.createGain(); o.type = type; o.detune.value = detune || 0; g.gain.value = gain; o.connect(g); g.connect(filt); o.start(); return o; };
+    const o1 = mk('sawtooth', 0.55), o2 = mk('square', 0.35), o3 = mk('sawtooth', 0.18, 7);
+    // noise: wind with speed, a hiss with nitro
+    const nb = c.createBuffer(1, c.sampleRate*2, c.sampleRate), d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
+    const ns = c.createBufferSource(); ns.buffer = nb; ns.loop = true; ns.start();
+    const wf = c.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 500; wf.Q.value = 0.6; const wg = c.createGain(); wg.gain.value = 0; ns.connect(wf); wf.connect(wg); wg.connect(out);
+    const hf = c.createBiquadFilter(); hf.type = 'highpass'; hf.frequency.value = 1800; const hg = c.createGain(); hg.gain.value = 0; ns.connect(hf); hf.connect(hg); hg.connect(out);
+    S.ctx = c; Object.assign(S, { out, filt, eng, o1, o2, o3, wg, wf, hg });
+    document.addEventListener('visibilitychange', () => { if (!S.ctx) return; document.hidden ? S.ctx.suspend() : (S.on && S.ctx.resume()); });
+    return c;
+  }
+  function flames(){
+    if (S.flames) return S.flames;
+    const m = new B.StandardMaterial('nitroFlameM', scene); m.emissiveColor = new C3(0.35, 0.65, 1); m.diffuseColor = new C3(0, 0, 0); m.alpha = 0.75; m.disableLighting = true; m.backFaceCulling = false;
+    const core = new B.StandardMaterial('nitroCoreM', scene); core.emissiveColor = new C3(1, 0.85, 0.6); core.disableLighting = true; core.alpha = 0.9;
+    S.flames = [-1, 1].map(sd => {
+      const f = B.MeshBuilder.CreateCylinder('nitroFlame', { height: 1, diameterTop: 0, diameterBottom: 0.24, tessellation: 10 }, scene); f.material = m; f.isPickable = false;
+      const k = B.MeshBuilder.CreateCylinder('nitroCore', { height: 0.6, diameterTop: 0, diameterBottom: 0.12, tessellation: 8 }, scene); k.material = core; k.isPickable = false; k.parent = f; k.position.y = -0.15;
+      f.rotationQuaternion = null; f.setEnabled(false); f.metadata = { sd }; return f;
+    });
+    return S.flames;
+  }
+  function start(node){
+    S.on = true; S.rpm = 850; S.gear = 1; S.fov0 = camera.fov;
+    try { const bv = node.getHierarchyBoundingVectors(true); S.len = clamp(Math.max(bv.max.x - bv.min.x, bv.max.z - bv.min.z), 3.6, 6); } catch (e){ S.len = 4.4; }
+    const c = audio(); if (c){ c.resume(); S.out.gain.cancelScheduledValues(c.currentTime); S.out.gain.setTargetAtTime(0.22, c.currentTime + 0.6, 0.25); }   // the engine starts as you sit in
+  }
+  function stop(){
+    S.on = false; S.boost = false; camera.fov = S.fov0;
+    if (S.ctx){ S.out.gain.setTargetAtTime(0, S.ctx.currentTime, 0.15); }
+    if (S.flames) for (const f of S.flames) f.setEnabled(false);
+    $('#speedo').classList.remove('boost'); clearLines();
+  }
+  const lc = $('#speedLines'), lx = lc.getContext('2d'); let lines = [];
+  function clearLines(){ lx.clearRect(0, 0, lc.width, lc.height); lines = []; }
+  function drawLines(k, boost, dt){
+    const W = lc.clientWidth, H = lc.clientHeight; if (lc.width !== W || lc.height !== H){ lc.width = W; lc.height = H; }
+    lx.clearRect(0, 0, W, H); if (k <= 0.01) return;
+    const want = Math.round(70*k); while (lines.length < want) lines.push({ a: Math.random()*Math.PI*2, r: 0.25 + Math.random()*0.5, s: 0.6 + Math.random()*0.8 });
+    lines.length = Math.min(lines.length, want);
+    const cx = W/2, cy = H*0.48, R = Math.hypot(W, H)/2;
+    lx.lineCap = 'round';
+    for (const l of lines){
+      l.r += dt*l.s*(1.2 + 2.5*k); if (l.r > 1.05){ l.r = 0.25 + Math.random()*0.2; l.a = Math.random()*Math.PI*2; }
+      const r0 = l.r*R, r1 = (l.r + 0.08 + 0.18*k)*R, ca = Math.cos(l.a), sa = Math.sin(l.a);
+      lx.strokeStyle = boost ? `rgba(160,215,255,${0.10 + 0.32*k*l.r})` : `rgba(255,255,255,${0.06 + 0.22*k*l.r})`; lx.lineWidth = 1 + 2*k*l.r;
+      lx.beginPath(); lx.moveTo(cx + ca*r0, cy + sa*r0); lx.lineTo(cx + ca*r1, cy + sa*r1); lx.stroke();
+    }
+    if (boost){ const g = lx.createRadialGradient(cx, cy, R*0.45, cx, cy, R); g.addColorStop(0, 'rgba(60,140,255,0)'); g.addColorStop(1, `rgba(60,140,255,${0.22*k})`); lx.fillStyle = g; lx.fillRect(0, 0, W, H); }
+  }
+  function update(dt, thr, wantBoost){
+    const D = DRIVE, kmh = Math.abs(D.v)*3.6;
+    // nitro tank: lasts about four seconds, refills in about twelve
+    if (S.nitro <= 0.01) S.empty = true; else if (S.nitro >= 0.3) S.empty = false;   // an empty tank must refill a third first
+    S.boost = wantBoost && !S.empty && D.v > 2 && thr >= 0;
+    S.nitro = clamp(S.nitro + (S.boost ? -0.25 : 0.085)*dt, 0, 1);
+    // gears and revs
+    const top = GEARS[S.gear - 1], low = S.gear > 1 ? GEARS[S.gear - 2] : 0;
+    if (kmh > top*0.97 && S.gear < GEARS.length){ S.gear++; S.shiftT = 0.12; }
+    else if (S.gear > 1 && kmh < low*0.82){ S.gear--; S.shiftT = 0.08; }
+    const g0 = S.gear > 1 ? GEARS[S.gear - 2]*0.55 : 0, g1 = GEARS[S.gear - 1];
+    let want = kmh < 4 ? 850 + Math.max(0, thr)*2600 : 1500 + (kmh - g0)/(g1 - g0)*5400 + Math.max(0, thr)*300;
+    if (D.v < -0.5) want = 1200 + Math.abs(D.v)*3.6*120;
+    S.rpm += (want - S.rpm)*Math.min(1, dt*(S.shiftT > 0 ? 18 : 7)); S.shiftT -= dt;
+    if (S.ctx && S.on){
+      const t = S.ctx.currentTime, f = S.rpm/30;                   // four cylinders: two firings a turn
+      S.o1.frequency.setTargetAtTime(f, t, 0.03); S.o2.frequency.setTargetAtTime(f*0.5, t, 0.03); S.o3.frequency.setTargetAtTime(f*2, t, 0.03);
+      const load = Math.max(0, thr) + (S.boost ? 0.6 : 0);
+      S.filt.frequency.setTargetAtTime(260 + S.rpm*0.16 + load*900, t, 0.05);
+      S.eng.gain.setTargetAtTime((S.shiftT > 0 ? 0.25 : 0.45 + 0.35*load)*(0.7 + S.rpm/7000*0.5), t, 0.04);
+      S.wg.gain.setTargetAtTime(Math.min(0.5, (kmh/300)**2*0.55), t, 0.1); S.wf.frequency.setTargetAtTime(350 + kmh*4, t, 0.2);
+      S.hg.gain.setTargetAtTime(S.boost ? 0.16 : 0, t, S.boost ? 0.05 : 0.25);
+    }
+    // the feeling of speed: a wider view, a little shake, streaks across the screen, blue fire from the exhausts
+    const k = clamp((kmh - 90)/210, 0, 1);
+    const fovWant = S.fov0 + 0.32*k*k + (S.boost ? 0.1 : 0);
+    camera.fov += (fovWant - camera.fov)*Math.min(1, dt*3);
+    S.shake = kmh > 140 ? (kmh - 140)/160*0.06 + (S.boost ? 0.03 : 0) : 0;
+    if (S.shake){ camera.target.x += (Math.random() - 0.5)*S.shake; camera.target.y += (Math.random() - 0.5)*S.shake; }
+    drawLines(Math.max(k, S.boost ? 0.45 : 0), S.boost, dt);
+    const fl = flames();
+    for (const f of fl){
+      f.setEnabled(S.boost);
+      if (!S.boost) continue;
+      const sd = f.metadata.sd, back = -S.len/2 - 0.35, s_ = Math.sin(D.h), c_ = Math.cos(D.h);
+      const lx_ = sd*0.38, ly = 0.38, lz = back;
+      f.position.set(D.x + c_*lx_ + s_*lz, DRIVE.node.position.y + ly, D.z - s_*lx_ + c_*lz);
+      f.rotation.set(-Math.PI/2, D.h, 0);
+      const fl_ = 0.8 + Math.random()*0.5; f.scaling.set(1, fl_, 1);
+    }
+    $('#gear').textContent = D.v < -0.5 ? 'R' : kmh < 2 && thr <= 0 ? 'N' : S.gear;
+    $('#nitroBar s').style.width = Math.round(S.nitro*100) + '%';
+    $('#speedo').classList.toggle('boost', S.boost);
+  }
+  // the touch button: hold for nitro
+  const nb = $('#nitroBtn'); let held = false;
+  const on = e => { e.preventDefault(); held = true; nb.classList.add('on'); }, off = () => { held = false; nb.classList.remove('on'); };
+  nb.addEventListener('pointerdown', on); nb.addEventListener('pointerup', off); nb.addEventListener('pointercancel', off); nb.addEventListener('pointerleave', off);
+  return { start, stop, update, get touchHeld(){ return held; }, S };
+})();
+
 // getting in / out, step by step
 function driveAnim(dt){
   const a = DRIVE.anim, av = WALK.av; a.t += dt;
@@ -5230,18 +5357,24 @@ function driveUpdate(dt){
   if (keys.has(' ')) hand = true;
   if (Math.hypot(WALK.joy.x, WALK.joy.y) > 0.12){ thr = clamp(-WALK.joy.y*1.3, -1, 1); st = clamp(WALK.joy.x*1.2, -1, 1); }
   if (GP.on){ if (GP.rt > 0.05 || GP.lt > 0.05) thr = GP.rt - GP.lt; if (GP.lx) st = GP.lx; if (GP.b[1]) hand = true; }
-  const D = DRIVE, vmax = 22, vrev = -6;
-  if (thr > 0) D.v = D.v < 0 ? Math.min(0, D.v + 12*dt) : Math.min(vmax, D.v + 6.5*thr*dt*(1 - D.v/vmax*0.5));
-  else if (thr < 0) D.v = D.v > 0.3 ? Math.max(0, D.v - 13*dt) : Math.max(vrev, D.v - 3.5*dt*(-thr));
-  else D.v -= Math.sign(D.v)*Math.min(Math.abs(D.v), 1.8*dt);
+  const nitroKey = keys.has('shift') || keys.has('n') || (GP.on && GP.b[2]) || CARFX.touchHeld;
+  const D = DRIVE, boost = CARFX.S.boost, vmax = boost ? 83.4 : 50, vrev = -8;      // 180 km/h, 300 with nitro
+  if (thr > 0){
+    if (D.v < 0) D.v = Math.min(0, D.v + 14*dt);
+    else if (D.v < vmax) D.v = Math.min(vmax, D.v + (9.5*thr*Math.pow(Math.max(0, 1 - D.v/vmax), 0.55) + (boost ? 16 : 0))*dt);
+    else D.v -= Math.min(D.v - vmax, 9*dt);                            // nitro over: ease back to the normal top speed
+  }
+  else if (thr < 0) D.v = D.v > 0.3 ? Math.max(0, D.v - (14 + Math.abs(D.v)*0.12)*dt) : Math.max(vrev, D.v - 4*dt*(-thr));
+  else D.v -= Math.sign(D.v)*Math.min(Math.abs(D.v), (1.8 + D.v*D.v*0.0012)*dt);   // rolling, and the air at speed
+  if (boost && thr === 0 && D.v > 2) D.v = Math.min(83.4, D.v + 16*dt);
   if (hand) D.v -= Math.sign(D.v)*Math.min(Math.abs(D.v), 16*dt);
-  D.steer += (st*0.55*(1 - Math.min(0.55, Math.abs(D.v)/40)) - D.steer)*Math.min(1, dt*6);
+  D.steer += (st*0.55*(1 - Math.min(0.82, Math.abs(D.v)/45)) - D.steer)*Math.min(1, dt*6);   // calmer steering at speed
   const nh = D.h + D.v/CAR_L*Math.tan(D.steer)*dt;
   const nx = D.x + Math.sin(nh)*D.v*dt, nz = D.z + Math.cos(nh)*D.v*dt;
   const hit = carHits(nx, nz, nh);
   if (!hit){ D.odo += Math.hypot(nx - D.x, nz - D.z); D.x = nx; D.z = nz; D.h = nh; }
   else {
-    if (Math.abs(D.v) > 4 && performance.now() > D.bumpT){ toast(hit === 'car' ? 'Ehtiyot bo‘ling — mashinaga urildingiz!' : 'Bum! Yo‘l shu yerda tugaydi'); D.bumpT = performance.now() + 2500; }
+    if (Math.abs(D.v) > 4 && performance.now() > D.bumpT){ toast(Math.abs(D.v) > 30 ? 'Juda tez edi — qattiq urildingiz!' : hit === 'car' ? 'Ehtiyot bo‘ling — mashinaga urildingiz!' : 'Bum! Yo‘l shu yerda tugaydi'); D.bumpT = performance.now() + 2500; }
     D.v = -D.v*0.25;
   }
   const gy = 0.02 + Math.max(0, walkGround(D.x, D.z) - 0.07);
@@ -5251,6 +5384,7 @@ function driveUpdate(dt){
   WALK.x = D.x; WALK.z = D.z;
   $('#speedo b').textContent = Math.round(Math.abs(D.v)*3.6);
   camera.target.set(D.x, 1.2, D.z);
+  CARFX.update(dt, thr, nitroKey);
   if (!gest && performance.now() > WALK.camT && Math.abs(D.v) > 1){
     const want = Math.atan2(-Math.cos(D.h), -Math.sin(D.h)) + (D.v < 0 ? Math.PI : 0);
     let d = want - camera.alpha; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
@@ -7432,7 +7566,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>{ if (!MAP.skip()) scene.render(); });
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>{ if (!MAP.skip()) scene.render(); }); } });
-window.__mahalla = { parkC, CASCADE, walkGround, MAP, trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { driveUpdate, RW, CARFX, parkC, CASCADE, walkGround, MAP, trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>

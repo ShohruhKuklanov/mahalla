@@ -17,7 +17,7 @@ export type Player = { id: number; nick: string; avatar: Avatar | null; x: numbe
 const num = (lo: number, hi: number) => z.number().finite().min(lo).max(hi);
 const posMsg = z.object({
   type: z.literal('pos'), x: num(-6000, 6000), y: num(-20, 200), z: num(-6000, 6000), yaw: num(-1000, 1000),
-  mode: z.enum(['walk', 'drive']), speed: num(-60, 60),
+  mode: z.enum(['walk', 'drive']), speed: num(-100, 100),           // cars reach 300 km/h (83 m/s) with nitro
   car: z.object({ model: z.string().max(24), color: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).nullable().optional(),
 });
 
