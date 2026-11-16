@@ -1397,14 +1397,73 @@ parkPad.material = stdMat('parkM',{dt:parkTex}); parkPad.receiveShadows=true; pa
 const pathM = stdMat('pathM',{dt:pave});
 const pathA = B.MeshBuilder.CreateBox('pathA',{width:parkW,height:0.36,depth:5},scene); pathA.position=new V3(parkC.x,0.18,parkC.z); pathA.material=pathM; pathA.receiveShadows=true;
 const pathB = B.MeshBuilder.CreateBox('pathB',{width:5,height:0.36,depth:parkD},scene); pathB.position=new V3(parkC.x,0.18,parkC.z); pathB.material=pathM; pathB.receiveShadows=true;
-// fountain
-const basin = B.MeshBuilder.CreateCylinder('basin',{diameter:22,height:1.1,tessellation:48},scene); basin.position=new V3(parkC.x,0.55,parkC.z);
-basin.material = stdMat('basinM',{diffuse:hex('#d9d2c5')});
-const water = B.MeshBuilder.CreateCylinder('water',{diameter:20,height:0.2,tessellation:48},scene); water.position=new V3(parkC.x,1.0,parkC.z);
-mats.water = stdMat('waterM',{diffuse:hex('#2f6f8f'), spec:new C3(.9,.9,.9), power:128}); mats.water.alpha=0.92; water.material=mats.water;
-const jet = B.MeshBuilder.CreateCylinder('jet',{diameterTop:0.3,diameterBottom:1.4,height:5,tessellation:16},scene); jet.position=new V3(parkC.x,3.5,parkC.z);
-mats.jet = stdMat('jetM',{diffuse:hex('#cfe9f5'), emissive:new C3(.15,.2,.25)}); mats.jet.alpha=0.55; jet.material=mats.jet;
-[basin,water,jet,pathA,pathB].forEach(m=>m.isPickable=false);
+// fountain: a stepped cascade. From a tiled back wall three spouts fill the top pool; the water then falls over
+// three stone terraces, each wider and lower, as thin sheets into a long pool at the front, with benches along the sides
+mats.water = stdMat('waterM',{diffuse:hex('#2f6f8f'), spec:new C3(.9,.9,.9), power:128}); mats.water.alpha=0.92;
+const CASCADE = (() => {
+  const cx = parkC.x, cz = parkC.z, G0 = 0.32;
+  const stoneM = stdMat('cascStoneM', { diffuse: hex('#d9d2c5') });
+  const capM = stdMat('cascCapM', { diffuse: hex('#efe8da'), spec: new C3(.15,.15,.15) });
+  const tileM = stdMat('cascTileM', { diffuse: hex('#2a7fb8'), spec: new C3(.5,.5,.5), power: 90 });
+  const goldM = stdMat('cascGoldM', { diffuse: hex('#e8c26a'), spec: new C3(.6,.5,.3), power: 60 });
+  // water: a still surface for the pools, and streaky moving sheets for the falls
+  const glow = new B.DynamicTexture('cascGlow', { width: 8, height: 8 }, scene, false); { const g = glow.getContext(); g.fillStyle = '#123f5e'; g.fillRect(0, 0, 8, 8); glow.update(); }
+  const poolM = stdMat('cascPoolM', { diffuse: hex('#2f7fa5'), spec: new C3(.9,.9,.9), power: 128 }); poolM.alpha = 0.9;
+  poolM.emissiveTexture = glow; poolM.emissiveColor = new C3(0, 0, 0); nightMats.push(poolM);           // lit from under the water at night
+  const st = new B.DynamicTexture('cascSheet', { width: 64, height: 256 }, scene, true); {
+    const g = st.getContext(); g.fillStyle = 'rgba(200,232,248,0.55)'; g.fillRect(0, 0, 64, 256);
+    for (let k = 0; k < 90; k++){ const x = Math.random()*64, w = 1 + Math.random()*2.5, y = Math.random()*256, h = 30 + Math.random()*120;
+      g.fillStyle = `rgba(255,255,255,${0.25 + Math.random()*0.5})`; g.fillRect(x, y, w, h); g.fillRect(x, y - 256, w, h); }
+    st.update(); st.hasAlpha = true; st.wrapV = B.Texture.WRAP_ADDRESSMODE; st.vScale = 1; }
+  const sheetM = stdMat('cascSheetM', { dt: st, emissive: new C3(.12, .16, .2) }); sheetM.useAlphaFromDiffuseTexture = true; sheetM.backFaceCulling = false; sheetM.alpha = 0.85;
+  const parts = [];
+  const box = (n, w, h, d, x, y, z, m) => { const b = B.MeshBuilder.CreateBox(n, { width: w, height: h, depth: d }, scene); b.position.set(cx + x, y, cz + z); b.material = m; b.isPickable = false; b.receiveShadows = true; parts.push(b); return b; };
+  // terraces, back to front: half-width, z from–to, top height
+  const T = [ { hw: 4, z0: -11, z1: -5, top: 2.6 }, { hw: 6, z0: -5, z1: 0, top: 1.8 }, { hw: 8, z0: 0, z1: 5, top: 1.05 } ];
+  T.forEach((t, k) => {
+    box('cascStep' + k, t.hw*2, t.top - G0, t.z1 - t.z0, 0, (G0 + t.top)/2, (t.z0 + t.z1)/2, stoneM);
+    box('cascRimL' + k, 0.35, 0.18, t.z1 - t.z0, -t.hw + 0.175, t.top + 0.09, (t.z0 + t.z1)/2, capM);
+    box('cascRimR' + k, 0.35, 0.18, t.z1 - t.z0, t.hw - 0.175, t.top + 0.09, (t.z0 + t.z1)/2, capM);
+    box('cascWater' + k, t.hw*2 - 0.7, 0.04, t.z1 - t.z0 - 0.3, 0, t.top + 0.03, (t.z0 + t.z1)/2 + 0.15, poolM);
+    const next = k < 2 ? T[k + 1].top : 0.62, sh = t.top + 0.05 - next;              // the fall over the front lip
+    const s_ = B.MeshBuilder.CreatePlane('cascFall' + k, { width: t.hw*2 - 0.7, height: sh }, scene);
+    s_.position.set(cx, next + sh/2, cz + t.z1 + 0.06); s_.material = sheetM; s_.isPickable = false; parts.push(s_);
+    box('cascLip' + k, t.hw*2 - 0.7, 0.08, 0.25, 0, t.top + 0.02, t.z1 - 0.12, tileM);                   // a blue tiled lip under each fall
+  });
+  // the front pool: a low rim all round
+  box('cascPoolFloor', 22, 0.2, 7, 0, G0 + 0.1, 8, stoneM);
+  box('cascPoolWater', 21.2, 0.06, 6.2, 0, 0.6, 8.05, poolM);
+  box('cascPoolRimF', 22.6, 0.55, 0.45, 0, G0 + 0.27, 11.3, capM);
+  box('cascPoolRimL', 0.45, 0.55, 7, -11.1, G0 + 0.27, 8, capM); box('cascPoolRimR', 0.45, 0.55, 7, 11.1, G0 + 0.27, 8, capM);
+  // splash where each fall lands
+  const foamM = stdMat('cascFoamM', { diffuse: hex('#ffffff'), emissive: new C3(.25,.28,.3) }); foamM.alpha = 0.55;
+  T.forEach((t, k) => box('cascFoam' + k, t.hw*2 - 0.9, 0.05, 0.6, 0, (k < 2 ? T[k + 1].top : 0.62) + 0.05, t.z1 + 0.4, foamM));
+  // back wall with a tiled band and three spouts arching into the top pool
+  box('cascWall', 9, 4.2 - G0, 0.6, 0, (G0 + 4.2)/2, -11.3, stoneM);
+  box('cascBand', 8.2, 0.7, 0.08, 0, 3.4, -10.98, tileM); box('cascCap', 9.4, 0.25, 0.9, 0, 4.32, -11.3, capM);
+  const spoutM = stdMat('cascSpoutM', { diffuse: hex('#cfe9f5'), emissive: new C3(.18,.22,.28) }); spoutM.alpha = 0.6;
+  const spouts = [];
+  for (const sx of [-2.6, 0, 2.6]){
+    box('cascNozzle', 0.5, 0.5, 0.5, sx, 3.4, -10.8, goldM);
+    const path = []; for (let k = 0; k <= 14; k++){ const u = k/14; path.push(new V3(cx + sx, 3.4 + 0.5*u - 3.3*u*u + 0.02, cz - 10.6 + 2.6*u)); }
+    const tb = B.MeshBuilder.CreateTube('cascSpout', { path, radius: 0.09, tessellation: 8 }, scene); tb.material = spoutM; tb.isPickable = false; parts.push(tb); spouts.push(tb);
+  }
+  // benches along both sides, facing the falls
+  const woodM = stdMat('cascWoodM', { diffuse: hex('#8a6a4a') });
+  const SOLID = [{ x0: -4, x1: 4, z0: -11.6, z1: -5 }, { x0: -6, x1: 6, z0: -5, z1: 0 }, { x0: -8, x1: 8, z0: 0, z1: 5 }, { x0: -11.4, x1: 11.4, z0: 5, z1: 11.6 }];
+  for (const side of [-1, 1]) for (const bz of [-7, -1.5, 4]){
+    const bx = side*(bz < -5 ? 6.6 : bz < 0 ? 8.6 : 10.6);
+    box('cascBenchBase', 0.9, 0.42, 2.6, bx, G0 + 0.21, bz, stoneM); box('cascBenchSeat', 1.0, 0.08, 2.8, bx, G0 + 0.46, bz, woodM);
+    SOLID.push({ x0: bx - 0.5, x1: bx + 0.5, z0: bz - 1.4, z1: bz + 1.4 });
+  }
+  for (const r of SOLID){ r.x0 += cx; r.x1 += cx; r.z0 += cz; r.z1 += cz; }
+  return {
+    parts, SOLID,
+    blocks: (x, z, pad) => SOLID.some(r => x > r.x0 - pad && x < r.x1 + pad && z > r.z0 - pad && z < r.z1 + pad),
+    update(dt){ st.vOffset -= dt*1.6; for (const sp of spouts) sp.scaling.y = 1; },
+  };
+})();
+[pathA,pathB].forEach(m=>m.isPickable=false);
 // small square parks across the new districts
 const sqPark = B.MeshBuilder.CreateBox('sqPark',{width:BLK,height:0.32,depth:BLK},scene);
 sqPark.material = parkPad.material; sqPark.receiveShadows = true; sqPark.isPickable = false;
@@ -4381,7 +4440,7 @@ function walkBlocked(x, z, fx, fz){
   if (z > COAST_Z - 3) return true;                                        // the sea
   if (onRiverRoad(x, z) && !onBridge(x, z)) return true;                   // the river, except on the bridges
   if (dealerWall(x, z, fx, fz)) return true;
-  if (Math.hypot(x - parkC.x, z - parkC.z) < 11 + BODY_R) return true;        // the fountain's basin
+  if (CASCADE.blocks(x, z, BODY_R)) return true;                              // the cascade, its pools and benches
   for (const r of WALL_RECTS) if (x > r.x0 - BODY_R && x < r.x1 + BODY_R && z > r.z0 - BODY_R && z < r.z1 + BODY_R) return true;   // warehouses, terminals, hangars
   return !!buildingAt(x, z);
 }
@@ -5738,7 +5797,7 @@ const MAP = (() => {
     for (const bl of blocks){ const x0 = blockX(bl.bx), z0 = blockZ(bl.bz); rect(x0, z0, x0 + BLK, z0 + BLK, '#33413a'); rect(x0 + SW, z0 + SW, x0 + BLK - SW, z0 + BLK - SW, '#2b3832'); }
     rect(parkMin.x, parkMin.z, parkMax.x, parkMax.z, '#2f6b3a');
     for (const sp of smallParks){ const x0 = blockX(sp.bx), z0 = blockZ(sp.bz); rect(x0, z0, x0 + BLK, z0 + BLK, '#2f5f37'); }
-    g.fillStyle = '#7fc2e6'; g.beginPath(); g.arc(mx(parkC.x), my(parkC.z), 11*PPM, 0, Math.PI*2); g.fill();
+    g.fillStyle = '#7fc2e6'; for (const r of CASCADE.SOLID.slice(0, 4)) g.fillRect(mx(r.x0), my(r.z0), (r.x1 - r.x0)*PPM, (r.z1 - r.z0)*PPM);
     // the river through the city
     rect(X0 - RD - 2, RIVER_Z - RD/2, RIVER_X + RD/2, RIVER_Z + RD/2, '#2a6a96'); rect(RIVER_X - RD/2, RIVER_Z - RD/2, RIVER_X + RD/2, COAST_Z, '#2a6a96');
     // buildings
@@ -6601,7 +6660,7 @@ function openSettings(){
 // ---------- quality ----------
 let shadowGen = null, pipeline = null, glow = null, ssao = null;
 const casters = () => {
-  const list = [...humanCasters(), ...treeCasters(), ...poles.meshes(), basin, jet, ...[...CARS.values()].flatMap(c => c.node ? c.node.getChildMeshes() : []), ...DLR.casters()];
+  const list = [...humanCasters(), ...treeCasters(), ...poles.meshes(), ...CASCADE.parts, ...[...CARS.values()].flatMap(c => c.node ? c.node.getChildMeshes() : []), ...DLR.casters()];
   for (const t of Object.values(T)) for (const pt of t.parts) list.push(pt.mesh);
   return list;
 };
@@ -7023,7 +7082,7 @@ scene.onBeforeRenderObservable.add(()=>{
   // selector pulse
   if (selector.isEnabled()){ const s = 1 + Math.sin(now/220)*0.03; selector.scaling.set(s,1,s); mats.sel.emissiveColor = hex('#2fb5a3').scale(0.6+0.4*Math.sin(now/220)); }
   // water shimmer + traffic
-  jet.scaling.y = 1 + Math.sin(now/160)*0.06;
+  CASCADE.update(dt);
   lakeTex.uOffset += dt*0.004; lakeTex.vOffset += dt*0.002; updateSea();
   // clouds drift with the wind; cover slowly comes and goes (broken cumulus ↔ near clear)
   cloudT += dt; skyMat.setFloat('time', cloudT); skyMat.setFloat('cover', 0.5 + 0.09*Math.sin(cloudT/260) + 0.04*Math.sin(cloudT/93));
@@ -7350,7 +7409,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>{ if (!MAP.skip()) scene.render(); });
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>{ if (!MAP.skip()) scene.render(); }); } });
-window.__mahalla = { walkGround, MAP, trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { parkC, CASCADE, walkGround, MAP, trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
