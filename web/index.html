@@ -215,6 +215,7 @@
   @media (max-width:520px){ #avChip span{display:none} #avChip.need span{display:inline} }
   body.walking #avChip{display:none}
   /* ---------- city map ---------- */
+  body:not(.touch) #walkJump{display:none}                     /* on a computer Tab jumps; the button is for touch screens */
   #mapBtn{margin-left:8px;min-height:40px;padding:0 14px;font-weight:800;font-size:13px;color:var(--ink);pointer-events:auto}
   @media (max-width:520px){ #mapBtn span{display:none} }
   body.walking #mapBtn{display:none}
@@ -2190,6 +2191,22 @@ for (const bl of blocks){
   for (const [dx,dz] of [[0.8,0.8],[BLK-0.8,0.8],[0.8,BLK-0.8],[BLK-0.8,BLK-0.8],[BLK/2,0.8],[BLK/2,BLK-0.8],[0.8,BLK/2],[BLK-0.8,BLK/2]]){
     const m = B.Matrix.Translation(x0+dx,0.3,z0+dz); poles.add(m, x0+dx, z0+dz); bulbs.add(m, x0+dx, z0+dz); LAMP_XZ.push([x0+dx, z0+dz]);
   }
+}
+// the central park: lamps along both paths, a ring round the cascade and a few out on the lawns
+{
+  const lamp = (x, z) => { const m = B.Matrix.Translation(x, 0.36, z); poles.add(m, x, z); bulbs.add(m, x, z); LAMP_XZ.push([x, z, 0.39]); };
+  const nearCascade = (x, z) => Math.abs(x - parkC.x) < 15 && Math.abs(z - parkC.z) < 15;
+  for (let d = 18; d < parkW/2 - 4; d += 15) for (const sg of [-1, 1]){
+    const x = parkC.x + sg*d, side = ((d/15)|0) % 2 ? 3.2 : -3.2;
+    if (!nearCascade(x, parkC.z)) lamp(x, parkC.z + side);
+  }
+  for (let d = 18; d < parkD/2 - 4; d += 15) for (const sg of [-1, 1]){
+    const z = parkC.z + sg*d, side = ((d/15)|0) % 2 ? 3.2 : -3.2;
+    if (!nearCascade(parkC.x, z)) lamp(parkC.x + side, z);
+  }
+  for (let k = 0; k < 8; k++){ const a = (k + 0.5)/8*Math.PI*2; lamp(parkC.x + Math.cos(a)*17.5, parkC.z + Math.sin(a)*17.5); }
+  for (let x = parkMin.x + 20; x < parkMax.x - 10; x += 32) for (let z = parkMin.z + 20; z < parkMax.z - 10; z += 32)
+    if (Math.abs(x - parkC.x) > 12 && Math.abs(z - parkC.z) > 12 && !nearCascade(x, z)) lamp(x, z);
 }
 poles.flush(); bulbs.flush();
 
@@ -4741,7 +4758,13 @@ const AVATAR = {
       else if (n === 'Eyes' || n === 'Sclera' || n === 'Lens'){ sm.specularColor = new C3(.7, .7, .7); sm.specularPower = 120; }
       else if (n === 'HatDoppiPattern'){ sm.diffuseTexture = pm.albedoTexture; if (sm.diffuseTexture) sm.diffuseTexture.hasAlpha = true; sm.useAlphaFromDiffuseTexture = false; }
       if (n === 'Lens'){ sm.alpha = 0.85; }
-      if (/^Hair|^Brow/.test(n)){ sm.backFaceCulling = false; sm.specularColor = new C3(.14, .12, .1); sm.specularPower = 40; }
+      if (/^Hair|^Brow/.test(n)){ sm.backFaceCulling = false; sm.twoSidedLighting = true; sm.specularColor = new C3(.14, .12, .1); sm.specularPower = 40; }
+      if (/^Hair|^Beard|^Mustache/.test(n) && pm && pm.albedoTexture){              // strands: the colour is tinted, the strands come from the texture
+        sm.diffuseTexture = pm.albedoTexture;
+        if (pm.bumpTexture){ sm.bumpTexture = pm.bumpTexture; sm.bumpTexture.level = 1.1; sm.invertNormalMapX = pm.invertNormalMapX; sm.invertNormalMapY = pm.invertNormalMapY; }
+        sm.specularColor = new C3(.22, .2, .17); sm.specularPower = 55;
+        if (n === 'BeardStubble'){ sm.diffuseTexture.hasAlpha = true; sm.useAlphaFromDiffuseTexture = true; sm.transparencyMode = 1; sm.alphaCutOff = 0.5; sm.bumpTexture = null; }
+      }
       if (pm && pm.albedoColor && !sm.diffuseTexture) sm.diffuseColor = pm.albedoColor.toGammaSpace ? pm.albedoColor.toGammaSpace() : pm.albedoColor;
       m.material = sm; m.isPickable = false; m.receiveShadows = true; m.alwaysSelectAsActiveMesh = true;
       (meshes[n] = meshes[n] || []).push(m);
@@ -4770,7 +4793,8 @@ const AVATAR = {
     const BEARD = { none: [], stubble: ['BeardStubble'], mustache: ['Mustache'], goatee: ['Mustache', 'BeardGoatee'], chin: ['BeardGoatee'],
       short: ['Mustache', 'BeardShort'], full: ['Mustache', 'BeardFull'], long: ['Mustache', 'BeardFull', 'BeardLong'] };
     for (const n of BEARD[c.beard] || []) show.add(n);
-    for (const n of ['BeardStubble', 'Mustache', 'BeardGoatee', 'BeardShort', 'BeardFull', 'BeardLong']) tint[n] = n === 'BeardStubble' ? mul(c.beardColor, 0.8) : rgb(c.beardColor);
+    for (const n of ['BeardStubble', 'Mustache', 'BeardGoatee', 'BeardShort', 'BeardFull', 'BeardLong']) tint[n] = n === 'BeardStubble' ? (() => { const b_ = hex(c.beardColor), s_ = hex(c.skin); return new C3(b_.r*0.65 + s_.r*0.35*0.8, b_.g*0.65 + s_.g*0.35*0.8, b_.b*0.65 + s_.b*0.35*0.8); })() : rgb(c.beardColor);
+    for (const n of Object.keys(tint)) if (/^Hair|^Beard|^Mustache/.test(n) && n !== 'BeardStubble'){ const t_ = tint[n]; tint[n] = new C3(Math.min(1, t_.r*1.4), Math.min(1, t_.g*1.4), Math.min(1, t_.b*1.4)); }   // the strand texture darkens; lift it back
     // clothes
     const o = c.outfit;
     if (o !== 'tee' && o !== 'shorts') show.add('Sleeve');
@@ -4798,7 +4822,6 @@ const AVATAR = {
     for (const [n, list] of Object.entries(a.meshes)) for (const m of list){
       m.setEnabled(show.has(n));
       if (tint[n]) m.material.diffuseColor = tint[n];
-      if (n === 'BeardStubble' && m.material.alpha !== 0.42){ m.material.alpha = 0.42; m.material.transparencyMode = 2; }   // a shadow of hair, the skin shows through
     }
     // morph targets (face shape, nose, mouth, eye size)
     const on = new Set(['face_' + c.face, 'nose_' + c.nose, 'mouth_' + c.mouth, 'eyes_' + c.eyes]);
@@ -6009,7 +6032,7 @@ const STREETLIGHT = (() => {
   const base = B.MeshBuilder.CreateGround('slPool', { width: 1, height: 1 }, scene); base.material = m; base.isPickable = false;
   const pools = chunkSet(base, 700);
   const R = 22;
-  for (const [x, z] of LAMP_XZ) pools.add(B.Matrix.Compose(new V3(R, 1, R), B.Quaternion.Identity(), new V3(x, 0.32, z)), x, z);
+  for (const [x, z, y] of LAMP_XZ) pools.add(B.Matrix.Compose(new V3(R, 1, R), B.Quaternion.Identity(), new V3(x, y || 0.32, z)), x, z);
   pools.flush();
   // headlights of the car you drive: a long soft beam on the road
   const ht = new B.DynamicTexture('hlBeamT', { width: 64, height: 128 }, scene, true), hg = ht.getContext(), hgr = hg.createLinearGradient(0, 128, 0, 0);

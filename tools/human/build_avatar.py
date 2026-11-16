@@ -122,13 +122,45 @@ sk *= (1 - 0.12*lids[..., None]); sk = sk*(1 - 0.5*nails[..., None]) + np.array(
 skin_png = WORK + 'skin_avatar.jpg'; Image.fromarray(np.clip(sk, 0, 255).astype(np.uint8)).save(skin_png, quality=88)
 
 # beard: a fine light grain (tinted per player) and, for stubble, a dotted alpha
+# hair: thin strands (light) with dark gaps between them, plus a normal map so each strand catches the light
+HS = 512
+def strands(seed, n, wmin, wmax, wave):
+    r = np.random.default_rng(seed); img = np.full((HS, HS), 0.32, np.float32)
+    ys = np.arange(HS)
+    for _ in range(n):
+        x0 = r.random()*HS; L = int(HS*(0.35 + 0.65*r.random())); y0 = int(r.random()*HS)
+        w = wmin + (wmax - wmin)*r.random(); br = 0.55 + 0.45*r.random(); ph = r.random()*6.28; amp = wave*r.random()
+        yy = (y0 + np.arange(L)) % HS
+        xx = x0 + amp*np.sin(yy/HS*2*np.pi*2 + ph)
+        fade = np.minimum(1.0, np.minimum(np.arange(L), L - np.arange(L))/18.0)
+        for dx in range(-2, 3):
+            xi = (np.floor(xx).astype(int) + dx) % HS
+            k = np.clip(1 - np.abs(xi + 0.5 - (xx % HS))/max(w, 0.6), 0, 1) if dx else np.ones(L)
+            img[yy, xi] = np.maximum(img[yy, xi], 0.32 + (br - 0.32)*k*fade)
+    return img
+def save_hair(img, name):
+    col = WORK + name + '.jpg'; Image.fromarray((np.clip(img, 0, 1)*255).astype(np.uint8)).convert('RGB').save(col, quality=82)
+    hgt = np.asarray(Image.fromarray((img*255).astype(np.uint8)).filter(__import__('PIL.ImageFilter', fromlist=['x']).GaussianBlur(0.8)), np.float32)/255
+    gx = (np.roll(hgt, -1, 1) - np.roll(hgt, 1, 1))*2.2; gy = (np.roll(hgt, -1, 0) - np.roll(hgt, 1, 0))*0.6
+    nz = np.ones_like(gx); ln = np.sqrt(gx*gx + gy*gy + nz*nz)
+    nrm = np.stack([(-gx/ln)*0.5 + 0.5, (gy/ln)*0.5 + 0.5, (nz/ln)*0.5 + 0.5], -1)
+    nm = WORK + name + '_n.jpg'; Image.fromarray((nrm*255).astype(np.uint8)).save(nm, quality=80)
+    return col, nm
+HAIR_TEX = save_hair(strands(7, 2600, 0.7, 1.6, 6.0), 'hair_strands')
+BEARD_TEX = save_hair(strands(9, 3000, 0.6, 1.3, 14.0), 'beard_strands')
+def hair_mat(name, col, tex=HAIR_TEX):
+    m = mat(name, col, 0.55, tex[0])
+    nt = m.node_tree; t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(tex[1]); t.image.colorspace_settings.name = 'Non-Color'
+    nmap = nt.nodes.new('ShaderNodeNormalMap'); nt.links.new(t.outputs['Color'], nmap.inputs['Color']); nt.links.new(nmap.outputs['Normal'], nt.nodes['Principled BSDF'].inputs['Normal'])
+    return m
 BS = 512
 g = np.asarray(Image.fromarray((rng.random((BS//4, BS//4))*255).astype(np.uint8)).resize((BS, BS), Image.BILINEAR), np.float32)/255
 fine = rng.random((BS, BS)).astype(np.float32)
 bt = np.clip(0.78 + 0.22*(0.6*g + 0.4*fine), 0, 1)
 beard_png = WORK + 'beard_avatar.jpg'; Image.fromarray((bt*255).astype(np.uint8)).convert('RGB').save(beard_png, quality=70)
-dots = (fine > 0.55).astype(np.uint8)*255
-stub_png = WORK + 'stubble_avatar.png'; Image.fromarray(np.dstack([np.full((BS, BS), 242, np.uint8), dots]), 'LA').save(stub_png, optimize=True)
+SB = 1024; fine2 = np.random.default_rng(12).random((SB, SB)).astype(np.float32)
+dots = (fine2 > 0.62).astype(np.uint8)*255                      # fine short hairs: ~38% of the skin under them
+stub_png = WORK + 'stubble_avatar.png'; Image.fromarray(np.dstack([np.full((SB, SB), 242, np.uint8), dots]), 'LA').save(stub_png, optimize=True)
 NAMES = ['Skin', 'Shirt', 'Sleeve', 'PantsTop', 'PantsLow', 'Shoes', 'Hair', 'Eyes', 'Sclera', 'HairMid', 'HairLong', 'Skirt', 'Jacket',
          'BeardStubble', 'Mustache', 'BeardGoatee', 'BeardShort', 'BeardFull']
 COL = {'Shirt': '#f2f0ea', 'Sleeve': '#f2f0ea', 'PantsTop': '#2c3e5c', 'PantsLow': '#2c3e5c', 'Shoes': '#1c1c1e', 'Hair': '#2a1d15', 'Eyes': '#3b2a1e',
@@ -139,7 +171,8 @@ BEARDS = ('BeardStubble', 'Mustache', 'BeardGoatee', 'BeardShort', 'BeardFull')
 for n in NAMES:
     if n == 'Skin': me.materials.append(mat(n, (1, 1, 1), 0.5, skin_png))
     elif n == 'BeardStubble': me.materials.append(mat(n, lin('#2a1d15'), 0.9, stub_png, alpha=True))
-    elif n in BEARDS: me.materials.append(mat(n, lin('#2a1d15'), 0.92, beard_png))
+    elif n in BEARDS: me.materials.append(hair_mat(n, lin('#2a1d15'), BEARD_TEX))
+    elif n in ('Hair', 'HairMid', 'HairLong'): me.materials.append(hair_mat(n, lin(COL.get(n, '#2a1d15'))))
     else: me.materials.append(mat(n, lin(COL[n]), 0.15 if n in ('Eyes', 'Sclera') else 0.8))
 
 # head landmarks (before editing)
@@ -344,33 +377,56 @@ MOUTH_HW = max(abs(f.calc_center_median().x) for f in lipf)
 print('mouth', round(MOUTH_TOP, 3), round(MOUTH_BOT, 3), 'hw', round(MOUTH_HW, 3), flush=True)
 def sst(a, b, x): t = min(1.0, max(0.0, (x - a)/(b - a))); return t*t*(3 - 2*t)
 def ang(c): return math.degrees(math.atan2(abs(c.x), -(c.y - HB.y)))
-def is_must(c):
-    ax = abs(c.x); droop = 0.013*sst(MOUTH_HW - 0.006, MOUTH_HW + 0.004, ax)
-    return ax < MOUTH_HW + 0.008 and MOUTH_TOP - 0.001 - droop < c.z < NOSE_BASE - 0.002 and c.y < HB.y - 0.06
-def is_goatee(c):
-    return abs(c.x) < MOUTH_HW*0.85 and CHIN_Z - 0.014 < c.z < MOUTH_BOT - 0.003 and c.y < CHIN_Y + 0.045
-def jaw(c, top_front, top_side, a0, a1):
-    a = ang(c)
-    if a > 100 or c.y > HB.y + 0.005: return False
-    top = top_front + (top_side - top_front)*sst(a0, a1, a)
-    if not (CHIN_Z - 0.018 < c.z < top): return False
-    if c.z < CHIN_Z + 0.004 and c.y > CHIN_Y + 0.05: return False          # only the front of the neck under the chin
-    return not is_must(c)
+# every beard edge is a smooth line, cut into the skin before the beard shells are copied from it
+LIP_H = (MOUTH_TOP - MOUTH_BOT)/2 + 0.0025
+def lip_f(p): return (p.x/(MOUTH_HW + 0.002))**2 + ((p.z - MOUTH_Z)/LIP_H)**2 - 1          # > 0 outside the lips
+def droop(ax): return 0.013*sst(MOUTH_HW - 0.006, MOUTH_HW + 0.004, ax)
+M_SIDE = lambda p: MOUTH_HW + 0.008 - abs(p.x)
+M_TOP = lambda p: NOSE_BASE - 0.002 - p.z
+M_BOT = lambda p: p.z - (MOUTH_TOP - 0.001 - droop(abs(p.x)))
+G_Z0, G_Z1 = CHIN_Z - 0.014, MOUTH_BOT - 0.003
+def goatee_f(p): return 1 - (p.x/(MOUTH_HW*0.9))**2 - ((p.z - (G_Z0 + G_Z1)/2)/((G_Z1 - G_Z0)/2))**2
+G_Y = lambda p: CHIN_Y + 0.045 - p.y
+def z_low(y): return CHIN_Z - 0.018 + 0.024*sst(CHIN_Y + 0.03, CHIN_Y + 0.06, y) + 0.05*sst(CHIN_Y + 0.06, CHIN_Y + 0.11, y)   # the neckline rises towards the ears
+LOW = lambda p: p.z - z_low(p.y)
+BACK = lambda p: HB.y + 0.005 - p.y
+def top_fn(top_front, top_side, a0, a1): return lambda p: top_front + (top_side - top_front)*sst(a0, a1, ang(p)) - p.z
+TOP_SHORT = top_fn(MOUTH_Z + 0.004, EYE_L.z - 0.04, 38, 72)
+TOP_FULL = top_fn(NOSE_BASE - 0.004, EYE_L.z - 0.03, 22, 58)
+zone = lambda: [f for f in bm.faces if f.material_index == MI['Skin'] and f.calc_center_median().z < EYE_L.z - 0.01
+                and f.calc_center_median().z > CHIN_Z - 0.09 and f.calc_center_median().y < HB.y + 0.04]
+for fn_ in (M_SIDE, M_TOP, M_BOT, lip_f, goatee_f, G_Y, LOW, BACK, TOP_SHORT, TOP_FULL): iso_cut(zone(), fn_)
+skinf = [f for f in bm.faces if f.material_index == MI['Skin']]
+def is_must(c): return M_SIDE(c) > 0 and M_TOP(c) > 0 and M_BOT(c) > 0 and c.y < HB.y - 0.06 and lip_f(c) > 0
+def is_goatee(c): return goatee_f(c) > 0 and G_Y(c) > 0 and lip_f(c) > 0
+def jaw(top):
+    return lambda c: ang(c) <= 100 and BACK(c) > 0 and (top(c) > 0 or is_must(c)) and LOW(c) > 0 and lip_f(c) > 0   # one shell over the moustache too: no seam
 REG = {
     'Mustache':     is_must,
     'BeardGoatee':  is_goatee,
-    'BeardShort':   lambda c: jaw(c, MOUTH_Z + 0.004, EYE_L.z - 0.04, 38, 72),
-    'BeardFull':    lambda c: jaw(c, NOSE_BASE - 0.004, EYE_L.z - 0.03, 22, 58),
-    'BeardStubble': lambda c: is_must(c) or jaw(c, NOSE_BASE - 0.004, EYE_L.z - 0.03, 22, 58),
+    'BeardShort':   jaw(TOP_SHORT),
+    'BeardFull':    jaw(TOP_FULL),
+    'BeardStubble': lambda c: is_must(c) or jaw(TOP_FULL)(c),
 }
 THICK = {'BeardStubble': (0.0011, 0.0), 'Mustache': (0.0034, 0.0), 'BeardGoatee': (0.0050, 0.004), 'BeardShort': (0.0040, 0.002), 'BeardFull': (0.0075, 0.008)}
-good = [f for f in skinf if mval(f, 'lips') < 0.3 and mval(f, 'ears') < 0.3 and mval(f, 'lids') < 0.3 and mval(f, 'mouth') < 0.3]
+good = [f for f in skinf if mval(f, 'ears') < 0.3 and mval(f, 'lids') < 0.3 and mval(f, 'mouth') < 0.3]
+def flow_uv(co, ru, rv):
+    th = math.atan2(co.x, -(co.y - HY)); return (th/(2*math.pi)*ru, (ZTOP - co.z)*rv)
+def set_flow_uv(faces, uvl_, ru, rv):
+    for f in faces:
+        uvs = [flow_uv(l.vert.co, ru, rv) for l in f.loops]
+        us = [u for u, _ in uvs]
+        if max(us) - min(us) > ru/2: uvs = [(u + ru if u < 0 else u, v) for u, v in uvs]   # the seam at the back of the head
+        for l, uv in zip(f.loops, uvs): l[uvl_].uv = uv
+uvl = bm.loops.layers.uv.active
+set_flow_uv([f for f in bm.faces if f.material_index == MI['Hair']], uvl, 7, 6)
 for name, test in REG.items():
     src = [f for f in good if test(f.calc_center_median())]
     dup = bmesh.ops.duplicate(bm, geom=src)
     nf = [g for g in dup['geom'] if isinstance(g, bmesh.types.BMFace)]
     nv = [g for g in dup['geom'] if isinstance(g, bmesh.types.BMVert)]
     for f in nf: f.material_index = MI[name]
+    if name != 'BeardStubble': set_flow_uv(nf, uvl, 16, 11)
     T, chin = THICK[name]
     for v in nv:
         edge = any(e.is_boundary for e in v.link_edges)
@@ -525,10 +581,8 @@ def long_beard(b):
     tipv = b.verts.new((0, CHIN_Y + 0.004, CHIN_Z + 0.014 - 0.13))
     for i in range(N): b.faces.new((rings[-1][i], rings[-1][(i + 1) % N], tipv))
     bmesh.ops.recalc_face_normals(b, faces=b.faces)
-    uv = b.loops.layers.uv.new('UVMap')
-    for f in b.faces:
-        for l in f.loops: l[uv].uv = (0.5 + l.vert.co.x*3, 0.5 + l.vert.co.z*3)
-piece('BeardLong', long_beard, mat('BeardLong', lin('#2a1d15'), 0.92, beard_png))
+    uv = b.loops.layers.uv.new('UVMap'); set_flow_uv(list(b.faces), uv, 16, 11)
+piece('BeardLong', long_beard, hair_mat('BeardLong', lin('#2a1d15'), BEARD_TEX))
 
 # longer hair: a solid fall of hair from the crown, lying on the head, then hanging straight (never back in),
 # resting on the back and shoulders; light grooves for locks and an uneven, layered lower edge
@@ -563,9 +617,7 @@ def hair_fall(z_from, z_to, overlap, a0=None):
         if out < 0: bmesh.ops.reverse_faces(b, faces=b.faces)
         inner = bmesh.ops.duplicate(b, geom=list(b.faces))                     # an inside, seen from below or the front
         bmesh.ops.reverse_faces(b, faces=[g for g in inner['geom'] if isinstance(g, bmesh.types.BMFace)])
-        uv = b.loops.layers.uv.new('UVMap')
-        for f in b.faces:
-            for l in f.loops: l[uv].uv = (0.5, 0.5)
+        uv = b.loops.layers.uv.new('UVMap'); set_flow_uv(list(b.faces), uv, 7, 6)
     return fn
 def lock(th, k): return 0.010*math.sin(math.radians(th)*k) + 0.006*math.sin(math.radians(th)*k*2.3 + 1)
 def mid_end(th):   # just below the ear at the sides, to the collar at the back
@@ -581,7 +633,10 @@ piece('HairFallLong', hair_fall(lambda th: mid_end(th), long_end, 0.012, a0=112)
 def bun(b):
     bmesh.ops.create_uvsphere(b, u_segments=20, v_segments=12, radius=0.052)
     for v in b.verts: v.co = Vector((v.co.x*1.0, v.co.y*0.85, v.co.z*0.9)) + Vector((0, HEADB + 0.018, ZTOP - 0.035))
-piece('HairBun', bun, mat('HairBun', lin('#2a1d15'), 0.6))
+    uv = b.loops.layers.uv.new('UVMap')
+    for f in b.faces:                                                       # strands wound round the bun
+        for l in f.loops: d = l.vert.co - Vector((0, HEADB + 0.018, ZTOP - 0.035)); l[uv].uv = (math.atan2(d.z, d.x)/(2*math.pi)*3, d.y*20)
+piece('HairBun', bun, hair_mat('HairBun', lin('#2a1d15')))
 
 # glasses
 def ring(b, c, rx, rz, minor, segs=28, square=False):
