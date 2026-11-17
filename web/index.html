@@ -5409,7 +5409,7 @@ function exitCarDone(){
   WALK.x = a.ex; WALK.z = a.ez; WALK.y = walkGround(a.ex, a.ez); WALK.yaw = a.yaw;
   camera.radius = 4.6; camera.beta = 1.28;
   document.body.classList.remove('driving'); $('#speedo').hidden = true;
-  CARFX.stop(); LAPS.tick();
+  CARFX.stop(); LAPS.tick(); DRIFT.stop(); if (DRIVE.node) DRIVE.node.rotation.z = 0; DRIVE.vr = 0; DRIVE.beta = 0; DRIVE.th = null; DRIVE.drift = 0;
 }
 // ---------- engine sound, gears, nitro and the feeling of speed ----------
 // The engine is synthesised (Web Audio), shaped after real engine types: a small three-cylinder turbo, a four,
@@ -5447,6 +5447,8 @@ const CARFX = (() => {
     const hf = c.createBiquadFilter(); hf.type = 'highpass'; hf.frequency.value = 1800; const hg = c.createGain(); hg.gain.value = 0; ns.connect(hf); hf.connect(hg); hg.connect(out);
     const pf = c.createBiquadFilter(); pf.type = 'bandpass'; pf.frequency.value = 900; pf.Q.value = 0.9; const pg = c.createGain(); pg.gain.value = 0; ns.connect(pf); pf.connect(pg); pg.connect(out);
     const tw = c.createOscillator(), tg = c.createGain(); tw.type = 'sine'; tg.gain.value = 0; tw.connect(tg); tg.connect(out); tw.start();   // turbo whistle
+    const sf = c.createBiquadFilter(); sf.type = 'bandpass'; sf.frequency.value = 2600; sf.Q.value = 9; const sg = c.createGain(); sg.gain.value = 0; ns.connect(sf); sf.connect(sg); sg.connect(out);   // tyre squeal
+    S.sf = sf; S.sg = sg;
     S.ctx = c; Object.assign(S, { out, filt, engG, amp, lfo, lfoG, wg, wf, hg, pg, pf, tw, tg });
     document.addEventListener('visibilitychange', () => { if (!S.ctx) return; document.hidden ? S.ctx.suspend() : (S.on && S.ctx.resume()); });
     return c;
@@ -5540,6 +5542,8 @@ const CARFX = (() => {
       S.engG.gain.setTargetAtTime(base, t, 0.04);
       S.wg.gain.setTargetAtTime(Math.min(0.5, (kmh/300)**2*0.55), t, 0.1); S.wf.frequency.setTargetAtTime(350 + kmh*4, t, 0.2);
       S.hg.gain.setTargetAtTime(S.boost ? 0.16 : 0, t, S.boost ? 0.05 : 0.25);
+      const sq = DRIFT.surface(D.x, D.z) === 'asphalt' ? (S.slip || 0) : 0;
+      S.sg.gain.setTargetAtTime(sq > 0.3 ? 0.06 + 0.22*sq : 0, t, 0.06); S.sf.frequency.setTargetAtTime(2300 + 700*sq + Math.random()*120, t, 0.05);
       S.tw.frequency.setTargetAtTime(1800 + S.rpm*0.55, t, 0.1); S.tg.gain.setTargetAtTime(E.turbo ? 0.012 + 0.03*Math.max(0, thr)*S.rpm/7000 : 0, t, 0.15);
       if (S.crackT > 0 && Math.random() < dt*16){                   // one pop
         S.pf.frequency.setValueAtTime(500 + Math.random()*900, t);
@@ -5573,6 +5577,94 @@ const CARFX = (() => {
   nb.addEventListener('pointerdown', on); nb.addEventListener('pointerup', off); nb.addEventListener('pointercancel', off); nb.addEventListener('pointerleave', off);
   window.addEventListener('keydown', e => { if (DRIVE.on && !DRIVE.anim && (e.key === 'v' || e.key === 'V') && !(e.target && e.target.tagName === 'INPUT')) next(); });
   return { start, stop, update, next, get touchHeld(){ return held; }, S };
+})();
+
+// ---------- wheels, tyre smoke, dust and skid marks ----------
+const DRIFT = (() => {
+  // what the tyres are on: asphalt (roads, the race track, paved slabs) or loose ground (grass, gravel)
+  function surface(x, z){
+    if (x > X0 - RD && x < X0 + W + RD && z > Z0 - RD && z < Z0 + D + RD) return 'asphalt';
+    if (x > RACE.box.x0 - 30 && RACE.dist(x, z) < RACE.W/2 + 1.5) return 'asphalt';
+    for (const r of GROUND_RECTS) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) return 'asphalt';
+    if (x > DEALER.x0 && x < RACE.PAD.x + 40 && Math.abs(z - RACE.PAD.z*(x - DEALER.x1)/(RACE.PAD.x - DEALER.x1)) < 6) return 'asphalt';
+    return 'loose';
+  }
+  // each wheel's radius, from its own size (models differ)
+  function radius(wh){
+    if (wh.r) return wh.r;
+    try { const bv = wh.w.getHierarchyBoundingVectors(true); wh.r = clamp((bv.max.y - bv.min.y)/2, 0.24, 0.48); } catch (e){ wh.r = 0.333; }
+    return wh.r;
+  }
+  function wheels(n, dt, D, slip, thr){
+    for (const wh of (n.metadata.wheels || [])){
+      const r = radius(wh);
+      let ground = D.v + (wh.front ? 0 : 0);
+      if (!wh.front && slip > 0.3 && thr > 0.3) ground = D.v + Math.sign(D.v || 1)*(8 + 14*slip);   // rear wheels spinning faster than the car goes
+      let d = ground*dt/r;
+      // past what the eye can follow, a turning wheel blurs: keep the step below a quarter spoke so it never seems to run backwards
+      if (Math.abs(d) > 0.42) d = Math.sign(d)*(0.36 + Math.random()*0.1);
+      wh.a = (wh.a || 0) + d;
+      wh.w.rotation.z = wh.sd*wh.a; wh.w.rotation.y = wh.sd*Math.PI/2 + (wh.front ? D.steer : 0);
+    }
+  }
+  // smoke and dust: one emitter per rear wheel
+  let ps = null, marks = null, mi = 0, lastMark = [null, null];
+  const MAXM = 2400;
+  function setup(){
+    const t = new B.DynamicTexture('smokeT', { width: 64, height: 64 }, scene, true), g = t.getContext();
+    const gr = g.createRadialGradient(32, 32, 2, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); t.update(); t.hasAlpha = true;
+    ps = [0, 1].map(k => {
+      const p = new B.ParticleSystem('tyreSmoke' + k, 420, scene);
+      p.particleTexture = t; p.emitter = new V3(0, -100, 0);
+      p.minEmitBox = new V3(-0.25, 0, -0.3); p.maxEmitBox = new V3(0.25, 0.1, 0.3);
+      p.minSize = 0.5; p.maxSize = 1.2; p.minLifeTime = 0.9; p.maxLifeTime = 2.2;
+      p.addSizeGradient(0, 0.6); p.addSizeGradient(1, 3.4);
+      p.minEmitPower = 0.4; p.maxEmitPower = 1.4; p.direction1 = new V3(-0.6, 0.6, -0.6); p.direction2 = new V3(0.6, 1.4, 0.6);
+      p.gravity = new V3(0, 0.35, 0); p.minAngularSpeed = -0.8; p.maxAngularSpeed = 0.8;
+      p.blendMode = B.ParticleSystem.BLENDMODE_STANDARD; p.emitRate = 0; p.updateSpeed = 0.016;
+      p.start(); return p;
+    });
+    // skid marks: short dark strips laid where a sliding tyre passes
+    const mk = B.MeshBuilder.CreateGround('skid', { width: 0.24, height: 0.62 }, scene);
+    const mm = new B.StandardMaterial('skidM', scene); mm.diffuseColor = new C3(0.05, 0.05, 0.05); mm.specularColor = new C3(0, 0, 0); mm.alpha = 0.55; mm.zOffset = -4; mm.disableLighting = false;
+    mk.material = mm; mk.isPickable = false;
+    const buf = new Float32Array(MAXM*16); for (let i = 0; i < MAXM; i++) B.Matrix.Translation(0, -500, 0).copyToArray(buf, i*16);
+    mk.thinInstanceSetBuffer('matrix', buf, 16, false); mk.alwaysSelectAsActiveMesh = true;
+    marks = { mk, buf };
+  }
+  const col = (p, a, b) => { p.color1 = a; p.color2 = b; p.colorDead = new B.Color4(a.r, a.g, a.b, 0); };
+  function effects(n, dt, D, slip, surf){
+    if (!ps) setup();
+    let rear = (n.metadata.wheels || []).filter(w => !w.front).map(w => w.w.getAbsolutePosition());
+    if (rear.length < 2){                                            // a model without wheel nodes: the back corners
+      const L2 = (CARFX.S.len || 4.4)*0.33, fx = Math.sin(D.h), fz = Math.cos(D.h), rx = Math.cos(D.h), rz = -Math.sin(D.h);
+      rear = [-1, 1].map(sd => new V3(D.x - fx*L2 + rx*sd*0.8, 0.3, D.z - fz*L2 + rz*sd*0.8));
+    }
+    const loose = surf === 'loose', moving = Math.abs(D.v) > 2;
+    // dust rises from loose ground at any speed, tyre smoke on asphalt only when they slide
+    const amount = loose ? Math.min(1, Math.abs(D.v)/25)*0.6 + slip*0.6 : (slip > 0.25 ? slip : 0);
+    ps.forEach((p, k) => {
+      const wp = rear[k]; p.emitter.set(wp.x, Math.max(0.05, wp.y - 0.25), wp.z);
+      if (loose){ col(p, new B.Color4(0.62, 0.52, 0.38, 0.42), new B.Color4(0.52, 0.44, 0.32, 0.3)); p.gravity.y = 0.1; }
+      else { col(p, new B.Color4(0.86, 0.86, 0.86, 0.36), new B.Color4(0.7, 0.7, 0.72, 0.26)); p.gravity.y = 0.35; }
+      p.emitRate = (moving || slip > 0.6) ? amount*230 : 0;
+    });
+    // marks on asphalt while sliding
+    if (!loose && slip > 0.35 && marks){
+      rear.forEach((wp, k) => {
+        const last = lastMark[k];
+        if (last && Math.hypot(wp.x - last.x, wp.z - last.z) < 0.5) return;
+        const y = Math.max(0.08, walkGround(wp.x, wp.z) + 0.02);
+        const ang = last ? Math.atan2(wp.x - last.x, wp.z - last.z) : D.h;
+        B.Matrix.Compose(new V3(1, 1, 1), B.Quaternion.FromEulerAngles(0, ang, 0), new V3(wp.x, y, wp.z)).copyToArray(marks.buf, mi*16);
+        mi = (mi + 1) % MAXM; lastMark[k] = { x: wp.x, z: wp.z };
+      });
+      marks.mk.thinInstanceBufferUpdated('matrix');
+    } else lastMark = [null, null];
+  }
+  function stop(){ if (ps) ps.forEach(p => p.emitRate = 0); lastMark = [null, null]; }
+  return { surface, wheels, effects, stop, get ps(){ return ps; }, get marks(){ return marks; } };
 })();
 
 // ---------- lap timer on the race track ----------
@@ -5650,20 +5742,50 @@ function driveUpdate(dt){
   else if (thr < 0) D.v = D.v > 0.3 ? Math.max(0, D.v - (14 + Math.abs(D.v)*0.12)*dt) : Math.max(vrev, D.v - 4*dt*(-thr));
   else D.v -= Math.sign(D.v)*Math.min(Math.abs(D.v), (1.8 + D.v*D.v*0.0012)*dt);   // rolling, and the air at speed
   if (boost && thr === 0 && D.v > 2) D.v = Math.min(83.4, D.v + 16*dt);
-  if (hand) D.v -= Math.sign(D.v)*Math.min(Math.abs(D.v), 16*dt);
-  D.steer += (st*0.55*(1 - Math.min(0.82, Math.abs(D.v)/45)) - D.steer)*Math.min(1, dt*6);   // calmer steering at speed
-  const nh = D.h + D.v/CAR_L*Math.tan(D.steer)*dt;
-  const nx = D.x + Math.sin(nh)*D.v*dt, nz = D.z + Math.cos(nh)*D.v*dt;
+  if (hand) D.v -= Math.sign(D.v)*Math.min(Math.abs(D.v), (Math.abs(D.v) > 7 ? 6 : 16)*dt);   // the handbrake locks the rear: it slides more than it stops
+  // ---- grip and drift: the car keeps its own velocity; the tyres pull it towards where the car points ----
+  // Handbrake (Space, gamepad B) at speed, or full throttle with full lock above ~55 km/h, breaks the rear tyres loose:
+  // the tail steps out, the car slides, counter-steer to hold it. Grass and gravel give less grip than asphalt.
+  const surf = DRIFT.surface(D.x, D.z), vabs = Math.abs(D.v);
+  let grip = surf === 'asphalt' ? 14 : 6;
+  D.drift = D.drift || 0;
+  const want = (hand && vabs > 7) ? 1 : (thr > 0.8 && Math.abs(st) > 0.7 && D.v > 15) ? 0.7 : 0;
+  D.drift += (want - D.drift)*Math.min(1, dt*(want > D.drift ? 6 : 1.6));                         // loose quickly, grip back slowly
+  grip *= 1 - 0.88*D.drift;
+  const lockK = 1 - Math.min(0.82, vabs/45)*(1 - 0.6*D.drift);                                     // more lock while sliding: counter-steer
+  D.steer += (st*0.55*lockK - D.steer)*Math.min(1, dt*6);
+  // the car's nose may point away from where it travels (the slip angle, beta): in a drift beta grows towards a target
+  // set by the steering (steer into the turn for a deeper slide, counter-steer to straighten), the travel line keeps
+  // curving round the corner, and the slide scrubs speed
+  const ad = a => Math.atan2(Math.sin(a), Math.cos(a));
+  if (D.beta == null) D.beta = 0;
+  if (D.th == null || Math.abs(ad(D.h - D.beta - D.th)) > 0.6) D.th = D.h - D.beta;            // the car was put somewhere new
+  const cb = Math.max(0.35, Math.cos(D.beta));
+  let sp = D.v/cb;
+  const sdir = Math.sign(D.steer) || 0, bdir = Math.sign(D.beta) || 0;
+  const bT = D.drift > 0.05 ? D.drift*(0.6*(st || 0) + 0.4*bdir*(st ? (Math.sign(st) === bdir ? 1 : -0.2) : 1))*0.72 : 0;
+  D.beta += (bT - D.beta)*Math.min(1, dt*(D.drift > 0.05 ? 2.6 : 7));
+  const thRate = sp/CAR_L*Math.tan(D.steer)*(1 - 0.45*D.drift) + D.drift*bdir*Math.min(1, Math.abs(sp)/20)*0.45*Math.min(1, Math.abs(D.beta)/0.3);
+  const nth = D.th + thRate*dt*(1 + 0*grip), nh = nth + D.beta;
+  sp -= Math.sign(sp)*Math.min(Math.abs(sp), Math.abs(Math.sin(D.beta))*Math.abs(sp)*0.22*dt);   // sliding scrubs speed
+  const nx = D.x + Math.sin(nth)*sp*dt, nz = D.z + Math.cos(nth)*sp*dt;
   const hit = carHits(nx, nz, nh) || (RACE.blocks(D.x, D.z, nx, nz) ? 'wall' : null);
-  if (!hit){ D.odo += Math.hypot(nx - D.x, nz - D.z); D.x = nx; D.z = nz; D.h = nh; }
+  if (!hit){
+    D.odo += Math.hypot(nx - D.x, nz - D.z); D.x = nx; D.z = nz; D.th = nth; D.h = nh;
+    D.v = sp*Math.cos(D.beta); D.vr = -sp*Math.sin(D.beta);
+  }
   else {
     if (Math.abs(D.v) > 4 && performance.now() > D.bumpT){ toast(Math.abs(D.v) > 30 ? 'Juda tez edi — qattiq urildingiz!' : hit === 'car' ? 'Ehtiyot bo‘ling — mashinaga urildingiz!' : 'Bum! Yo‘l shu yerda tugaydi'); D.bumpT = performance.now() + 2500; }
-    D.v = -D.v*0.25;
+    D.v = -D.v*0.25; D.vr = 0; D.beta *= 0.4; D.th = D.h - D.beta;
   }
+  const slip = Math.min(1, Math.abs(Math.sin(D.beta))*Math.min(1, Math.abs(D.v)/8)*2.2 + (D.drift > 0.3 && thr > 0.5 ? 0.3 : 0) + (thr > 0.9 && vabs < 6 && hand ? 0.9 : 0));   // sideways, or spinning on the spot   // sideways, or spinning on the spot
   const gy = 0.02 + Math.max(0, walkGround(D.x, D.z) - 0.07);
   const n = D.node; n.position.set(D.x, n.position.y + (gy - n.position.y)*Math.min(1, dt*10), D.z); n.rotation.y = D.h;
-  D.roll += D.v*dt/0.333;
-  for (const wh of (n.metadata.wheels || [])){ wh.w.rotation.z = wh.sd*D.roll; wh.w.rotation.y = wh.sd*Math.PI/2 + (wh.front ? D.steer : 0); }
+  // the body leans a little into the slide
+  n.rotation.z = (n.rotation.z || 0) + (clamp(-(D.vr || 0)*0.012, -0.06, 0.06) - (n.rotation.z || 0))*Math.min(1, dt*6);
+  DRIFT.wheels(n, dt, D, slip, thr);
+  DRIFT.effects(n, dt, D, slip, surf);
+  CARFX.S.slip = slip;
   WALK.x = D.x; WALK.z = D.z;
   $('#speedo b').textContent = Math.round(Math.abs(D.v)*3.6);
   camera.target.set(D.x, 1.2, D.z);
@@ -7860,7 +7982,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>{ if (!MAP.skip()) scene.render(); });
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>{ if (!MAP.skip()) scene.render(); }); } });
-window.__mahalla = { RACE, LAPS, driveUpdate, RW, CARFX, parkC, CASCADE, walkGround, MAP, trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { DRIFT, RACE, LAPS, driveUpdate, RW, CARFX, parkC, CASCADE, walkGround, MAP, trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
