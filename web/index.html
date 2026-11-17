@@ -256,6 +256,11 @@
   #nitroBar{align-self:center;width:70px;height:8px;border-radius:5px;background:rgba(255,255,255,.12);overflow:hidden;margin-left:6px}
   #nitroBar s{display:block;height:100%;width:100%;background:linear-gradient(90deg,#3aa0ff,#9fe3ff);text-decoration:none}
   #speedo.boost #nitroBar s{background:linear-gradient(90deg,#ff7a1a,#ffd36b)} #speedo.boost{box-shadow:0 0 0 2px rgba(255,140,40,.6)}
+  #raceHud{position:absolute;top:70px;left:50%;transform:translateX(-50%);min-width:260px;padding:10px 18px;border-radius:16px;background:rgba(19,18,42,.86);border:1px solid rgba(240,197,102,.45);color:#f6efe2;text-align:center;font:600 13px Manrope,system-ui,sans-serif;pointer-events:none}
+  #raceHud .rh-t{font-weight:800;letter-spacing:.08em;color:#f0c566;font-size:12px}
+  #raceHud .rh-now{font:800 30px/1.1 Manrope,system-ui;font-variant-numeric:tabular-nums}
+  #raceHud .rh-row{display:flex;gap:16px;justify-content:center;color:#c9cce0} #raceHud b{color:#fff;font-variant-numeric:tabular-nums}
+  #raceHud .rh-msg{margin-top:4px;color:#9fe3c9;font-weight:700;min-height:0}
   #speedLines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:none}
   body.driving #speedLines{display:block}
   #nitroBtn{display:none;position:absolute;right:18px;bottom:110px;width:78px;height:78px;border-radius:50%;border:2px solid rgba(255,160,60,.7);background:rgba(40,20,10,.7);color:#fff;font:800 13px system-ui;pointer-events:auto;touch-action:none}
@@ -536,6 +541,7 @@
   <button class="tool" id="tilt" title="Ko‘rinishni almashtirish">3D</button>
   <button class="tool" id="goPort" title="Port" aria-label="Portga borish"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v14"/><path d="M5 13a7 7 0 0 0 14 0"/><path d="M8 11h8"/></svg></button>
   <button class="tool" id="goAir" title="Aeroport" aria-label="Aeroportga borish"><svg viewBox="0 0 24 24"><path d="M10.5 3.5c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5V9l7 4v2l-7-2v5l2 1.5V21l-3.5-1-3.5 1v-1.5l2-1.5v-5l-7 2v-2l7-4z"/></svg></button>
+  <button class="tool" id="goRace" title="Poyga yo‘li" aria-label="Poyga yo‘liga borish"><svg viewBox="0 0 24 24"><path d="M5 21V4h1.5v1H19l-2.5 4.5L19 14H6.5v7z"/><path d="M8 6.5h2v2H8zm4 0h2v2h-2zm-2 2h2v2h-2zm4 0h2v2h-2zm-6 2h2v2H8zm4 0h2v2h-2z" fill="#13122a"/></svg></button>
   <button class="tool" id="goForest" title="Bog‘ va o‘rmon" aria-label="Bog‘ va o‘rmonga borish"><svg viewBox="0 0 24 24"><path d="M12 2 6 10h3l-4 6h5v6h4v-6h5l-4-6h3z"/></svg></button>
   <button class="tool" id="home" title="Mening yerim" aria-label="Mening yerim"><svg viewBox="0 0 24 24"><path d="M4 11l8-6 8 6"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/></svg></button>
   <button class="tool" id="walkBtn" title="Piyoda yurish" aria-label="Piyoda yurish"><svg viewBox="0 0 24 24"><circle cx="13" cy="4" r="2"/><path d="M9 21l2.5-6.5L14 17v4"/><path d="M11.5 14.5 12 9l-3.5 2.5V15"/><path d="M12 9l3 3 3 1"/></svg></button>
@@ -591,6 +597,7 @@
   <div id="qTrack" hidden role="status" aria-live="polite"><div class="qt-t"></div><div class="qt-s"></div><div class="qt-d"></div></div>
   <div id="speedo" hidden aria-live="off"><b>0</b><span>km/soat</span><em id="gear" title="Uzatma">1</em><div id="nitroBar" title="Nitro (Shift yoki N)"><s></s></div></div>
   <canvas id="speedLines" aria-hidden="true"></canvas>
+  <div id="raceHud" hidden aria-live="polite"><div class="rh-t">🏁 Susambil Ring</div><div class="rh-now">0:00.00</div><div class="rh-row"><span>Oxirgi: <b class="rh-last">—</b></span><span>Rekord: <b class="rh-best">—</b></span></div><div class="rh-msg"></div></div>
   <button type="button" id="nitroBtn" aria-label="Nitro">🔥 Nitro</button>
   <button type="button" id="actBtn" hidden></button>
   <div id="dlg" hidden role="dialog" aria-labelledby="dlgName" aria-describedby="dlgText"><div class="dlg-n" id="dlgName"></div><div class="dlg-t" id="dlgText"></div><div class="dlg-b" id="dlgBtns"></div></div>
@@ -2177,6 +2184,50 @@ for (const bl of blocks){
 }
 // small parks
 for (const sp of smallParks) for (let i=0;i<14;i++) addTree(sp.cx + (rnd()-0.5)*(BLK-6), sp.cz + (rnd()-0.5)*(BLK-6), 0.8+rnd()*0.5);
+// =================== RACE TRACK (east of the city, past the dealership) ===================
+// A 3.25 km road course with nine turns, laid out after a real circuit's plan: a long main straight running
+// south-east, a sweeping right onto the bottom straight, a hairpin, an S through the woods and a tight top hairpin.
+// Kerbs at every corner, a start gantry, grandstand, pit garages, tyre walls, turn boards, floodlights and a lap timer.
+const RACE = (() => {
+  const P = [[240,700],[300,790],[350,860],[384,887],[430,896],[490,892],[550,862],[584,812],[590,762],[572,722],[540,702],[490,700],[446,712],
+             [414,738],[402,762],[388,740],[384,700],[396,642],[408,602],[392,582],[356,572],[318,562],[280,543],[248,512],[224,470],[208,424],
+             [204,382],[198,352],[176,341],[142,345],[112,368],[100,410],[110,452],[150,522],[195,612]];
+  const LEN = 3250, CX = 1800, CZ = -120, PCX = 345, PCZ = 620, W_ = 12;
+  // smooth closed curve through the points (Catmull-Rom), then even samples every 4 m
+  const raw = [];
+  for (let i = 0; i < P.length; i++){
+    const p0 = P[(i - 1 + P.length) % P.length], p1 = P[i], p2 = P[(i + 1) % P.length], p3 = P[(i + 2) % P.length];
+    for (let k = 0; k < 12; k++){ const t = k/12, t2 = t*t, t3 = t2*t;
+      raw.push([0.5*((2*p1[0]) + (-p0[0] + p2[0])*t + (2*p0[0] - 5*p1[0] + 4*p2[0] - p3[0])*t2 + (-p0[0] + 3*p1[0] - 3*p2[0] + p3[0])*t3),
+                0.5*((2*p1[1]) + (-p0[1] + p2[1])*t + (2*p0[1] - 5*p1[1] + 4*p2[1] - p3[1])*t2 + (-p0[1] + 3*p1[1] - 3*p2[1] + p3[1])*t3)]); }
+  }
+  let L = 0; for (let i = 0; i < raw.length; i++){ const a = raw[i], b = raw[(i + 1) % raw.length]; L += Math.hypot(b[0] - a[0], b[1] - a[1]); }
+  const k = LEN/L, STEP = 4, N = Math.round(LEN/STEP);
+  const C = [];                                                 // the centre line: {x, z, dx, dz (unit), nx, nz (left normal), curv}
+  { let acc = 0, i = 0, want = 0;
+    const seg = j => { const a = raw[j % raw.length], b = raw[(j + 1) % raw.length]; return [a, b, Math.hypot(b[0] - a[0], b[1] - a[1])*k]; };
+    while (C.length < N){ const [a, b, l] = seg(i); if (acc + l >= want){ const t = (want - acc)/l; C.push({ x: CX + (a[0] + (b[0] - a[0])*t - PCX)*k, z: CZ + (a[1] + (b[1] - a[1])*t - PCZ)*k }); want += STEP; } else { acc += l; i++; } } }
+  for (let i = 0; i < N; i++){ const a = C[(i - 1 + N) % N], b = C[(i + 1) % N], d = Math.hypot(b.x - a.x, b.z - a.z); C[i].dx = (b.x - a.x)/d; C[i].dz = (b.z - a.z)/d; C[i].nx = -C[i].dz; C[i].nz = C[i].dx; }
+  for (let i = 0; i < N; i++){ const a = C[(i - 2 + N) % N], b = C[(i + 2) % N]; let da = Math.atan2(b.dz, b.dx) - Math.atan2(a.dz, a.dx); da = Math.atan2(Math.sin(da), Math.cos(da)); C[i].curv = da/(4*STEP); }
+  const box = { x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9 };
+  for (const c of C){ box.x0 = Math.min(box.x0, c.x - 40); box.x1 = Math.max(box.x1, c.x + 40); box.z0 = Math.min(box.z0, c.z - 40); box.z1 = Math.max(box.z1, c.z + 40); }
+  // where on the course a point is (nearest sample), searching near the last answer when given
+  function nearest(x, z, hint){
+    let bi = 0, bd = 1e18;
+    const scan = (a, b) => { for (let j = a; j < b; j++){ const c = C[(j + N) % N], d = (c.x - x)**2 + (c.z - z)**2; if (d < bd){ bd = d; bi = (j + N) % N; } } };
+    if (hint != null) scan(hint - 25, hint + 25); if (hint == null || bd > 900) scan(0, N);
+    return { i: bi, d: Math.sqrt(bd) };
+  }
+  const dist = (x, z) => nearest(x, z).d;
+  // the start line, the paddock (outside the main straight) and the road from the dealership
+  const S0 = 0, st = C[S0];
+  const centroid = C.reduce((a, c) => ({ x: a.x + c.x/N, z: a.z + c.z/N }), { x: 0, z: 0 });
+  const outSign = (st.nx*(centroid.x - st.x) + st.nz*(centroid.z - st.z)) > 0 ? -1 : 1;          // the side away from the infield
+  const PAD = (() => { const m = C[(N - 22) % N]; const ox = m.x + m.nx*outSign*48, oz = m.z + m.nz*outSign*48; return { x: ox, z: oz }; })();
+  // the outside of the sharp corners (gravel and tyre walls): sg = 1 turning left, -1 turning right
+  const sharp = sg => i => { for (let d = -6; d <= 6; d++){ const c = C[(i + d + N) % N].curv; if (Math.abs(c) > 0.011 && Math.sign(c) === sg) return true; } return false; };
+  return { C, N, W: W_, box, nearest, dist, outSign, PAD, S0, LEN, k, rawLen: L, sharp };
+})();
 // countryside groves east and west of the city, and behind the airport
 for (let i=0;i<1400;i++){
   const x = lerp(LAND.x0+200, LAND.x1-200, rnd()), z = lerp(AIR.z-1400, COAST_Z-40, rnd());
@@ -2184,6 +2235,8 @@ for (let i=0;i<1400;i++){
   if (Math.abs(x) > 2600 && rnd() < 0.6) continue;
   if (distToRiver(x, z) < 45) continue;
   if (x > DEALER.x0 - 8 && x < DEALER.x1 + 12 && z > DEALER.z0 - 12 && z < DEALER.z1 + 12) continue;   // the dealership lot
+  if (x > RACE.box.x0 - 30 && x < RACE.box.x1 + 30 && z > RACE.box.z0 - 30 && z < RACE.box.z1 + 30 && (RACE.dist(x, z) < 26 || Math.hypot(x - RACE.PAD.x, z - RACE.PAD.z) < 70)) continue;   // the race track and its paddock
+  if (x > DEALER.x1 && x < RACE.PAD.x && Math.abs(z - RACE.PAD.z*(x - DEALER.x1)/(RACE.PAD.x - DEALER.x1)) < 14) continue;   // the road out to it
   addTree(x, z, 0.9+rnd()*0.9, rnd() < 0.25 ? 'poplar' : rnd() < 0.2 ? 'pine' : 'broad');
 }
 flushTrees();
@@ -2217,6 +2270,12 @@ for (const bl of blocks){
   for (let k = 0; k < 8; k++){ const a = (k + 0.5)/8*Math.PI*2; lamp(parkC.x + Math.cos(a)*17.5, parkC.z + Math.sin(a)*17.5); }
   for (let x = parkMin.x + 20; x < parkMax.x - 10; x += 32) for (let z = parkMin.z + 20; z < parkMax.z - 10; z += 32)
     if (Math.abs(x - parkC.x) > 12 && Math.abs(z - parkC.z) > 12 && !nearCascade(x, z)) lamp(x, z);
+}
+// floodlights round the race track, every 60 m on the outside
+for (let i = 0; i < RACE.N; i += 15){
+  const c = RACE.C[i], sd = c.curv > 0 ? -1 : 1, off = RACE.sharp(1)(i) || RACE.sharp(-1)(i) ? 15 : 9.5;
+  const x = c.x + c.nx*sd*off, z = c.z + c.nz*sd*off, m = B.Matrix.Translation(x, 0, z);
+  poles.add(m, x, z); bulbs.add(m, x, z); LAMP_XZ.push([x, z, 0.1]);
 }
 poles.flush(); bulbs.flush();
 
@@ -2258,6 +2317,108 @@ const flatBox = (name, x0, x1, z0, z1, y, h, mat) => {
   return m;
 };
 const whiteM = stdMat('whiteM',{diffuse:hex('#f2f2ee'), spec:new C3(.3,.3,.3)});
+
+// ---- the race track, built ----
+(function buildRace(){
+  const { C, N, W: TW } = RACE;
+  const cum = [0]; for (let i = 1; i <= N; i++){ const a = C[i - 1], b = C[i % N]; cum.push(cum[i - 1] + Math.hypot(b.x - a.x, b.z - a.z)); }
+  // a strip along the course between two offsets from the centre line (left normal = +), for the samples where keep(i)
+  function strip(name, o0, o1, y, mat, vScale, keep = () => true, uScale = 1){
+    const pos = [], uv = [], idx = [];
+    let run = -1;
+    for (let i = 0; i <= N; i++){
+      const c = C[i % N], on = keep(i % N);
+      if (!on){ run = -1; continue; }
+      const v0 = pos.length/3;
+      pos.push(c.x + c.nx*o0, y, c.z + c.nz*o0, c.x + c.nx*o1, y, c.z + c.nz*o1);
+      uv.push(0, cum[i]/vScale, uScale, cum[i]/vScale);
+      if (run >= 0) idx.push(run, v0, run + 1, run + 1, v0, v0 + 1);
+      run = v0;
+    }
+    if (!idx.length) return null;
+    const m = new B.Mesh(name, scene), vd = new B.VertexData(); vd.positions = pos; vd.indices = idx; vd.uvs = uv;
+    const nrm = []; B.VertexData.ComputeNormals(pos, idx, nrm); for (let j = 1; j < nrm.length; j += 3) if (nrm[j] < 0){ for (let q = 0; q < idx.length; q += 3){ const t = idx[q]; idx[q] = idx[q + 1]; idx[q + 1] = t; } break; }
+    B.VertexData.ComputeNormals(pos, idx, nrm); vd.normals = nrm; vd.applyToMesh(m);
+    m.material = mat; m.isPickable = false; m.receiveShadows = true; return m;
+  }
+  const tex = (name, w, h, draw) => { const t = new B.DynamicTexture(name, { width: w, height: h }, scene, true); draw(t.getContext(), w, h); t.update(); t.wrapU = t.wrapV = B.Texture.WRAP_ADDRESSMODE; return t; };
+  const asphT = noiseTex('raceAsphT', '#3a3d42', 0.16, 256, 2);
+  const trackM = stdMat('raceAsph', { dt: asphT, spec: new C3(.15, .15, .15) }); trackM.zOffset = -1;
+  strip('raceTrack', -TW/2, TW/2, 0.06, trackM, 12, undefined, TW/12);
+  const lineM = stdMat('raceLine', { diffuse: hex('#f4f4f0') }); lineM.zOffset = -2;
+  strip('raceEdgeL', TW/2 - 0.55, TW/2 - 0.25, 0.07, lineM, 10); strip('raceEdgeR', -TW/2 + 0.25, -TW/2 + 0.55, 0.07, lineM, 10);
+  // kerbs on both sides through every corner, red and white
+  const kerbT = tex('kerbT', 64, 64, (g, w, h) => { g.fillStyle = '#d92b2b'; g.fillRect(0, 0, w, h/2); g.fillStyle = '#f6f6f2'; g.fillRect(0, h/2, w, h/2); });
+  const kerbM = stdMat('raceKerb', { dt: kerbT }); kerbM.zOffset = -2;
+  const bend = i => { for (let d = -3; d <= 3; d++) if (Math.abs(C[(i + d + N) % N].curv) > 0.0045) return true; return false; };
+  strip('raceKerbL', TW/2, TW/2 + 1.4, 0.075, kerbM, 3, bend); strip('raceKerbR', -TW/2 - 1.4, -TW/2, 0.075, kerbM, 3, bend);
+  // gravel and a tyre wall on the outside of the sharp corners
+  const gravelM = stdMat('raceGravel', { dt: noiseTex('gravel', '#c9b58c', 0.25, 128, 3) }); gravelM.diffuseTexture.uScale = 2; gravelM.zOffset = -1;
+  const sharp = RACE.sharp;
+  // turning left (curv > 0 with the left normal) throws cars to the right: gravel on the right, and the other way round
+  strip('raceGravelR', -TW/2 - 12, -TW/2 - 1.4, 0.04, gravelM, 6, sharp(1)); strip('raceGravelL', TW/2 + 1.4, TW/2 + 12, 0.04, gravelM, 6, sharp(-1));
+  const tyreT = tex('tyreT', 64, 32, (g, w, h) => { g.fillStyle = '#1b1c1f'; g.fillRect(0, 0, w, h); g.fillStyle = '#e8e8e2'; for (let x = 0; x < w; x += 16) g.fillRect(x, h*0.42, 8, h*0.16); });
+  const tyreM = stdMat('raceTyre', { dt: tyreT }); tyreM.backFaceCulling = false;
+  function wall(name, off, keep){
+    const pos = [], uv = [], idx = []; let run = -1;
+    for (let i = 0; i <= N; i++){ const c = C[i % N]; if (!keep(i % N)){ run = -1; continue; }
+      const v0 = pos.length/3, x = c.x + c.nx*off, z = c.z + c.nz*off; pos.push(x, 0, z, x, 1.1, z); uv.push(cum[i]/3, 0, cum[i]/3, 1);
+      if (run >= 0) idx.push(run, v0, run + 1, run + 1, v0, v0 + 1); run = v0; }
+    if (!idx.length) return;
+    const m = new B.Mesh(name, scene), vd = new B.VertexData(), nrm = []; vd.positions = pos; vd.indices = idx; vd.uvs = uv; B.VertexData.ComputeNormals(pos, idx, nrm); vd.normals = nrm; vd.applyToMesh(m); m.material = tyreM; m.isPickable = false;
+  }
+  wall('raceWallR', -TW/2 - 12.4, sharp(1)); wall('raceWallL', TW/2 + 12.4, sharp(-1));
+  // start / finish: a chequered line, a gantry over it
+  const st = C[RACE.S0], hd = Math.atan2(st.dx, st.dz);
+  const chk = tex('chkT', 128, 32, (g, w, h) => { for (let x = 0; x < w; x += 8) for (let y = 0; y < h; y += 8){ g.fillStyle = ((x + y)/8) % 2 ? '#111' : '#f4f4f0'; g.fillRect(x, y, 8, 8); } });
+  const chkM = stdMat('raceChk', { dt: chk }); chkM.zOffset = -3;
+  const line = B.MeshBuilder.CreateGround('raceStart', { width: TW, height: 2 }, scene); line.position.set(st.x, 0.08, st.z); line.rotation.y = hd; line.material = chkM; line.isPickable = false;
+  const steelM = stdMat('raceSteel', { diffuse: hex('#3b3f46'), spec: new C3(.4, .4, .4) });
+  for (const sd of [-1, 1]){ const p = B.MeshBuilder.CreateBox('raceGantryPost', { width: 0.6, height: 8, depth: 0.6 }, scene); p.position.set(st.x + st.nx*sd*(TW/2 + 1.5), 4, st.z + st.nz*sd*(TW/2 + 1.5)); p.material = steelM; p.isPickable = false; }
+  const banT = tex('raceBanT', 1024, 128, (g, w, h) => { g.fillStyle = '#13122a'; g.fillRect(0, 0, w, h); g.fillStyle = '#f0c566'; g.font = '900 78px Manrope, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('SUSAMBIL RING', w/2, h/2 + 4); });
+  const banM = stdMat('raceBan', { dt: banT, emissive: new C3(.25, .22, .18) });
+  const beam = B.MeshBuilder.CreateBox('raceGantry', { width: TW + 4, height: 1.6, depth: 0.5 }, scene);
+  beam.position.set(st.x, 7.4, st.z); beam.rotation.y = hd + Math.PI/2; beam.material = steelM; beam.isPickable = false;
+  for (const f of [0, 1]){                                         // the name on both faces, each reading the right way round
+    const pl = B.MeshBuilder.CreatePlane('raceBanner', { width: TW + 3.6, height: 1.4 }, scene); pl.material = banM; pl.isPickable = false;
+    const ry = hd + (f ? Math.PI : 0); pl.rotation.y = ry; pl.position.set(st.x - Math.sin(ry)*0.32, 7.4, st.z - Math.cos(ry)*0.32);
+  }
+  // grandstand along the main straight, on the outside, and pit garages beyond the paddock
+  const out = RACE.outSign, seatM = stdMat('raceSeat', { diffuse: hex('#2f6fb3') }), standM = stdMat('raceStand', { diffuse: hex('#c9c4ba') }), roofM = stdMat('raceRoof', { diffuse: hex('#e9e6df') });
+  const mid = C[(N - 14) % N], mh = Math.atan2(mid.dx, mid.dz);
+  for (let t = 0; t < 6; t++){
+    const b = B.MeshBuilder.CreateBox('raceStandStep', { width: 1.2*(6 - t) + 0.01, height: 0.8 + t*0.9, depth: 110 }, scene);
+    const off = 20 + t*1.2;
+    b.position.set(mid.x + mid.nx*out*(off + 0.6*(6 - t)), (0.8 + t*0.9)/2, mid.z + mid.nz*out*(off + 0.6*(6 - t))); b.rotation.y = mh; b.material = t % 2 ? seatM : standM; b.isPickable = false;
+  }
+  const roof = B.MeshBuilder.CreateBox('raceStandRoof', { width: 9, height: 0.4, depth: 114 }, scene);
+  roof.position.set(mid.x + mid.nx*out*24.5, 8.6, mid.z + mid.nz*out*24.5); roof.rotation.y = mh; roof.material = roofM; roof.isPickable = false;
+  const pad = RACE.PAD, padM = stdMat('racePad', { dt: asphT }); padM.zOffset = -1;
+  const pg = B.MeshBuilder.CreateGround('racePaddock', { width: 70, height: 120 }, scene); pg.position.set(pad.x, 0.05, pad.z); pg.rotation.y = mh; pg.material = padM; pg.isPickable = false;
+  GROUND_RECTS.push({ x0: pad.x - 40, x1: pad.x + 40, z0: pad.z - 60, z1: pad.z + 60, top: 0.05 });
+  const garM = stdMat('raceGarage', { diffuse: hex('#eceae4') }), doorM = stdMat('raceDoor', { diffuse: hex('#a8202a') });
+  for (let g = 0; g < 8; g++){
+    const along = (g - 3.5)*13, gx = pad.x + mid.dx*along + mid.nx*out*30, gz = pad.z + mid.dz*along + mid.nz*out*30;
+    const gb = B.MeshBuilder.CreateBox('raceGarage', { width: 10, height: 6, depth: 12 }, scene); gb.position.set(gx, 3, gz); gb.rotation.y = mh; gb.material = garM; gb.isPickable = false;
+    const dr = B.MeshBuilder.CreateBox('raceDoor', { width: 0.1, height: 4.5, depth: 10 }, scene); dr.position.set(gx - mid.nx*out*5.05, 2.25, gz - mid.nz*out*5.05); dr.rotation.y = mh; dr.material = doorM; dr.isPickable = false;
+    WALL_RECTS.push({ x0: gx - 7, x1: gx + 7, z0: gz - 7, z1: gz + 7 });
+  }
+  // the road out from the dealership
+  { const x0 = DEALER.x1, z0 = 0, x1 = pad.x, z1 = pad.z, len = Math.hypot(x1 - x0, z1 - z0);
+    const rd = B.MeshBuilder.CreateGround('raceRoad', { width: 10, height: len }, scene); rd.position.set((x0 + x1)/2, 0.05, (z0 + z1)/2); rd.rotation.y = Math.atan2(x1 - x0, z1 - z0);
+    const rT = noiseTex('raceRoadT', '#3a3d42', 0.16, 256, 2); rT.uScale = 1; rT.vScale = len/12; rd.material = stdMat('raceRoadM', { dt: rT }); rd.material.zOffset = -1; rd.isPickable = false; }
+  // turn boards: 1 to 9, outside each corner
+  const TURNS = [[100,420],[190,345],[240,540],[410,595],[410,750],[540,690],[585,770],[490,890],[370,885]];
+  TURNS.forEach(([px, pz], n) => {
+    const k_ = RACE.LEN/RACE.rawLen, wx = 1800 + (px - 345)*RACE.k, wz = -120 + (pz - 620)*RACE.k;
+    const c = C[RACE.nearest(wx, wz).i], sd = Math.sign((wx - c.x)*c.nx + (wz - c.z)*c.nz) || 1;
+    const bt = tex('turnT' + n, 128, 128, (g, w, h) => { g.fillStyle = '#13122a'; g.fillRect(0, 0, w, h); g.strokeStyle = '#f0c566'; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12); g.fillStyle = '#f6efe2'; g.font = '900 80px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(n + 1), w/2, h/2 + 4); });
+    const bm = stdMat('turnM' + n, { dt: bt, emissive: new C3(.2, .2, .2) });
+    const bx = c.x + c.nx*sd*(TW/2 + 16), bz = c.z + c.nz*sd*(TW/2 + 16);
+    const post = B.MeshBuilder.CreateBox('turnPost', { width: 0.15, height: 3, depth: 0.15 }, scene); post.position.set(bx, 1.5, bz); post.material = steelM; post.isPickable = false;
+    const brd = B.MeshBuilder.CreatePlane('turnBoard', { size: 1.8, sideOrientation: B.Mesh.DOUBLESIDE }, scene); brd.position.set(bx, 3.6, bz); brd.material = bm; brd.billboardMode = B.Mesh.BILLBOARDMODE_Y; brd.isPickable = false;
+  });
+})();
 const PORT = { x0: X0-60, x1: 160, zq: COAST_Z };            // container terminal west, promenade + cruise pier east
 flatBox('portYard', PORT.x0, RIVER_X-RD/2, CITY_S+1, COAST_Z, 0, 0.3, portConcrete);
 flatBox('portYard2', RIVER_X+RD/2, PORT.x1, CITY_S+1, COAST_Z, 0, 0.3, portConcrete);
@@ -5085,7 +5246,7 @@ const gpPressed = i => GP.b[i] && !GP.prev[i];
 // and so do other cars (a bump bounces you back).
 const DRIVE = { on: false, node: null, entry: null, x: 0, z: 0, h: 0, v: 0, steer: 0, roll: 0, odo: 0, bumpT: 0, home: null };
 const CAR_L = 2.6, CAR_HALF_L = 2.15, CAR_HALF_W = 0.92;
-const CITY_BOUNDS = { x0: X0 - 420, x1: DEALER.x1 + 220, z0: CITY_N - 1000, z1: COAST_Z - 2 };
+const CITY_BOUNDS = { x0: X0 - 420, x1: Math.max(DEALER.x1 + 220, RACE.box.x1 + 60), z0: CITY_N - 1000, z1: COAST_Z - 2 };   // the race track lies inside
 function carSpotBlocked(x, z){
   if (x < CITY_BOUNDS.x0 || x > CITY_BOUNDS.x1 || z < CITY_BOUNDS.z0 || z > CITY_BOUNDS.z1) return true;   // the edge of the city, the sea
   if (onRiverRoad(x, z) && !onBridge(x, z)) return true;
@@ -5207,7 +5368,7 @@ function exitCarDone(){
   WALK.x = a.ex; WALK.z = a.ez; WALK.y = walkGround(a.ex, a.ez); WALK.yaw = a.yaw;
   camera.radius = 4.6; camera.beta = 1.28;
   document.body.classList.remove('driving'); $('#speedo').hidden = true;
-  CARFX.stop();
+  CARFX.stop(); LAPS.tick();
 }
 // ---------- engine sound, gears, nitro and the feeling of speed ----------
 // The engine is synthesised (Web Audio), shaped after real engine types: a small three-cylinder turbo, a four,
@@ -5373,6 +5534,38 @@ const CARFX = (() => {
   return { start, stop, update, next, get touchHeld(){ return held; }, S };
 })();
 
+// ---------- lap timer on the race track ----------
+// Cross the chequered line to start a lap; the two sector marks (a third and two thirds round) must be passed in
+// order, so cutting across the infield doesn't count. The best lap is kept on this device.
+const LAPS = (() => {
+  const el = $('#raceHud'), fmt = ms => { if (ms == null) return '—'; const m = Math.floor(ms/60000), s_ = (ms % 60000)/1000; return m + ':' + s_.toFixed(2).padStart(5, '0'); };
+  let hint = null, prev = null, start = 0, run = false, s1 = false, s2 = false, last = null, msgT = 0;
+  let best = null; try { best = +localStorage.getItem('susambil_best_lap') || null; } catch (e){}
+  const msg = (t, ms = 3500) => { el.querySelector('.rh-msg').textContent = t; msgT = performance.now() + ms; };
+  function tick(){
+    const D = DRIVE, n = RACE.N;
+    if (!D.on || D.x < RACE.box.x0 - 60){ if (!el.hidden) el.hidden = true; prev = null; hint = null; run = false; return; }
+    const at = RACE.nearest(D.x, D.z, hint); hint = at.i;
+    if (at.d > 45){ if (!el.hidden) el.hidden = true; prev = null; run = false; return; }
+    if (el.hidden){ el.hidden = false; if (!run) msg('Start chizig‘idan o‘ting — vaqt boshlanadi', 5000); }
+    const i = at.i, now = performance.now();
+    if (prev != null){
+      if (prev > n - 30 && i < 30){                               // over the line, forwards
+        if (run && s1 && s2){ last = now - start; if (best == null || last < best){ best = last; try { localStorage.setItem('susambil_best_lap', String(Math.round(best))); } catch (e){} msg('🏆 Yangi rekord: ' + fmt(best)); } else msg('Davra: ' + fmt(last)); }
+        else if (!run) msg('Ketdik! Omad!', 2000);
+        run = true; start = now; s1 = s2 = false;
+      } else if (prev < 30 && i > n - 30){ run = false; msg('Teskari yo‘nalish — davra hisoblanmadi'); }
+      if (run && !s1 && i > n/3 && i < n/3 + 40) s1 = true;
+      if (run && s1 && !s2 && i > 2*n/3 && i < 2*n/3 + 40) s2 = true;
+    }
+    prev = i;
+    el.querySelector('.rh-now').textContent = run ? fmt(now - start) : '0:00.00';
+    el.querySelector('.rh-last').textContent = fmt(last); el.querySelector('.rh-best').textContent = fmt(best);
+    if (msgT && now > msgT){ el.querySelector('.rh-msg').textContent = ''; msgT = 0; }
+  }
+  return { tick };
+})();
+
 // getting in / out, step by step
 function driveAnim(dt){
   const a = DRIVE.anim, av = WALK.av; a.t += dt;
@@ -5433,7 +5626,7 @@ function driveUpdate(dt){
   WALK.x = D.x; WALK.z = D.z;
   $('#speedo b').textContent = Math.round(Math.abs(D.v)*3.6);
   camera.target.set(D.x, 1.2, D.z);
-  CARFX.update(dt, thr, nitroKey);
+  CARFX.update(dt, thr, nitroKey); LAPS.tick();
   if (!gest && performance.now() > WALK.camT && Math.abs(D.v) > 1){
     const want = Math.atan2(-Math.cos(D.h), -Math.sin(D.h)) + (D.v < 0 ? Math.PI : 0);
     let d = want - camera.alpha; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
@@ -5979,7 +6172,7 @@ window.addEventListener('keydown', e => {
 // dealership; you (gold arrow), other players (teal; gold while driving), the quest people (!) and your goal.
 // Tap the full map to set a waypoint: the gold light and the arrow then lead you there.
 const MAP = (() => {
-  const B0 = { x0: X0 - 470, x1: DEALER.x1 + 60, z0: AIR.z - 120, z1: COAST_Z + 520 };
+  const B0 = { x0: X0 - 470, x1: RACE.box.x1 + 40, z0: AIR.z - 120, z1: COAST_Z + 520 };
   const PPM = 0.75;                                                     // base image: pixels per metre
   let base = null;
   const mx = x => (x - B0.x0)*PPM, my = z => (z - B0.z0)*PPM;
@@ -5998,6 +6191,12 @@ const MAP = (() => {
     rect(RW.x0 - 160, AIR.z - 140, RW.x1 + 160, CITY_N - 20, '#26382b');
     rect(RW.x0, RW.z - RW.w/2, RW.x1, RW.z + RW.w/2, '#5d636c'); rect(APRON.x0, APRON.z0, APRON.x1, APRON.z1, '#555b63');
     rect(DEALER.x0, DEALER.z0, DEALER.x1, DEALER.z1, '#5b6068');
+    // the race track and the road out to it
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    g.strokeStyle = '#5d636c'; g.lineWidth = 10*PPM; g.beginPath(); g.moveTo(mx(DEALER.x1), my(0)); g.lineTo(mx(RACE.PAD.x), my(RACE.PAD.z)); g.stroke();
+    g.strokeStyle = '#d92b2b'; g.lineWidth = (RACE.W + 4)*PPM; g.beginPath(); RACE.C.forEach((c, i) => i ? g.lineTo(mx(c.x), my(c.z)) : g.moveTo(mx(c.x), my(c.z))); g.closePath(); g.stroke();
+    g.strokeStyle = '#4b5059'; g.lineWidth = RACE.W*PPM; g.stroke();
+    { const c = RACE.C[RACE.S0]; g.strokeStyle = '#ffffff'; g.lineWidth = 3; g.beginPath(); g.moveTo(mx(c.x + c.nx*8), my(c.z + c.nz*8)); g.lineTo(mx(c.x - c.nx*8), my(c.z - c.nz*8)); g.stroke(); }
     // the city: streets under everything, blocks on top
     rect(X0 - RD, Z0 - RD, X0 + W + RD, Z0 + D + RD, '#6b7280');
     for (const bl of blocks){ const x0 = blockX(bl.bx), z0 = blockZ(bl.bz); rect(x0, z0, x0 + BLK, z0 + BLK, '#33413a'); rect(x0 + SW, z0 + SW, x0 + BLK - SW, z0 + BLK - SW, '#2b3832'); }
@@ -6018,6 +6217,7 @@ const MAP = (() => {
   const labels = () => [
     { x: parkC.x, z: parkC.z + 4, t: 'Markaziy bog‘' }, { x: (PORT.x0 + RIVER_X)/2, z: (CITY_S + COAST_Z)/2, t: 'Port' },
     { x: 0, z: APRON.z0 + 40, t: 'Aeroport' }, { x: (DEALER.x0 + DEALER.x1)/2, z: DEALER.z0 - 10, t: 'Avtosalon' },
+    { x: (RACE.box.x0 + RACE.box.x1)/2, z: RACE.box.z0 + 10, t: 'Susambil Ring — poyga yo‘li' },
     ...plots.filter(p => isLm(p)).map(p => { const b = bpos(p); return { x: b.x, z: b.z, lm: true, t: TPL[p.tpl].name.replace(/ \(.*\)$/, '').replace(/ nusxasi$/, '') }; }),
   ];
   // the moving things, in world coordinates
@@ -6138,6 +6338,7 @@ const MAP = (() => {
   function where(x, z){
     if (z > COAST_Z - 120 && x < PORT.x1) return 'portda';
     if (z < CITY_N) return 'aeroport tomonda';
+    if (x > RACE.box.x0 - 20) return RACE.dist(x, z) < 12 ? 'poyga yo‘lida' : 'poyga yo‘li yonida';
     if (x > DEALER.x0 - 20) return 'avtosalon yonida';
     if (inPark(x, z)) return 'markaziy bog‘da';
     let best = null, bd = 160;
@@ -6402,6 +6603,8 @@ const PLACES = [
     view:{ x:0, z:AIR.z+120, r:620, b:1.0, a:-Math.PI/2.6 } },
   { key:'avto', name:'Avtosalon', icon:'<svg viewBox="0 0 24 24"><path d="M5 16h14l-1.5-5a2 2 0 0 0-1.9-1.4H8.4A2 2 0 0 0 6.5 11z"/><circle cx="8" cy="17" r="1.6"/><circle cx="16" cy="17" r="1.6"/></svg>', pos:new V3(X0 + W + RD + 40, 14, 0),
     view:{ x:X0 + W + RD + 30, z:0, r:95, b:1.15, a:Math.PI - 0.45 } },
+  { key:'race', name:'Susambil Ring', icon:document.querySelector('#goRace svg').outerHTML, pos:new V3(RACE.C[RACE.S0].x, 14, RACE.C[RACE.S0].z),
+    view:{ x:(RACE.box.x0+RACE.box.x1)/2, z:(RACE.box.z0+RACE.box.z1)/2, r:900, b:0.95, a:Math.PI/2 } },
   { key:'forest', name:'Bog‘ va o‘rmon', icon:document.querySelector('#goForest svg').outerHTML, pos:new V3((GARDEN.x0+GARDEN.x1)/2, 30, (GARDEN.z0+GARDEN.z1)/2),
     view:{ x:(GARDEN.x0+GARDEN.x1)/2, z:(GARDEN.z0+GARDEN.z1)/2 + 40, r:560, b:1.05, a:-Math.PI/2.6 } },
 ];
@@ -6410,7 +6613,7 @@ function goPlace(pl){
   const v = pl.view, portrait = canvas.clientHeight > canvas.clientWidth; flyTo(v.x, v.z, v.r * (portrait ? 1.5 : 1), v.b);
   let a = v.a; while (a - camera.alpha > Math.PI) a -= 2*Math.PI; while (camera.alpha - a > Math.PI) a += 2*Math.PI;   // shortest turn
   fly.from.a = camera.alpha; fly.to.a = a;
-  toast({ port:'Port: konteyner terminali, kranlar va kemalar', air:'Aeroport: samolyotlar har daqiqada qo‘nadi va uchadi', forest:'Tog‘lar ortida: o‘rmon, gullagan bog‘lar va daryo boshlanadigan ko‘l', avto:'Avtosalon: Susambil GT Pro, Susambil GT va Tracker ko‘rgazmada' }[pl.key]);
+  toast({ race:'Susambil Ring: 3,25 km, 9 burilish. Avtosalondan sharqqa yo‘l bor — mashinada borib, start chizig‘idan o‘ting', port:'Port: konteyner terminali, kranlar va kemalar', air:'Aeroport: samolyotlar har daqiqada qo‘nadi va uchadi', forest:'Tog‘lar ortida: o‘rmon, gullagan bog‘lar va daryo boshlanadigan ko‘l', avto:'Avtosalon: Susambil GT Pro, Susambil GT va Tracker ko‘rgazmada' }[pl.key]);
 }
 for (const pl of PLACES){
   const el = document.createElement('div'); el.className = 'plbl'; el.innerHTML = pl.icon + '<span>' + pl.name + '</span>';
@@ -6420,6 +6623,7 @@ for (const pl of PLACES){
 document.getElementById('goPort').onclick = () => goPlace(PLACES[0]);
 document.getElementById('goAir').onclick = () => goPlace(PLACES[1]);
 document.getElementById('goForest').onclick = () => goPlace(PLACES.find(p => p.key === 'forest'));
+document.getElementById('goRace').onclick = () => goPlace(PLACES.find(p => p.key === 'race'));
 function updatePlaces(){
   const k = engine.getHardwareScalingLevel(), vp = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()), W = canvas.clientWidth, H = canvas.clientHeight;
   for (const pl of PLACES){
@@ -7615,7 +7819,7 @@ setTimeout(()=>{ const l=$('#loader'); if (l && !l.classList.contains('hide')){ 
 engine.runRenderLoop(()=>{ if (!MAP.skip()) scene.render(); });
 window.addEventListener('resize', ()=>engine.resize());
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) engine.stopRenderLoop(); else { last = performance.now(); engine.runRenderLoop(()=>{ if (!MAP.skip()) scene.render(); }); } });
-window.__mahalla = { driveUpdate, RW, CARFX, parkC, CASCADE, walkGround, MAP, trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
+window.__mahalla = { RACE, LAPS, driveUpdate, RW, CARFX, parkC, CASCADE, walkGround, MAP, trafficNear, DROPPED, CHAT, OTHERS, presenceMessage, LAMP_XZ, PLAY, DRIVE, QUESTS, enterCar, exitCar, nearestCar, GP, AVED, AVSTORE, AVATAR, avClean, PORTOPS, plotFoot, buildingAt, plots, bpos, KMT, RDS, CAR_MODELS_ALL: CAR_MODELS, DLR, HUMAN, humanLoad, WALK, walkEnter, walkExit, walkBlocked, keys, stopFly: () => { fly = null; }, makeCar, CAR_MODELS, showPlot, refreshPlot, buildDrive, CARS, setCars, placeCars, startDrive, updateDrives, carLOD, onRiverRoad, cityRoute, newTrip, people, updatePeople, planes, updateFlights, cars, updateCars, plotAtPoint, scene, engine, plots, S, applyQuality, camera, T, vel, setLabel, addBuilding, paintPad, LM_KEYS, getVariant, flushBuffers };
 })();
 </script>
 </body>
