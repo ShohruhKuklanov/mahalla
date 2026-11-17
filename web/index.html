@@ -3329,6 +3329,24 @@ function drawPlate(g, cx, cy, S, pl){
   g.fillStyle = '#1e5bb5'; g.font = `bold ${h*0.28}px Arial, sans-serif`; g.fillText('UZ', fx + fw/2, y + h*0.74);
 }
 let TRK = null;
+/** tyre rubber: tread blocks across the crown and ribs on the sidewall, so a turning wheel reads as turning.
+ *  On a lathe u runs across the profile (sidewall → crown → sidewall) and v around the wheel. */
+let TREAD = null;
+function tyreTread(){
+  if (TREAD) return TREAD;
+  const t = new B.DynamicTexture('tyreTread', { width: 128, height: 64 }, scene, true), g = t.getContext();
+  g.fillStyle = '#a8a8a8'; g.fillRect(0, 0, 128, 64);
+  g.fillStyle = '#3c3c3c';
+  for (const v of [0, 32]){                                          // two tread pitches per repeat
+    g.fillRect(40, v + 1, 48, 5);                                     // lateral groove across the crown
+    g.fillRect(60, v + 6, 8, 26);                                     // centre groove, offset blocks
+    g.fillRect(44, v + 16, 14, 3); g.fillRect(70, v + 20, 14, 3);
+  }
+  g.fillRect(0, 0, 128, 2);
+  g.fillStyle = '#d2d2d2'; for (const u of [14, 106]) g.fillRect(u, 22, 8, 20);   // raised sidewall ribs catch the light
+  t.update(); t.vScale = 22; t.wrapU = B.Texture.CLAMP_ADDRESSMODE;
+  return TREAD = t;
+}
 function trackerTemplate(){
   if (TRK) return TRK;
   const root = new B.TransformNode('trackerTpl', scene); root.metadata = { wheels: [] };
@@ -3338,7 +3356,7 @@ function trackerTemplate(){
   const paint  = stdMat('trkPaint',  { diffuse: hex('#f1f2f0'), spec: new C3(.7,.7,.7), power: 120 });
   const silver = stdMat('trkSilver', { diffuse: hex('#cfd3d7'), spec: new C3(1,1,1), power: 110 });
   const gunm   = stdMat('trkGunm',   { diffuse: hex('#4a4e54'), spec: new C3(.5,.5,.5), power: 60 });
-  const tyreM  = stdMat('trkTyre',   { diffuse: hex('#1a1b1e'), spec: new C3(.05,.05,.05) });
+  const tyreM  = stdMat('trkTyre',   { diffuse: hex('#2a2b2f'), spec: new C3(.05,.05,.05), dt: tyreTread() });
   const tailM  = stdMat('trkTail',   { diffuse: hex('#b01019'), emissive: hex('#5a0508'), spec: new C3(.9,.9,.9), power: 160 });
   const add = (m, mat, parent = root) => { m.material = mat; m.parent = parent; m.isPickable = false; m.receiveShadows = true; return m; };
   const bx = (w, h, d, x, y, z, mat, rx = 0, ry = 0, rz = 0) => { const m = box(w, h, d, x, y, z); m.rotation.set(rx, ry, rz); return add(m, mat); };
@@ -3548,7 +3566,7 @@ function coupeTemplate(){
   const satin  = stdMat('gtSatin',  { diffuse: hex('#1b1c1f'), spec: new C3(.15,.15,.15), power: 30 });
   const paint  = stdMat('gtPaint',  { diffuse: hex('#c8ccd1'), spec: new C3(.8,.8,.8), power: 150 });
   const wheelM = stdMat('gtWheel',  { diffuse: hex('#141518'), spec: new C3(.55,.55,.55), power: 90 });
-  const tyreM  = stdMat('gtTyre',   { diffuse: hex('#18191b'), spec: new C3(.05,.05,.05) });
+  const tyreM  = stdMat('gtTyre',   { diffuse: hex('#27282b'), spec: new C3(.05,.05,.05), dt: tyreTread() });
   const discM  = stdMat('gtDisc',   { diffuse: hex('#6b6d70'), spec: new C3(.5,.5,.5), power: 40 });
   const chrome = stdMat('gtChrome', { diffuse: hex('#d4d7db'), spec: new C3(1,1,1), power: 200 });
   const mirrorM= stdMat('gtMirror', { diffuse: hex('#9aa3ad'), spec: new C3(1,1,1), power: 250 });
@@ -3816,7 +3834,7 @@ function toCarPBR(m){
   p.metallic = R[0]; p.roughness = R[1];
   if (r === 'paint' || r === 'gloss' || r === 'glass'){ p.clearCoat.isEnabled = true; p.clearCoat.intensity = r === 'paint' ? 1 : 0.6; p.clearCoat.roughness = 0.04; }
   if (r === 'rubber' && !m.diffuseTexture) p.albedoColor = hex('#161719').toLinearSpace();
-  if (m.diffuseTexture && r !== 'paint'){ p.metallic = 0; p.roughness = 0.4; }       // decals/plates: printed, not metal
+  if (m.diffuseTexture && r !== 'paint' && r !== 'rubber'){ p.metallic = 0; p.roughness = 0.4; }       // decals/plates: printed, not metal
   CAR_PBR.set(m, p); return p;
 }
 function carTemplatePBR(tpl){
@@ -3834,6 +3852,7 @@ function makeCar(dto, tplFn = trackerTemplate){
   drawPlate(tex.getContext(), 260, 56, 1000, dto.plate); tex.update(); tex.wrapU = tex.wrapV = B.Texture.CLAMP_ADDRESSMODE;
   const plateM = stdMat('plateM' + key, { diffuse: new C3(1,1,1), dt: tex, spec: new C3(.25,.25,.25) }); plateM.zOffset = -4;
   const root = tpl.instantiateHierarchy(null, { doNotInstantiate: true }, (src, cl) => {
+    cl.name = src.name;                                             // the clone would be "Clone of trkWheel" and the wheels lost
     if (src.material === tpl.metadata.mats.bodyM) cl.material = bodyM;
     else if (src.material === tpl.metadata.mats.paint) cl.material = paintM;
     else if (src.name === 'trkPlateF' || src.name === 'trkPlateR') cl.material = plateM;
@@ -5592,7 +5611,11 @@ const DRIFT = (() => {
   // each wheel's radius, from its own size (models differ)
   function radius(wh){
     if (wh.r) return wh.r;
-    try { const bv = wh.w.getHierarchyBoundingVectors(true); wh.r = clamp((bv.max.y - bv.min.y)/2, 0.24, 0.48); } catch (e){ wh.r = 0.333; }
+    try {                                                            // measured upright: a spun wheel's box is up to √2 too tall
+      const z0 = wh.w.rotation.z, y0 = wh.w.rotation.y; wh.w.rotation.z = 0; wh.w.rotation.y = wh.sd*Math.PI/2;
+      const bv = wh.w.getHierarchyBoundingVectors(true); wh.w.rotation.z = z0; wh.w.rotation.y = y0; wh.w.computeWorldMatrix(true);
+      wh.r = clamp((bv.max.y - bv.min.y)/2, 0.24, 0.48);
+    } catch (e){ wh.r = 0.333; }
     return wh.r;
   }
   function wheels(n, dt, D, slip, thr){
@@ -5600,12 +5623,40 @@ const DRIFT = (() => {
       const r = radius(wh);
       let ground = D.v + (wh.front ? 0 : 0);
       if (!wh.front && slip > 0.3 && thr > 0.3) ground = D.v + Math.sign(D.v || 1)*(8 + 14*slip);   // rear wheels spinning faster than the car goes
-      let d = ground*dt/r;
-      // past what the eye can follow, a turning wheel blurs: keep the step below a quarter spoke so it never seems to run backwards
-      if (Math.abs(d) > 0.42) d = Math.sign(d)*(0.36 + Math.random()*0.1);
-      wh.a = (wh.a || 0) + d;
+      const om = ground/r;                                            // rad/s: rolls exactly as far as the car goes
+      wh.a = ((wh.a || 0) + om*dt) % (Math.PI*2);
       wh.w.rotation.z = wh.sd*wh.a; wh.w.rotation.y = wh.sd*Math.PI/2 + (wh.front ? D.steer : 0);
+      // past ~4 turns a second the eye no longer follows the spokes: a spinning rim blurs into a disc
+      const bd = blurDisc(wh, r), k = clamp((Math.abs(om) - 18)/40, 0, 1);
+      bd.visibility = 0.82*k; bd.isVisible = k > 0.02;
     }
+  }
+  let blurM = null;
+  function blurDisc(wh, r){
+    if (wh.blur) return wh.blur;
+    if (!blurM){
+      const t = new B.DynamicTexture('rimBlur', { width: 128, height: 128 }, scene, true), g = t.getContext();
+      const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+      [[0, 'rgba(70,72,76,0.95)'], [0.18, 'rgba(150,153,158,0.9)'], [0.24, 'rgba(60,62,66,0.75)'], [0.55, 'rgba(165,168,173,0.62)'],
+       [0.82, 'rgba(120,123,128,0.7)'], [0.9, 'rgba(190,193,198,0.85)'], [0.97, 'rgba(90,92,96,0.6)'], [1, 'rgba(0,0,0,0)']].forEach(([o, c]) => gr.addColorStop(o, c));
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+      for (let i = 0; i < 70; i++){                                    // faint concentric streaks, like a long exposure
+        const rr = 10 + Math.random()*52; g.strokeStyle = `rgba(${Math.random() < 0.5 ? '230,232,236' : '40,42,46'},0.18)`; g.lineWidth = 0.6 + Math.random();
+        g.beginPath(); g.arc(64, 64, rr, 0, Math.PI*2); g.stroke();
+      }
+      t.update(); t.hasAlpha = true;
+      blurM = new B.StandardMaterial('rimBlurM', scene); blurM.diffuseTexture = t; blurM.useAlphaFromDiffuseTexture = true;
+      blurM.specularColor = new C3(0.25, 0.25, 0.25); blurM.backFaceCulling = false;
+    }
+    // the outer face of the wheel: furthest child extent along the axle (+local z points away from the car on both sides)
+    const inv = wh.w.getWorldMatrix().clone().invert(); let zMax = 0.08;
+    for (const m of wh.w.getChildMeshes(false)){
+      const bb = m.getBoundingInfo().boundingBox; for (const v of bb.vectorsWorld) zMax = Math.max(zMax, V3.TransformCoordinates(v, inv).z);
+    }
+    const d = B.MeshBuilder.CreateDisc('rimBlur', { radius: r*0.7, tessellation: 40 }, scene);
+    d.parent = wh.w; d.position.z = zMax + 0.004; d.rotation.y = Math.PI;   // faces outward
+    d.material = blurM; d.isPickable = false; d.isVisible = false;       // shared: a cloned DynamicTexture never turns ready
+    return wh.blur = d;
   }
   // smoke and dust: one emitter per rear wheel
   let ps = null, marks = null, mi = 0, lastMark = [null, null];
@@ -5663,7 +5714,10 @@ const DRIFT = (() => {
       marks.mk.thinInstanceBufferUpdated('matrix');
     } else lastMark = [null, null];
   }
-  function stop(){ if (ps) ps.forEach(p => p.emitRate = 0); lastMark = [null, null]; }
+  function stop(){
+    if (ps) ps.forEach(p => p.emitRate = 0); lastMark = [null, null];
+    const n = DRIVE.node; if (n) for (const wh of (n.metadata.wheels || [])) if (wh.blur) wh.blur.isVisible = false;
+  }
   return { surface, wheels, effects, stop, get ps(){ return ps; }, get marks(){ return marks; } };
 })();
 
