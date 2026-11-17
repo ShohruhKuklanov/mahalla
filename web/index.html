@@ -2226,7 +2226,28 @@ const RACE = (() => {
   const PAD = (() => { const m = C[(N - 22) % N]; const ox = m.x + m.nx*outSign*48, oz = m.z + m.nz*outSign*48; return { x: ox, z: oz }; })();
   // the outside of the sharp corners (gravel and tyre walls): sg = 1 turning left, -1 turning right
   const sharp = sg => i => { for (let d = -6; d <= 6; d++){ const c = C[(i + d + N) % N].curv; if (Math.abs(c) > 0.011 && Math.sign(c) === sg) return true; } return false; };
-  return { C, N, W: W_, box, nearest, dist, outSign, PAD, S0, LEN, k, rawLen: L, sharp };
+  // the barriers: a closed wall on both sides all the way round (out past the gravel at the sharp corners),
+  // with a single opening on the outside of the main straight, where the pit road comes in from the paddock
+  const smooth = tgt => { const mx = tgt.map((_, i) => { let m = 0; for (let d = -5; d <= 5; d++) m = Math.max(m, tgt[(i + d + N) % N]); return m; });
+    return mx.map((_, i) => { let a = 0; for (let d = -3; d <= 3; d++) a += mx[(i + d + N) % N]; return a/7; }); };
+  const OFF = { 1: smooth(C.map((_, i) => sharp(-1)(i) ? 12.4 : W_/2 + 3)), [-1]: smooth(C.map((_, i) => sharp(1)(i) ? 12.4 : W_/2 + 3)) };   // +1 = left of travel, -1 = right
+  const GATE = (N - 22) % N, inGap = i => { const d = ((i - GATE + N + N/2) % N) - N/2; return Math.abs(d) <= 5; };
+  // where a point is: 'track' (inside the walls), 'wall' (in the barrier), 'gate' (the pit road and paddock) or 'out'
+  function zone(x, z, hint){
+    if (x < box.x0 - 30 || x > box.x1 + 30 || z < box.z0 - 30 || z > box.z1 + 30) return 'out';
+    const at = nearest(x, z, hint), c = C[at.i], sd = Math.sign((x - c.x)*c.nx + (z - c.z)*c.nz) || 1, off = OFF[sd][at.i];
+    if (sd === outSign && inGap(at.i) && at.d > off - 1.2) return 'gate';
+    if (at.d <= off - 1.0) return 'track';
+    if (at.d < off + 1.4) return 'wall';
+    return 'out';
+  }
+  // may a car (or a walker) move from a to b? only within the walls, or through the gate
+  function blocks(ax, az, bx, bz){
+    const zb = zone(bx, bz); if (zb === 'wall') return zone(ax, az) !== 'wall';   // stepping out of a wall is always allowed
+    const za = zone(ax, az);
+    return (za === 'track' && zb === 'out') || (za === 'out' && zb === 'track');
+  }
+  return { C, N, W: W_, box, nearest, dist, outSign, PAD, S0, LEN, k, rawLen: L, sharp, OFF, GATE, inGap, zone, blocks };
 })();
 // countryside groves east and west of the city, and behind the airport
 for (let i=0;i<1400;i++){
@@ -2356,9 +2377,25 @@ const whiteM = stdMat('whiteM',{diffuse:hex('#f2f2ee'), spec:new C3(.3,.3,.3)});
   const gravelM = stdMat('raceGravel', { dt: noiseTex('gravel', '#c9b58c', 0.25, 128, 3) }); gravelM.diffuseTexture.uScale = 2; gravelM.zOffset = -1;
   const sharp = RACE.sharp;
   // turning left (curv > 0 with the left normal) throws cars to the right: gravel on the right, and the other way round
-  strip('raceGravelR', -TW/2 - 12, -TW/2 - 1.4, 0.04, gravelM, 6, sharp(1)); strip('raceGravelL', TW/2 + 1.4, TW/2 + 12, 0.04, gravelM, 6, sharp(-1));
+  strip('raceGravelR', -TW/2 - 6.2, -TW/2 - 1.4, 0.04, gravelM, 6, sharp(1)); strip('raceGravelL', TW/2 + 1.4, TW/2 + 6.2, 0.04, gravelM, 6, sharp(-1));   // up to the barrier
   const tyreT = tex('tyreT', 64, 32, (g, w, h) => { g.fillStyle = '#1b1c1f'; g.fillRect(0, 0, w, h); g.fillStyle = '#e8e8e2'; for (let x = 0; x < w; x += 16) g.fillRect(x, h*0.42, 8, h*0.16); });
   const tyreM = stdMat('raceTyre', { dt: tyreT }); tyreM.backFaceCulling = false;
+  function RACE_WALLS(cum, tyreM){
+    const barT = tex('barT', 128, 32, (g, w, h) => { for (let x = 0; x < w; x += 32){ g.fillStyle = (x/32) % 2 ? '#d92b2b' : '#f2f2ee'; g.fillRect(x, 0, 32, h); } g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, h - 5, w, 5); });
+    const barM = stdMat('raceBarrier', { dt: barT }); barM.backFaceCulling = false;
+    for (const sd of [1, -1]){
+      const pos = [], uv = [], idx = []; let run = -1;
+      for (let i = 0; i <= N; i++){
+        const ii = i % N, c = C[ii];
+        if (sd === RACE.outSign && RACE.inGap(ii)){ run = -1; continue; }            // the way in
+        const off = sd*(RACE.OFF[sd][ii] + 0.2), x = c.x + c.nx*off, z = c.z + c.nz*off, v0 = pos.length/3;
+        pos.push(x, 0, z, x, 1.05, z); uv.push(cum[i]/4, 0, cum[i]/4, 1);
+        if (run >= 0) idx.push(run, v0, run + 1, run + 1, v0, v0 + 1); run = v0;
+      }
+      const m = new B.Mesh('raceBarrier', scene), vd = new B.VertexData(), nrm = []; vd.positions = pos; vd.indices = idx; vd.uvs = uv; B.VertexData.ComputeNormals(pos, idx, nrm); vd.normals = nrm; vd.applyToMesh(m);
+      m.material = barM; m.isPickable = false; m.receiveShadows = true;
+    }
+  }
   function wall(name, off, keep){
     const pos = [], uv = [], idx = []; let run = -1;
     for (let i = 0; i <= N; i++){ const c = C[i % N]; if (!keep(i % N)){ run = -1; continue; }
@@ -2367,7 +2404,10 @@ const whiteM = stdMat('whiteM',{diffuse:hex('#f2f2ee'), spec:new C3(.3,.3,.3)});
     if (!idx.length) return;
     const m = new B.Mesh(name, scene), vd = new B.VertexData(), nrm = []; vd.positions = pos; vd.indices = idx; vd.uvs = uv; B.VertexData.ComputeNormals(pos, idx, nrm); vd.normals = nrm; vd.applyToMesh(m); m.material = tyreM; m.isPickable = false;
   }
-  wall('raceWallR', -TW/2 - 12.4, sharp(1)); wall('raceWallL', TW/2 + 12.4, sharp(-1));
+  RACE_WALLS(cum, tyreM);
+  // the way in: the pit road across the gap to the paddock
+  { const o = RACE.outSign, gapK = i => RACE.inGap(i) || RACE.inGap((i + 1) % N) || RACE.inGap((i - 1 + N) % N);
+    strip('racePitRoad', o > 0 ? TW/2 : -TW/2 - 12, o > 0 ? TW/2 + 12 : -TW/2, 0.055, trackM, 12, gapK, 1); }
   // start / finish: a chequered line, a gantry over it
   const st = C[RACE.S0], hd = Math.atan2(st.dx, st.dz);
   const chk = tex('chkT', 128, 32, (g, w, h) => { for (let x = 0; x < w; x += 8) for (let y = 0; y < h; y += 8){ g.fillStyle = ((x + y)/8) % 2 ? '#111' : '#f4f4f0'; g.fillRect(x, y, 8, 8); } });
@@ -2385,7 +2425,7 @@ const whiteM = stdMat('whiteM',{diffuse:hex('#f2f2ee'), spec:new C3(.3,.3,.3)});
   }
   // grandstand along the main straight, on the outside, and pit garages beyond the paddock
   const out = RACE.outSign, seatM = stdMat('raceSeat', { diffuse: hex('#2f6fb3') }), standM = stdMat('raceStand', { diffuse: hex('#c9c4ba') }), roofM = stdMat('raceRoof', { diffuse: hex('#e9e6df') });
-  const mid = C[(N - 14) % N], mh = Math.atan2(mid.dx, mid.dz);
+  const mid = C[18], mh = Math.atan2(mid.dx, mid.dz);          // just past the line (the pit entrance is before it)
   for (let t = 0; t < 6; t++){
     const b = B.MeshBuilder.CreateBox('raceStandStep', { width: 1.2*(6 - t) + 0.01, height: 0.8 + t*0.9, depth: 110 }, scene);
     const off = 20 + t*1.2;
@@ -4628,7 +4668,8 @@ function walkBlocked(x, z, fx, fz){
   if (z > COAST_Z - 3) return true;                                        // the sea
   if (onRiverRoad(x, z) && !onBridge(x, z)) return true;                   // the river, except on the bridges
   if (dealerWall(x, z, fx, fz)) return true;
-  if (CASCADE.blocks(x, z, BODY_R)) return true;                              // the cascade, its pools and benches
+  if (CASCADE.blocks(x, z, BODY_R)) return true;
+  if (x > RACE.box.x0 - 30 && RACE.zone(x, z) === 'wall') return true;          // the race track's barriers                              // the cascade, its pools and benches
   for (const r of WALL_RECTS) if (x > r.x0 - BODY_R && x < r.x1 + BODY_R && z > r.z0 - BODY_R && z < r.z1 + BODY_R) return true;   // warehouses, terminals, hangars
   return !!buildingAt(x, z);
 }
@@ -5613,7 +5654,7 @@ function driveUpdate(dt){
   D.steer += (st*0.55*(1 - Math.min(0.82, Math.abs(D.v)/45)) - D.steer)*Math.min(1, dt*6);   // calmer steering at speed
   const nh = D.h + D.v/CAR_L*Math.tan(D.steer)*dt;
   const nx = D.x + Math.sin(nh)*D.v*dt, nz = D.z + Math.cos(nh)*D.v*dt;
-  const hit = carHits(nx, nz, nh);
+  const hit = carHits(nx, nz, nh) || (RACE.blocks(D.x, D.z, nx, nz) ? 'wall' : null);
   if (!hit){ D.odo += Math.hypot(nx - D.x, nz - D.z); D.x = nx; D.z = nz; D.h = nh; }
   else {
     if (Math.abs(D.v) > 4 && performance.now() > D.bumpT){ toast(Math.abs(D.v) > 30 ? 'Juda tez edi — qattiq urildingiz!' : hit === 'car' ? 'Ehtiyot bo‘ling — mashinaga urildingiz!' : 'Bum! Yo‘l shu yerda tugaydi'); D.bumpT = performance.now() + 2500; }
